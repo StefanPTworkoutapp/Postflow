@@ -57,6 +57,8 @@ Write an engaging post that demonstrates their authentic voice. Return ONLY vali
     ],
   })
 
-  const text = response.content[0].type === "text" ? response.content[0].text : ""
-  return JSON.parse(text) as { caption: string; hashtags: string[] }
+  const raw   = response.content[0].type === "text" ? response.content[0].text : ""
+  // Strip markdown code fences that Claude occasionally adds despite being asked not to
+  const clean = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim()
+  return JSON.parse(clean) as { caption: string; hashtags: string[] }
 }

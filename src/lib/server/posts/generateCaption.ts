@@ -52,15 +52,18 @@ export interface GeneratedCaption {
  * when inside a JSON string value.
  */
 function robustJsonParse(raw: string): GeneratedCaption {
+  // Zero: strip markdown code fences Claude occasionally adds despite instructions
+  const stripped = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim()
+
   // First: try a straight parse — works most of the time
-  try { return JSON.parse(raw) } catch { /* fall through to sanitiser */ }
+  try { return JSON.parse(stripped) } catch { /* fall through to sanitiser */ }
 
   // Second: sanitise literal control characters inside JSON string values
   let inString = false
   let escaped  = false
   let out      = ""
 
-  for (const ch of raw) {
+  for (const ch of stripped) {
     if (escaped) {
       out     += ch
       escaped  = false

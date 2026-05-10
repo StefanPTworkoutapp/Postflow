@@ -77,11 +77,12 @@ export function Step3Identity({ draft, mergeDraft, saveToApi, next, back }: Prop
                   className="h-9 w-10 cursor-pointer rounded border border-[hsl(var(--input))] p-0.5"
                   {...register(field)}
                 />
+                {/* Display-only text field — not registered to avoid ref override */}
                 <Input
                   className="font-mono text-xs"
-                  {...register(field)}
                   value={value}
                   readOnly
+                  tabIndex={-1}
                 />
               </div>
               {errors[field] && (
