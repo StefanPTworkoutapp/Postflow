@@ -53,10 +53,63 @@ export type Database = {
         }
         Relationships: []
       }
+      brand_token_events: {
+        Row: {
+          brand_id: string
+          created_at: string
+          id: string
+          new_confidence: number | null
+          new_value: string | null
+          old_confidence: number | null
+          old_value: string | null
+          signal_detail: Json | null
+          signal_source_id: string | null
+          signal_type: string
+          token_key: string
+        }
+        Insert: {
+          brand_id: string
+          created_at?: string
+          id?: string
+          new_confidence?: number | null
+          new_value?: string | null
+          old_confidence?: number | null
+          old_value?: string | null
+          signal_detail?: Json | null
+          signal_source_id?: string | null
+          signal_type: string
+          token_key: string
+        }
+        Update: {
+          brand_id?: string
+          created_at?: string
+          id?: string
+          new_confidence?: number | null
+          new_value?: string | null
+          old_confidence?: number | null
+          old_value?: string | null
+          signal_detail?: Json | null
+          signal_source_id?: string | null
+          signal_type?: string
+          token_key?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "brand_token_events_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       brands: {
         Row: {
           accent_color: string
           account_id: string
+          brand_kit: Json
+          calibration_done_at: string | null
+          calibration_status: string
           created_at: string
           description: string | null
           do_not_mention: string[] | null
@@ -68,6 +121,7 @@ export type Database = {
           goals: string[] | null
           id: string
           industry: string | null
+          intelligence_tokens: Json
           logo_url: string | null
           name: string
           niche: string | null
@@ -78,18 +132,21 @@ export type Database = {
           tagline: string | null
           target_age_range: string | null
           target_audience_description: string | null
-          tone_examples: string[] | null
           template_style: number
+          tone_examples: string[] | null
           tone_profile: Json | null
           tone_suggestion: string | null
-          tone_suggestion_type: string | null
           tone_suggestion_at: string | null
+          tone_suggestion_type: string | null
           updated_at: string
           website_url: string | null
         }
         Insert: {
           accent_color?: string
           account_id: string
+          brand_kit?: Json
+          calibration_done_at?: string | null
+          calibration_status?: string
           created_at?: string
           description?: string | null
           do_not_mention?: string[] | null
@@ -101,6 +158,7 @@ export type Database = {
           goals?: string[] | null
           id?: string
           industry?: string | null
+          intelligence_tokens?: Json
           logo_url?: string | null
           name: string
           niche?: string | null
@@ -115,14 +173,17 @@ export type Database = {
           tone_examples?: string[] | null
           tone_profile?: Json | null
           tone_suggestion?: string | null
-          tone_suggestion_type?: string | null
           tone_suggestion_at?: string | null
+          tone_suggestion_type?: string | null
           updated_at?: string
           website_url?: string | null
         }
         Update: {
           accent_color?: string
           account_id?: string
+          brand_kit?: Json
+          calibration_done_at?: string | null
+          calibration_status?: string
           created_at?: string
           description?: string | null
           do_not_mention?: string[] | null
@@ -134,6 +195,7 @@ export type Database = {
           goals?: string[] | null
           id?: string
           industry?: string | null
+          intelligence_tokens?: Json
           logo_url?: string | null
           name?: string
           niche?: string | null
@@ -148,8 +210,8 @@ export type Database = {
           tone_examples?: string[] | null
           tone_profile?: Json | null
           tone_suggestion?: string | null
-          tone_suggestion_type?: string | null
           tone_suggestion_at?: string | null
+          tone_suggestion_type?: string | null
           updated_at?: string
           website_url?: string | null
         }
@@ -284,6 +346,81 @@ export type Database = {
           },
         ]
       }
+      invoices: {
+        Row: {
+          account_id: string
+          created_at: string
+          currency: string
+          description: string | null
+          id: string
+          invoice_pdf_url: string | null
+          issued_at: string | null
+          paid_at: string | null
+          provider: string
+          provider_invoice_id: string
+          provider_payment_url: string | null
+          status: string
+          subscription_id: string | null
+          subtotal_cents: number
+          total_cents: number
+          vat_amount_cents: number
+          vat_rate: number
+        }
+        Insert: {
+          account_id: string
+          created_at?: string
+          currency?: string
+          description?: string | null
+          id?: string
+          invoice_pdf_url?: string | null
+          issued_at?: string | null
+          paid_at?: string | null
+          provider: string
+          provider_invoice_id: string
+          provider_payment_url?: string | null
+          status?: string
+          subscription_id?: string | null
+          subtotal_cents?: number
+          total_cents?: number
+          vat_amount_cents?: number
+          vat_rate?: number
+        }
+        Update: {
+          account_id?: string
+          created_at?: string
+          currency?: string
+          description?: string | null
+          id?: string
+          invoice_pdf_url?: string | null
+          issued_at?: string | null
+          paid_at?: string | null
+          provider?: string
+          provider_invoice_id?: string
+          provider_payment_url?: string | null
+          status?: string
+          subscription_id?: string | null
+          subtotal_cents?: number
+          total_cents?: number
+          vat_amount_cents?: number
+          vat_rate?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoices_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_subscription_id_fkey"
+            columns: ["subscription_id"]
+            isOneToOne: false
+            referencedRelation: "subscriptions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       media_uploads: {
         Row: {
           ai_description: string | null
@@ -361,6 +498,115 @@ export type Database = {
             columns: ["used_in_post_id"]
             isOneToOne: false
             referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      niche_trends: {
+        Row: {
+          brand_id: string
+          fetched_at: string
+          headline: string | null
+          id: string
+          relevance_score: number | null
+          source: string
+          topic: string
+          url: string | null
+          week_of: string
+        }
+        Insert: {
+          brand_id: string
+          fetched_at?: string
+          headline?: string | null
+          id?: string
+          relevance_score?: number | null
+          source: string
+          topic: string
+          url?: string | null
+          week_of: string
+        }
+        Update: {
+          brand_id?: string
+          fetched_at?: string
+          headline?: string | null
+          id?: string
+          relevance_score?: number | null
+          source?: string
+          topic?: string
+          url?: string | null
+          week_of?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "niche_trends_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      performance_patterns: {
+        Row: {
+          avg_engagement_rate: number | null
+          avg_impressions: number | null
+          avg_reach: number | null
+          best_content_pillars: string[] | null
+          best_days_of_week: number[] | null
+          best_hours_of_day: number[] | null
+          best_post_types: string[] | null
+          brand_id: string
+          computed_at: string
+          id: string
+          period_days: number
+          period_end: string
+          period_start: string
+          platform: string
+          sample_size: number
+          top_hashtags: string[] | null
+        }
+        Insert: {
+          avg_engagement_rate?: number | null
+          avg_impressions?: number | null
+          avg_reach?: number | null
+          best_content_pillars?: string[] | null
+          best_days_of_week?: number[] | null
+          best_hours_of_day?: number[] | null
+          best_post_types?: string[] | null
+          brand_id: string
+          computed_at?: string
+          id?: string
+          period_days?: number
+          period_end: string
+          period_start: string
+          platform: string
+          sample_size?: number
+          top_hashtags?: string[] | null
+        }
+        Update: {
+          avg_engagement_rate?: number | null
+          avg_impressions?: number | null
+          avg_reach?: number | null
+          best_content_pillars?: string[] | null
+          best_days_of_week?: number[] | null
+          best_hours_of_day?: number[] | null
+          best_post_types?: string[] | null
+          brand_id?: string
+          computed_at?: string
+          id?: string
+          period_days?: number
+          period_end?: string
+          period_start?: string
+          platform?: string
+          sample_size?: number
+          top_hashtags?: string[] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "performance_patterns_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
             referencedColumns: ["id"]
           },
         ]
@@ -575,67 +821,67 @@ export type Database = {
       }
       subscriptions: {
         Row: {
-          account_id:              string
-          amount_cents:            number | null
-          billing_cycle:           string | null
-          billing_interval:        string | null
-          cancel_at:               string | null
-          canceled_at:             string | null
-          created_at:              string
-          currency:                string
-          current_period_end:      string | null
-          current_period_start:    string | null
+          account_id: string
+          amount_cents: number | null
+          billing_cycle: string | null
+          billing_interval: string | null
+          cancel_at: string | null
+          canceled_at: string | null
+          created_at: string
+          currency: string
+          current_period_end: string | null
+          current_period_start: string | null
           external_subscription_id: string | null
-          id:                      string
-          mollie_subscription_id:  string | null
-          plan:                    string | null
-          provider:                string | null
-          status:                  string | null
-          stripe_subscription_id:  string | null
-          trial_ends_at:           string | null
-          updated_at:              string
+          id: string
+          mollie_subscription_id: string | null
+          plan: string | null
+          provider: string | null
+          status: string | null
+          stripe_subscription_id: string | null
+          trial_ends_at: string | null
+          updated_at: string
         }
         Insert: {
-          account_id:              string
-          amount_cents?:           number | null
-          billing_cycle?:          string | null
-          billing_interval?:       string | null
-          cancel_at?:              string | null
-          canceled_at?:            string | null
-          created_at?:             string
-          currency?:               string
-          current_period_end?:     string | null
-          current_period_start?:   string | null
+          account_id: string
+          amount_cents?: number | null
+          billing_cycle?: string | null
+          billing_interval?: string | null
+          cancel_at?: string | null
+          canceled_at?: string | null
+          created_at?: string
+          currency?: string
+          current_period_end?: string | null
+          current_period_start?: string | null
           external_subscription_id?: string | null
-          id?:                     string
+          id?: string
           mollie_subscription_id?: string | null
-          plan?:                   string | null
-          provider?:               string | null
-          status?:                 string | null
+          plan?: string | null
+          provider?: string | null
+          status?: string | null
           stripe_subscription_id?: string | null
-          trial_ends_at?:          string | null
-          updated_at?:             string
+          trial_ends_at?: string | null
+          updated_at?: string
         }
         Update: {
-          account_id?:             string
-          amount_cents?:           number | null
-          billing_cycle?:          string | null
-          billing_interval?:       string | null
-          cancel_at?:              string | null
-          canceled_at?:            string | null
-          created_at?:             string
-          currency?:               string
-          current_period_end?:     string | null
-          current_period_start?:   string | null
+          account_id?: string
+          amount_cents?: number | null
+          billing_cycle?: string | null
+          billing_interval?: string | null
+          cancel_at?: string | null
+          canceled_at?: string | null
+          created_at?: string
+          currency?: string
+          current_period_end?: string | null
+          current_period_start?: string | null
           external_subscription_id?: string | null
-          id?:                     string
+          id?: string
           mollie_subscription_id?: string | null
-          plan?:                   string | null
-          provider?:               string | null
-          status?:                 string | null
+          plan?: string | null
+          provider?: string | null
+          status?: string | null
           stripe_subscription_id?: string | null
-          trial_ends_at?:          string | null
-          updated_at?:             string
+          trial_ends_at?: string | null
+          updated_at?: string
         }
         Relationships: [
           {
@@ -747,190 +993,6 @@ export type Database = {
             columns: ["post_id"]
             isOneToOne: false
             referencedRelation: "posts"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      niche_trends: {
-        Row: {
-          brand_id: string
-          fetched_at: string
-          headline: string | null
-          id: string
-          relevance_score: number | null
-          source: string
-          topic: string
-          url: string | null
-          week_of: string
-        }
-        Insert: {
-          brand_id: string
-          fetched_at?: string
-          headline?: string | null
-          id?: string
-          relevance_score?: number | null
-          source: string
-          topic: string
-          url?: string | null
-          week_of: string
-        }
-        Update: {
-          brand_id?: string
-          fetched_at?: string
-          headline?: string | null
-          id?: string
-          relevance_score?: number | null
-          source?: string
-          topic?: string
-          url?: string | null
-          week_of?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "niche_trends_brand_id_fkey"
-            columns: ["brand_id"]
-            isOneToOne: false
-            referencedRelation: "brands"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      performance_patterns: {
-        Row: {
-          avg_engagement_rate: number | null
-          avg_impressions: number | null
-          avg_reach: number | null
-          best_content_pillars: string[] | null
-          best_days_of_week: number[] | null
-          best_hours_of_day: number[] | null
-          best_post_types: string[] | null
-          brand_id: string
-          computed_at: string
-          id: string
-          period_days: number
-          period_end: string
-          period_start: string
-          platform: string
-          sample_size: number
-          top_hashtags: string[] | null
-        }
-        Insert: {
-          avg_engagement_rate?: number | null
-          avg_impressions?: number | null
-          avg_reach?: number | null
-          best_content_pillars?: string[] | null
-          best_days_of_week?: number[] | null
-          best_hours_of_day?: number[] | null
-          best_post_types?: string[] | null
-          brand_id: string
-          computed_at?: string
-          id?: string
-          period_days?: number
-          period_end: string
-          period_start: string
-          platform: string
-          sample_size?: number
-          top_hashtags?: string[] | null
-        }
-        Update: {
-          avg_engagement_rate?: number | null
-          avg_impressions?: number | null
-          avg_reach?: number | null
-          best_content_pillars?: string[] | null
-          best_days_of_week?: number[] | null
-          best_hours_of_day?: number[] | null
-          best_post_types?: string[] | null
-          brand_id?: string
-          computed_at?: string
-          id?: string
-          period_days?: number
-          period_end?: string
-          period_start?: string
-          platform?: string
-          sample_size?: number
-          top_hashtags?: string[] | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "performance_patterns_brand_id_fkey"
-            columns: ["brand_id"]
-            isOneToOne: false
-            referencedRelation: "brands"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      invoices: {
-        Row: {
-          id:                   string
-          account_id:           string
-          subscription_id:      string | null
-          provider:             string
-          provider_invoice_id:  string
-          provider_payment_url: string | null
-          invoice_pdf_url:      string | null
-          status:               string
-          subtotal_cents:       number
-          vat_rate:             number
-          vat_amount_cents:     number
-          total_cents:          number
-          currency:             string
-          description:          string | null
-          issued_at:            string | null
-          paid_at:              string | null
-          created_at:           string
-        }
-        Insert: {
-          id?:                  string
-          account_id:           string
-          subscription_id?:     string | null
-          provider:             string
-          provider_invoice_id:  string
-          provider_payment_url?: string | null
-          invoice_pdf_url?:     string | null
-          status?:              string
-          subtotal_cents?:      number
-          vat_rate?:            number
-          vat_amount_cents?:    number
-          total_cents?:         number
-          currency?:            string
-          description?:         string | null
-          issued_at?:           string | null
-          paid_at?:             string | null
-          created_at?:          string
-        }
-        Update: {
-          id?:                  string
-          account_id?:          string
-          subscription_id?:     string | null
-          provider?:            string
-          provider_invoice_id?: string
-          provider_payment_url?: string | null
-          invoice_pdf_url?:     string | null
-          status?:              string
-          subtotal_cents?:      number
-          vat_rate?:            number
-          vat_amount_cents?:    number
-          total_cents?:         number
-          currency?:            string
-          description?:         string | null
-          issued_at?:           string | null
-          paid_at?:             string | null
-          created_at?:          string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "invoices_account_id_fkey"
-            columns: ["account_id"]
-            isOneToOne: false
-            referencedRelation: "accounts"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "invoices_subscription_id_fkey"
-            columns: ["subscription_id"]
-            isOneToOne: false
-            referencedRelation: "subscriptions"
             referencedColumns: ["id"]
           },
         ]

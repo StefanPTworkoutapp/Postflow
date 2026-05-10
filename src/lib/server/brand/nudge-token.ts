@@ -9,6 +9,7 @@
  */
 
 import { createServiceClient } from "@/lib/supabase/service"
+import type { Json } from "@/types/database.types"
 
 export type SignalType =
   | "analytics"
@@ -51,11 +52,9 @@ export async function nudgeToken(
   detail?:         Record<string, unknown>
 ): Promise<void> {
   const supabase = createServiceClient()
-  // cast until types regenerated after 20260510000001_brand_intelligence_tokens migration is applied
-  const supabaseAny = supabase as any
 
   // 1. Fetch current intelligence_tokens for this brand
-  const { data: brand, error: fetchError } = await supabaseAny
+  const { data: brand, error: fetchError } = await supabase
     .from("brands")
     .select("intelligence_tokens")
     .eq("id", brandId)
@@ -66,7 +65,7 @@ export async function nudgeToken(
     return
   }
 
-  const tokens = ((brand as any).intelligence_tokens ?? {}) as BrandTokens
+  const tokens = (brand.intelligence_tokens ?? {}) as unknown as BrandTokens
   const token  = tokens[tokenKey]
 
   if (!token) {
@@ -116,10 +115,9 @@ export async function nudgeToken(
   }
 
   // 4. Write updated tokens back to brands
-  // 4. Write updated tokens back to brands
-  const { error: updateError } = await supabaseAny
+  const { error: updateError } = await supabase
     .from("brands")
-    .update({ intelligence_tokens: updatedTokens })
+    .update({ intelligence_tokens: updatedTokens as unknown as Json })
     .eq("id", brandId)
 
   if (updateError) {
@@ -128,7 +126,7 @@ export async function nudgeToken(
   }
 
   // 5. Write audit row — always, no exceptions
-  const { error: auditError } = await supabaseAny
+  const { error: auditError } = await supabase
     .from("brand_token_events")
     .insert({
       brand_id:         brandId,
@@ -139,7 +137,7 @@ export async function nudgeToken(
       new_confidence:   newConfidence,
       signal_type:      signalType,
       signal_source_id: sourceId ?? null,
-      signal_detail:    detail ?? null,
+      signal_detail:    (detail ?? null) as Json | null,
     })
 
   if (auditError) {
@@ -158,10 +156,7 @@ export async function seedCalibrationTokens(
 ): Promise<void> {
   const supabase = createServiceClient()
 
-  // cast until types regenerated after 20260510000001_brand_intelligence_tokens migration is applied
-  const supabaseAny = supabase as any
-
-  const { data: brand, error: fetchError } = await supabaseAny
+  const { data: brand, error: fetchError } = await supabase
     .from("brands")
     .select("intelligence_tokens")
     .eq("id", brandId)
@@ -172,7 +167,7 @@ export async function seedCalibrationTokens(
     return
   }
 
-  const tokens = (brand.intelligence_tokens ?? {}) as BrandTokens
+  const tokens = (brand.intelligence_tokens ?? {}) as unknown as BrandTokens
 
   const updatedTokens = { ...tokens }
   for (const seed of seeds) {
@@ -185,9 +180,12 @@ export async function seedCalibrationTokens(
     }
   }
 
-  const { error } = await supabaseAny
+  const { error } = await supabase
     .from("brands")
-    .update({ intelligence_tokens: updatedTokens, calibration_status: "complete" })
+    .update({
+      intelligence_tokens: updatedTokens as unknown as Json,
+      calibration_status:  "complete",
+    })
     .eq("id", brandId)
 
   if (error) {
@@ -198,15 +196,15 @@ export async function seedCalibrationTokens(
   // Audit all seeds
   await Promise.allSettled(
     seeds.map(seed =>
-      supabaseAny.from("brand_token_events").insert({
-        brand_id:    brandId,
-        token_key:   seed.key,
-        old_value:   String(tokens[seed.key]?.value ?? ""),
-        new_value:   String(seed.value),
+      supabase.from("brand_token_events").insert({
+        brand_id:       brandId,
+        token_key:      seed.key,
+        old_value:      String(tokens[seed.key]?.value ?? ""),
+        new_value:      String(seed.value),
         old_confidence: tokens[seed.key]?.confidence ?? 0,
         new_confidence: 0.60,
-        signal_type: "calibration",
-        signal_detail: { source: "first_post_calibration" },
+        signal_type:    "calibration",
+        signal_detail:  { source: "first_post_calibration" } as unknown as Json,
       })
     )
   )

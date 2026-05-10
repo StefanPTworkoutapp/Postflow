@@ -190,7 +190,7 @@ export async function getBrandContext(
     return null
   }
 
-  const b = brand as Record<string, unknown> & {
+  const b = brand as unknown as Record<string, unknown> & {
     id: string; name: string; industry?: string; niche?: string
     primary_goal?: string; goals?: string[]
     tone_profile?: ToneProfile | null
