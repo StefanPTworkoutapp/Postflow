@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import Anthropic from "@anthropic-ai/sdk"
 import { createClient } from "@/lib/supabase/server"
 import { getBrand } from "@/lib/server/brand/getBrand"
+import { getBrandContext } from "@/lib/server/brand/getBrandContext"
 import type { Json, Database } from "@/types/database.types"
 
 type CalendarUpdate = Database["postflow"]["Tables"]["content_calendar"]["Update"]
@@ -43,15 +44,6 @@ export async function POST(
     feedback = body?.feedback ?? ""
   } catch { /* no body */ }
 
-  const b = brand as unknown as {
-    name: string
-    industry?: string
-    niche?: string
-    primary_goal?: string
-    tone_profile?: { summary?: string }
-    do_not_mention?: string[]
-  }
-
   const platform    = (entry.platforms as string[] | null)?.[0] ?? "instagram"
   const postType    = entry.post_type    ?? "single_image"
   const pillar      = entry.content_pillar ?? "education"
@@ -59,6 +51,10 @@ export async function POST(
   const isCarousel  = postType === "carousel"
   const slideCount  = entry.required_media_count ?? 5
   const dateStr     = entry.scheduled_date
+
+  // Single source of truth for brand context — includes performance + trends
+  const ctx = await getBrandContext(brand.id, platform)
+  if (!ctx) return NextResponse.json({ error: "Brand context unavailable" }, { status: 500 })
 
   const templateMap: Record<string, string> = {
     "single_image:education":  "edu-bold",
@@ -76,12 +72,7 @@ export async function POST(
 
   const prompt = `You are an expert social media strategist. Generate ONE fresh post idea to replace an existing calendar entry.
 
-BRAND: ${b.name}
-${b.industry     ? `Industry: ${b.industry}` : ""}
-${b.niche        ? `Niche: ${b.niche}` : ""}
-${b.primary_goal ? `Goal: ${b.primary_goal}` : ""}
-${b.tone_profile?.summary ? `Tone: ${b.tone_profile.summary}` : ""}
-${b.do_not_mention?.length ? `Do NOT mention: ${b.do_not_mention.join(", ")}` : ""}
+${ctx.promptBlock}
 
 FIXED (do not change these):
 - Date: ${dateStr}

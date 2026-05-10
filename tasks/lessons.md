@@ -227,6 +227,46 @@ Do this before moving to the next implementation task, not at the end of the ses
 
 ---
 
+## [2026-05-10] Inngest dev server requires INNGEST_DEV=1, not just the production signing key
+
+**What happened:** Set `INNGEST_SIGNING_KEY=signkey-prod-*` in `.env.local`. The local Inngest Dev Server sends sync (PUT) requests without that signature — resulting in 400/401 errors and "Signature validation failed" in logs. All 6 functions appeared unregistered.
+
+**Root cause:** `signkey-prod-*` prefix forces strict signature validation even in dev. The local dev server uses its own internal signing — it doesn't match a production key.
+
+**Rule going forward:**
+- `.env.local` must have `INNGEST_DEV=1` — this disables signature validation for local dev server sync.
+- `INNGEST_SIGNING_KEY` goes in Vercel production env vars ONLY — never in `.env.local`.
+- `INNGEST_EVENT_KEY` is fine in `.env.local` (it's not a security boundary for local dev).
+- Verify connection: `curl localhost:3000/api/inngest` should return `{"function_count":N,"mode":"dev","has_signing_key":false}`.
+
+---
+
+## [2026-05-10] Spec patches must apply PostFlow naming conventions before integrating
+
+**What happened:** Received a spec patch that used `brand_profiles` (non-existent table), `userId` in brand context functions (should be `brandId`), `supabase/functions/` (should be Inngest jobs), and `trend_signals` (should be `niche_trends`). Five conflicts required resolution before the patch could be integrated.
+
+**Root cause:** Spec patches are written generically and don't know PostFlow's specific conventions.
+
+**Rule going forward:** Before integrating any spec patch into features_v6.md, scan for these five patterns and correct them:
+1. `brand_profiles` → `postflow.brands` + `intelligence_tokens` column
+2. `userId` in brand functions → `brandId` (brands.id UUID)
+3. `supabase/functions/` → `src/inngest/jobs/`
+4. `trend_signals` → `postflow.niche_trends`
+5. Any new `signal_type` values → extend the CHECK constraint in brand_token_events migration
+Document resolutions in the PATCH CONFLICT RESOLUTIONS section of the DECISIONS LOG.
+
+---
+
+## [2026-05-10] nudgeToken() is the ONLY way to update brand tokens
+
+**What happened:** (Pre-emptive lesson from spec design.) Brand token update logic is easy to duplicate — routes and jobs each tempted to write directly to `brands.intelligence_tokens`.
+
+**Root cause:** JSONB column updates look simple (`UPDATE brands SET intelligence_tokens = ...`). The audit trail requirement is easy to forget.
+
+**Rule going forward:** Every brand token update — without exception — goes through `nudgeToken(brandId, tokenKey, newValue, delta, signalType)` in `src/lib/server/brand/nudge-token.ts`. This function: enforces confidence floor, applies value shift rules, writes to `brands.intelligence_tokens`, AND writes the audit row to `brand_token_events`. Direct SQL updates to `intelligence_tokens` are forbidden in application code.
+
+---
+
 ## [2026-05-10] UI/UX consistency requires a living spec + a read-before-build habit
 
 **What happened:** Multiple features across a single session had divergent patterns: emoji-only platform display, non-navigable list items, missing dark mode variants, disconnected multi-step flows. Each was built without reading the established spec.

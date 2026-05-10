@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import Anthropic from "@anthropic-ai/sdk"
 import { createClient } from "@/lib/supabase/server"
 import { getBrand } from "@/lib/server/brand/getBrand"
+import { getBrandContext } from "@/lib/server/brand/getBrandContext"
 import type { Json } from "@/types/database.types"
 
 const client = new Anthropic({ apiKey: process.env.POSTFLOW_ANTHROPIC_KEY })
@@ -92,48 +93,15 @@ export async function POST(request: Request) {
       .lte("scheduled_date", to)
     const occupiedDates = new Set((existing ?? []).map(e => e.scheduled_date))
 
-    // Build brand context
-    const b = brand as unknown as {
-      name: string; industry?: string; niche?: string
-      primary_goal?: string
-      tone_profile?: { summary?: string }
-      do_not_mention?: string[]
-    }
-
-    // ── Load performance patterns (90-day rolling, one row per platform) ──────
-    const { data: patterns } = await supabase
-      .from("performance_patterns")
-      .select("platform, best_post_types, best_content_pillars, best_days_of_week, best_hours_of_day, top_hashtags, avg_engagement_rate, sample_size")
-      .eq("brand_id", brand.id)
-      .order("computed_at", { ascending: false })
-
-    // Build a compact per-platform insights string for the prompt
-    const DAY_NAMES = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"]
-    const patternLines = (patterns ?? [])
-      .filter(p => p.sample_size && p.sample_size >= 5)  // only trust patterns with enough data
-      .map(p => {
-        const parts: string[] = [`  ${p.platform}:`]
-        if (p.best_post_types?.length)     parts.push(`best formats=${p.best_post_types.join(",")}`)
-        if (p.best_content_pillars?.length) parts.push(`best pillars=${p.best_content_pillars.join(",")}`)
-        if (p.best_days_of_week?.length)   parts.push(`best days=${p.best_days_of_week.map((d: number) => DAY_NAMES[d]).join(",")}`)
-        if (p.best_hours_of_day?.length)   parts.push(`best hours=${p.best_hours_of_day.map((h: number) => `${h}:00`).join(",")}`)
-        if (p.avg_engagement_rate)         parts.push(`avg engagement=${(p.avg_engagement_rate * 100).toFixed(1)}%`)
-        return parts.join(" | ")
-      })
-    const performanceBlock = patternLines.length
-      ? `\nPERFORMANCE DATA (real 90-day results for this brand — weight these heavily):\n${patternLines.join("\n")}\n- Schedule more posts on the best days/hours above.\n- Prioritise the best-performing post formats and pillars.\n`
-      : ""
+    // Single source of truth for brand context — includes performance patterns,
+    // niche trends, and intelligence tokens. No manual assembly here.
+    const ctx = await getBrandContext(brand.id)
+    if (!ctx) return NextResponse.json({ error: "Brand context unavailable" }, { status: 500 })
 
     const prompt = `You are an expert social media strategist. Plan a content calendar for ${monthName} ${year}.
 
-BRAND:
-- Name: ${b.name}
-${b.industry        ? `- Industry: ${b.industry}`                          : ""}
-${b.niche           ? `- Niche: ${b.niche}`                                : ""}
-${b.primary_goal    ? `- Primary goal: ${b.primary_goal}`                  : ""}
-${b.tone_profile?.summary ? `- Tone: ${b.tone_profile.summary}`            : ""}
-${b.do_not_mention?.length ? `- Do NOT mention: ${b.do_not_mention.join(", ")}` : ""}
-${performanceBlock}
+${ctx.promptBlock}
+
 PLATFORMS TO USE: ${platforms.join(", ")}
 
 CONTENT PILLARS TO COVER: ${pillars.join(", ")}

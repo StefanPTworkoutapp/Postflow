@@ -749,12 +749,55 @@ export function PostEditor({ post, brandName, industry }: Props) {
               </p>
             ) : (
               <div className="flex flex-wrap gap-1.5">
+                {/* Base tags — always shown */}
                 {[
-                  { type: "great",       label: "👍 Loved it"      },
-                  { type: "too_formal",  label: "🎩 Too formal"    },
-                  { type: "too_casual",  label: "😅 Too casual"    },
-                  { type: "wrong_voice", label: "🎭 Wrong voice"   },
-                  { type: "cta_weak",    label: "📉 Weak CTA"      },
+                  { type: "great",       label: "👍 Loved it"    },
+                  { type: "too_formal",  label: "🎩 Too formal"  },
+                  { type: "too_casual",  label: "😅 Too casual"  },
+                  { type: "wrong_voice", label: "🎭 Wrong voice" },
+                  { type: "cta_weak",    label: "📉 Weak CTA"    },
+                  { type: "too_long",    label: "📏 Too long"    },
+                  { type: "too_short",   label: "✂️ Too short"   },
+                ].map(fb => (
+                  <button
+                    key={fb.type}
+                    type="button"
+                    disabled={feedbackSending}
+                    onClick={() => handleFeedback(fb.type)}
+                    className="px-2.5 py-1 text-xs rounded-full border border-[hsl(var(--border))] hover:bg-[hsl(var(--muted))] transition-colors disabled:opacity-50"
+                  >
+                    {fb.label}
+                  </button>
+                ))}
+
+                {/* Video / Reel tags — shown for reel-cover template */}
+                {selectedTemplate === "reel-cover" && [
+                  { type: "great_hook",       label: "🎣 Great hook"        },
+                  { type: "bad_music",        label: "🎵 Bad music choice"  },
+                  { type: "too_fast",         label: "⚡ Too fast"           },
+                  { type: "too_slow",         label: "🐢 Too slow"           },
+                  { type: "wrong_length",     label: "⏱️ Wrong length"       },
+                  { type: "doesnt_fit_brand", label: "🚫 Doesn't fit brand" },
+                ].map(fb => (
+                  <button
+                    key={fb.type}
+                    type="button"
+                    disabled={feedbackSending}
+                    onClick={() => handleFeedback(fb.type)}
+                    className="px-2.5 py-1 text-xs rounded-full border border-[hsl(var(--border))] hover:bg-[hsl(var(--muted))] transition-colors disabled:opacity-50"
+                  >
+                    {fb.label}
+                  </button>
+                ))}
+
+                {/* Carousel tags — shown for carousel-edu / carousel-myth templates */}
+                {(selectedTemplate === "carousel-edu" || selectedTemplate === "carousel-myth") && [
+                  { type: "too_many_slides",  label: "📚 Too many slides"   },
+                  { type: "too_few_slides",   label: "📄 Too few slides"    },
+                  { type: "wrong_content_mix",label: "🔀 Wrong content mix" },
+                  { type: "text_too_heavy",   label: "📝 Too text-heavy"    },
+                  { type: "text_too_light",   label: "🖼️ Too image-heavy"   },
+                  { type: "great_slide_flow", label: "✨ Great slide flow"  },
                 ].map(fb => (
                   <button
                     key={fb.type}

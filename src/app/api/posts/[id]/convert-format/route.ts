@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import Anthropic from "@anthropic-ai/sdk"
 import { createClient } from "@/lib/supabase/server"
 import { getBrand } from "@/lib/server/brand/getBrand"
+import { getBrandContext } from "@/lib/server/brand/getBrandContext"
 import type { Json } from "@/types/database.types"
 
 /**
@@ -76,6 +77,10 @@ export async function POST(
   const isCarousel     = isCarouselEdu || isCarouselMyth
   const prevIsCarousel = ["carousel-edu", "carousel-myth"].includes(post.template_slug ?? "")
 
+  // Single source of truth for brand context
+  const ctx = await getBrandContext(brand.id)
+  if (!ctx) return NextResponse.json({ error: "Brand context unavailable" }, { status: 500 })
+
   // ── Carousel → single-image: flatten slides back into a caption ──────────────
   if (!isCarousel && prevIsCarousel) {
     const slides = post.slide_content as SlideContentItem[] | null
@@ -85,16 +90,14 @@ export async function POST(
       return NextResponse.json({ converted: false })
     }
 
-    const b = brand as unknown as { name?: string; tone_profile?: { summary?: string } }
-
     const slideSummary = slides
       .map(s => [s.headline, s.body].filter(Boolean).join(" — "))
       .join("\n")
 
     const flattenPrompt = `You are a social media copywriter. Convert these carousel slides into a single cohesive Instagram/LinkedIn post caption.
 
-BRAND: ${b.name ?? ""}
-${b.tone_profile?.summary ? `TONE: ${b.tone_profile.summary}` : ""}
+BRAND: ${ctx.brand_name}
+${ctx.tone_summary ? `TONE: ${ctx.tone_summary}` : ""}
 PLATFORM: ${post.platform}
 
 CAROUSEL SLIDES:
@@ -142,13 +145,11 @@ No markdown, no explanation.`
     return NextResponse.json({ error: "No caption to convert" }, { status: 400 })
   }
 
-  const b = brand as unknown as { name?: string; tone_profile?: { summary?: string } }
-
   const prompt = isCarouselEdu
     ? `You are a social media expert. Convert this existing post caption into slide content for an educational Instagram/LinkedIn carousel.
 
-BRAND: ${b.name ?? ""}
-${b.tone_profile?.summary ? `TONE: ${b.tone_profile.summary}` : ""}
+BRAND: ${ctx.brand_name}
+${ctx.tone_summary ? `TONE: ${ctx.tone_summary}` : ""}
 PLATFORM: ${post.platform}
 
 EXISTING CAPTION:
@@ -177,8 +178,8 @@ Format:
 
     : `You are a social media expert. Convert this existing post caption into slide content for a Myth vs Reality Instagram carousel.
 
-BRAND: ${b.name ?? ""}
-${b.tone_profile?.summary ? `TONE: ${b.tone_profile.summary}` : ""}
+BRAND: ${ctx.brand_name}
+${ctx.tone_summary ? `TONE: ${ctx.tone_summary}` : ""}
 PLATFORM: ${post.platform}
 
 EXISTING CAPTION:
