@@ -6,6 +6,7 @@ import { weeklyTrendFetch }          from "@/inngest/jobs/weeklyTrendFetch"
 import { weeklyTrendEmail }          from "@/inngest/jobs/weeklyTrendEmail"
 import { schedulePostReminders }     from "@/inngest/jobs/postReminders"
 import { toneLearningLoop }          from "@/inngest/jobs/toneLearningLoop"
+import { tagMediaUpload }            from "@/inngest/jobs/tagMediaUpload"
 
 export const { GET, POST, PUT } = serve({
   client:    inngest,
@@ -16,5 +17,6 @@ export const { GET, POST, PUT } = serve({
     weeklyTrendEmail,
     schedulePostReminders,
     toneLearningLoop,
+    tagMediaUpload,
   ],
 })

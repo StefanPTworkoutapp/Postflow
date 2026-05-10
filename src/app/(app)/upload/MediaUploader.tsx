@@ -19,7 +19,7 @@ const MAX_SIZE = 50 * 1024 * 1024 // 50 MB
 
 function uid() { return Math.random().toString(36).slice(2) }
 
-export function MediaUploader() {
+export function MediaUploader({ onUploadComplete }: { onUploadComplete?: () => void }) {
   const [files, setFiles] = useState<UploadFile[]>([])
   const [draggingOver, setDraggingOver] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -96,6 +96,7 @@ export function MediaUploader() {
   async function uploadAll() {
     const pending = files.filter(f => f.status === "pending" || f.status === "error")
     await Promise.all(pending.map(uploadFile))
+    onUploadComplete?.()
   }
 
   const pendingCount   = files.filter(f => f.status === "pending" || f.status === "error").length

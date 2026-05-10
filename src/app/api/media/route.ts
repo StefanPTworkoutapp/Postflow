@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getBrand } from "@/lib/server/brand/getBrand"
 
-// GET /api/media — returns all media uploads for the current brand
+// GET /api/media — returns all media uploads for the current brand (newest first)
 export async function GET() {
   try {
     const supabase = await createClient()
@@ -14,7 +14,7 @@ export async function GET() {
 
     const { data, error } = await supabase
       .from("media_uploads")
-      .select("id, public_url, media_type, filename, file_size_mb")
+      .select("id, public_url, media_type, mime_type, filename, file_size_mb, ai_tags, ai_description, ai_quality_score, used_in_post_id, created_at")
       .eq("brand_id", brand.id)
       .order("created_at", { ascending: false })
 
