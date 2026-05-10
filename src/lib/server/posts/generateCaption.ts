@@ -171,7 +171,12 @@ THIS WEEK'S TRENDING TOPICS IN YOUR NICHE (weave relevance naturally if it fits)
 ${trends.slice(0, 5).map(t => `- ${t.topic}${t.headline ? ` ("${t.headline}")` : ""}`).join("\n")}`
     : ""
 
-  const prompt = `You are a social media copywriter for ${brand_name}, a ${industry} brand.
+  const contentLang = tone_profile?.content_language
+  const langInstruction = contentLang
+    ? `\nIMPORTANT: Write the entire post in ${contentLang}. Never switch languages.`
+    : ""
+
+  const prompt = `You are a social media copywriter for ${brand_name}, a ${industry} brand.${langInstruction}
 
 Write a ${platform} post using the "${template.name}" format.
 

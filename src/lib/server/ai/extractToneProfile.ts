@@ -17,6 +17,8 @@ export type ToneProfile = {
   do_not_use: string[]
   cta_style: string
   emoji_usage: string
+  /** Language the brand writes in — auto-detected from examples. e.g. "Dutch", "English", "Spanish" */
+  content_language: string
 }
 
 export async function extractToneProfile(
@@ -55,8 +57,11 @@ Return ONLY valid JSON matching this exact structure — no explanation, no mark
   "do_use": ["pattern1", "pattern2", "pattern3"],
   "do_not_use": ["avoid1", "avoid2"],
   "cta_style": "direct_action|soft_invite|question|urgency",
-  "emoji_usage": "none|minimal|moderate|heavy"
-}`,
+  "emoji_usage": "none|minimal|moderate|heavy",
+  "content_language": "English"
+}
+
+For content_language: detect the primary language of the example posts (e.g. "Dutch", "English", "Spanish", "French") and use its English name.`,
       },
     ],
   })

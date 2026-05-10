@@ -48,6 +48,7 @@ ${goalsDesc}
 ${doNotMention ? `DO NOT MENTION: ${doNotMention}` : ""}
 ${feedbackLine}
 
+Write the post in ${toneProfile?.content_language ?? "the same language as the examples above"}.
 Write an engaging post that demonstrates their authentic voice. Return ONLY valid JSON — no explanation:
 {
   "caption": "the full caption text",

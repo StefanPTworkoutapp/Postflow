@@ -63,14 +63,15 @@ function buildToneSummary(tp: ToneProfile): string {
 }
 
 function buildPromptBlock(opts: {
-  brand:       Record<string, unknown>
-  tokens:      Record<string, { value: unknown; confidence: number }>
-  patterns:    Array<Record<string, unknown>>
-  trends:      TrendContext[]
-  toneSummary: string | null
-  platform?:   string
+  brand:           Record<string, unknown>
+  tokens:          Record<string, { value: unknown; confidence: number }>
+  patterns:        Array<Record<string, unknown>>
+  trends:          TrendContext[]
+  toneSummary:     string | null
+  platform?:       string
+  contentLanguage: string | null
 }): string {
-  const { brand, tokens, patterns, trends, toneSummary, platform } = opts
+  const { brand, tokens, patterns, trends, toneSummary, platform, contentLanguage } = opts
   const b = brand as {
     name: string; industry?: string; niche?: string; primary_goal?: string
     goals?: string[]; do_not_mention?: string[]
@@ -159,6 +160,7 @@ function buildPromptBlock(opts: {
     b.target_audience_description ? `Audience: ${b.target_audience_description}` : "",
     goalsLine,
     toneSummary ? `Tone: ${toneSummary}` : "",
+    contentLanguage ? `Content language: ${contentLanguage} — ALL generated text must be in ${contentLanguage}.` : "",
     b.do_not_mention?.length ? `Never mention: ${b.do_not_mention.join(", ")}` : "",
     performanceBlock,
     trendBlock,
@@ -264,12 +266,13 @@ export async function getBrandContext(
 
   // 6. Build prompt block
   const promptBlock = buildPromptBlock({
-    brand:       b as Record<string, unknown>,
+    brand:           b as Record<string, unknown>,
     tokens,
-    patterns:    allPatterns,
+    patterns:        allPatterns,
     trends,
     toneSummary,
     platform,
+    contentLanguage: toneProfile?.content_language ?? null,
   })
 
   return {
