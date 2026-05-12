@@ -38,7 +38,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <TooltipProvider>
       <div className="flex h-screen overflow-hidden bg-[hsl(var(--background))]">
-        <Sidebar />
+        <Sidebar userEmail={userEmail} />
         <div className="flex flex-1 flex-col overflow-hidden">
           <TopBar userEmail={userEmail} userName={userName} />
           <main className="flex-1 overflow-y-auto p-6">{children}</main>
