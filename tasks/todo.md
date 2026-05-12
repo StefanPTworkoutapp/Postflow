@@ -65,7 +65,7 @@ Preview URL fix:
 
 ---
 
-## PHASE G — V1 Remaining Spec Items 🔨 ACTIVE
+## PHASE G — V1 Remaining Spec Items ✅ COMPLETE (2026-05-12)
 
 **Goal:** Complete every v1 spec item not yet built. Grouped by scope.
 
@@ -95,7 +95,16 @@ Preview URL fix:
 - [x] Transcription summaries passed as `captionText` into ClipInputs → Shotstack Layer 4 overlays
 - [x] Graceful fallback: skips transcription if OPENAI_API_KEY missing (no error, just no captions)
 
-**✅ Phase G complete when:** All 4 groups done, `npx tsc --noEmit` clean, build passes.
+### G5 — Final V1 spec gaps ✅ COMPLETE (2026-05-12)
+- [x] Buffer notification-publish fallback UI — `PostEditor.tsx` shows "Almost there" banner for Instagram/Facebook posts with media; `schedule/route.ts` returns `notificationPublish` flag
+- [x] Instagram OAuth debug tooling — `/api/auth/instagram/debug` endpoint shows masked app ID, redirect URI, full auth URL preview; callback route now logs full tokenUrl + raw response body for Vercel log diagnosis
+
+**Architectural debt (Amber — functionality exists, not separate module files):**
+- nudge-analyzer.ts — inline in `/api/trend/[id]/nudge/route.ts` as `extractNudgeSignals()`
+- version-builder.ts — inline via `getVersionTokens()` in `trend-filter.ts`
+- concept-generator.ts — part of `trend-filter.ts` as `generateTrendConcepts()`
+- useRenderStatus, useUploadManager, useBrandProfile, useTrendConcepts, useDualRender — state managed inline in client components (acceptable for V1)
+- `/inspiration/analyse/page.tsx` — analysis result is inline in `InspirationClient.tsx` (acceptable for V1)
 
 ---
 
