@@ -1,0 +1,691 @@
+---
+description: Code Quality & Completeness Review - Verify correct implementation, no errors/gaps, complete documentation, and comprehensive test coverage
+alwaysApply: false
+---
+
+# Code Quality & Completeness Review
+
+This workflow verifies that code and features are **actually complete** — no 
+hidden bugs, no documentation gaps, no untested code, no broken edge cases.
+
+Use this BEFORE marking work done, or when inheriting code from the past.
+This is the "holistic health check" that prevents "it looked fine until..."
+
+**When to use:** After implementation is "finished" and before any merge/deploy.
+
+================================================================
+1. PRE-REVIEW CHECKLIST
+================================================================
+
+Before diving into detailed checks, answer these baseline questions:
+
+□ Code compiles without errors?
+□ No TypeScript/ESLint/type errors?
+□ Test suite runs without failures? (what's the pass rate?)
+□ All console.log/debug statements removed?
+□ No commented-out code left in?
+□ No TODO/FIXME/XXX comments without context or deadline?
+
+If ANY of these fail, STOP and fix before proceeding.
+
+================================================================
+2. IMPLEMENTATION CORRECTNESS REVIEW
+================================================================
+
+Verify the code actually implements what was requested, correctly.
+
+REQUIREMENTS VERIFICATION:
+□ Does the code do what was asked? (read the original request)
+□ Did you miss any requirements?
+□ Are there requirements that are partially implemented?
+□ Does the implementation match the acceptance criteria?
+
+LINE-BY-LINE CODE REVIEW:
+For each function/component:
+
+□ Do the inputs match what callers pass?
+□ Do the outputs match what callers expect?
+□ Is the logic correct for the happy path?
+□ Does it handle all documented inputs properly?
+□ Are there obvious bugs (off-by-one, null checks, type mismatches)?
+□ Are variable names clear and consistent?
+□ Is there dead code that should be removed?
+□ Are there any "magic numbers" that should be constants?
+
+CONTROL FLOW:
+□ Does every code path return/resolve?
+□ Are there unreachable code paths?
+□ Is the logic flow obvious or convoluted?
+□ Do conditionals cover all cases (if X, else what)?
+□ Are loops guaranteed to terminate?
+
+EXAMPLE CHECKLIST:
+```
+Function: calculateDiscount(price, quantity, coupon)
+
+✓ Handles price = 0? (no division errors)
+✓ Handles quantity = 0? (returns 0 discount? 0 price?)
+✓ Handles coupon = null / undefined?
+✓ Handles negative prices / quantities?
+✓ Returns correct type (number, or throws)?
+✓ Precision correct for currency (2 decimals)?
+✓ Doesn't mutate input parameters?
+✓ Performance reasonable (no N² loops)?
+```
+
+================================================================
+3. ERROR HANDLING & EDGE CASE REVIEW
+================================================================
+
+Check if code fails gracefully or crashes silently.
+
+EXPLICIT ERROR HANDLING:
+□ What happens on network failure? (is it handled?)
+□ What happens on invalid input? (thrown? logged? defaults?)
+□ What happens on timeout? (retry logic? fallback?)
+□ What happens on API error? (shown to user? logged?)
+□ Are all Promise rejections caught?
+□ Are all async errors awaited/handled?
+
+EDGE CASES:
+□ Empty input ([], "", null, undefined)
+□ Single item (list with 1 thing)
+□ Large input (1000s of items)
+□ Boundary values (min/max, first/last)
+□ Concurrent calls (race conditions?)
+□ Invalid data types (string instead of number)
+□ Missing optional fields
+□ All paths through conditionals tested
+
+DEFENSIVE CODING:
+□ Input validation at entry points?
+□ Type checks (TypeScript or runtime)?
+□ Null checks before property access?
+□ Array bounds checks?
+□ Exception handling for third-party calls?
+□ Graceful degradation (doesn't break on one bad item)?
+
+SYMPTOMS OF POOR ERROR HANDLING:
+❌ "It works in the happy path, but if X is null it crashes"
+❌ "No error logging, so we don't know what went wrong"
+❌ "Unhandled promise rejection"
+❌ "Silent failure (returns undefined instead of throwing)"
+❌ "Generic error message (doesn't help debug)"
+
+================================================================
+4. DOCUMENTATION COMPLETENESS REVIEW
+================================================================
+
+Verify documentation is complete enough for future developers to understand 
+and extend the code.
+
+FUNCTION/COMPONENT DOCUMENTATION:
+For each public API (function, component, class, export):
+
+□ Is there a description of what it does?
+□ Are inputs documented (parameters, types, examples)?
+□ Are outputs documented (return value, type, examples)?
+□ Are side effects documented (modifies state? calls API?)?
+□ Are errors documented (what exceptions can it throw?)?
+□ Are there usage examples?
+□ Is there a note if this is performance-sensitive?
+□ Is there a note if this has breaking changes?
+
+EXAMPLE (GOOD):
+```javascript
+/**
+ * Calculates the total price with discounts applied.
+ * 
+ * @param {number} basePrice - Item price in cents
+ * @param {number} quantity - Number of items (must be > 0)
+ * @param {Coupon|null} coupon - Optional coupon to apply
+ * @returns {number} Total price in cents
+ * @throws {Error} if basePrice < 0 or quantity <= 0
+ * 
+ * @example
+ * calculateTotal(1000, 2, coupon) // 2000 cents ($20)
+ * calculateTotal(1000, 2, null) // 2000 cents (no coupon)
+ */
+```
+
+EXAMPLE (BAD):
+```javascript
+// calculate price
+function calc(p, q, c) {
+  return p * q - (c ? c.amount : 0);
+}
+```
+
+ARCHITECTURE/DESIGN DOCUMENTATION:
+□ Is there a README explaining the module/feature?
+□ Are architectural decisions documented (why this design)?
+□ Are complex algorithms explained?
+□ Are dependencies clearly listed?
+□ Is the data flow documented (how does data move)?
+□ Are there diagrams for complex flows?
+
+MAINTAINABILITY DOCUMENTATION:
+□ Are there comments explaining WHY, not just WHAT?
+□ Are there known limitations/future improvements noted?
+□ Are there "gotchas" or surprising behaviors documented?
+□ Is there a troubleshooting guide?
+□ Are external dependencies documented (APIs, libraries)?
+
+CHANGELOG/VERSION DOCUMENTATION:
+□ Are breaking changes documented?
+□ Are new features documented?
+□ Is there a migration guide if needed?
+
+================================================================
+5. TEST COVERAGE REVIEW
+================================================================
+
+Verify tests actually cover the code and prove it works.
+
+TEST EXISTENCE:
+□ Does every public function have at least one test?
+□ Do error cases have tests (not just happy path)?
+□ Do edge cases have tests?
+□ Do integration points have tests?
+
+TEST QUALITY (not just quantity):
+A test is good if:
+  ✓ It fails when code is broken (test actually proves correctness)
+  ✓ It passes when code is fixed
+  ✓ It tests ONE behavior (not 5 things at once)
+  ✓ It has clear setup, action, assertion
+  ✓ It has a descriptive name explaining what it tests
+
+A test is BAD if:
+  ❌ It always passes (even if code is wrong)
+  ❌ It's unclear what it's testing
+  ❌ It depends on test order (brittle)
+  ❌ It uses mock objects that hide real problems
+  ❌ It tests implementation details, not behavior
+
+COVERAGE METRICS:
+□ What % of code is covered by tests? (aim for 80%+)
+□ What % of lines are covered? (branches? functions?)
+□ What code is NOT covered? (intentional? or forgotten?)
+□ Are critical paths covered more thoroughly?
+
+EXAMPLE TEST REVIEW:
+
+GOOD TEST:
+```javascript
+test('calculateDiscount returns 0 for null coupon', () => {
+  const result = calculateDiscount(1000, 2, null);
+  expect(result).toBe(0);
+});
+
+test('calculateDiscount throws for negative price', () => {
+  expect(() => calculateDiscount(-100, 2, null))
+    .toThrow('Price must be positive');
+});
+```
+
+BAD TEST:
+```javascript
+test('discount function works', () => {
+  const x = calculateDiscount(1000, 2, {amount: 100});
+  const y = calculateDiscount(500, 1, null);
+  expect(x).toBeDefined();
+  expect(y).toBeDefined();
+});
+```
+
+SPECIFIC TEST CHECKLIST:
+
+Unit Tests:
+□ Does each function have unit tests?
+□ Do tests cover branches (if/else, switch)?
+□ Are error cases tested?
+□ Are boundary conditions tested?
+□ Mock external dependencies properly?
+
+Integration Tests:
+□ Do tests verify components work together?
+□ Are real (or realistic) data flows tested?
+□ Do tests verify API contracts?
+□ Are database operations tested?
+
+Edge Case Tests:
+□ Empty/null inputs
+□ Large inputs
+□ Boundary values
+□ Concurrent calls
+□ Error states from dependencies
+□ Timeout/retry scenarios
+
+Snapshot/Visual Tests (if applicable):
+□ Are snapshots reasonable (not 1000 lines)?
+□ Would a developer understand what changed?
+□ Are visual regressions caught?
+
+================================================================
+6. CODE QUALITY METRICS REVIEW
+================================================================
+
+Verify code quality beyond just "does it work?"
+
+COMPLEXITY:
+□ Functions under 50 lines? (most should be)
+□ Cyclomatic complexity reasonable? (how many branches?)
+□ Nesting depth reasonable? (not 5 levels deep)
+□ Are there better ways to simplify?
+
+DUPLICATION:
+□ Is code repeated that could be abstracted?
+□ Are there similar patterns that should share logic?
+□ Is copy-paste used instead of abstraction?
+□ Would a shared utility help?
+
+CONSISTENCY:
+□ Code style matches the rest of the project?
+□ Naming conventions consistent?
+□ Similar problems solved in similar ways?
+□ No random formatting or weird indentation?
+
+PERFORMANCE:
+□ Are there obvious inefficiencies (N² loops, repeated calculations)?
+□ Are expensive operations (API calls, DB queries) minimized?
+□ Are there memory leaks (listeners not cleaned up, subscriptions not unsubscribed)?
+□ Is caching used appropriately?
+
+SECURITY (if relevant):
+□ Are inputs validated/sanitized?
+□ Are secrets not hardcoded?
+□ Are SQL injections prevented (parameterized queries)?
+□ Is user data encrypted if needed?
+□ Are permissions checked?
+
+================================================================
+7. INTEGRATION & ENVIRONMENT REVIEW
+================================================================
+
+Verify the code works in the actual environment.
+
+LOCAL TESTING:
+□ Does it work on localhost?
+□ Does it work in development environment?
+□ Have you tested it with realistic data?
+□ Have you tested with slow network (throttled)?
+□ Have you tested with actual API (not mocked)?
+
+ENVIRONMENT SPECIFICS:
+□ Does it work in different browsers (if web)?
+□ Does it work on different Node.js versions?
+□ Does it work with different database versions?
+□ Are environment variables documented?
+□ Are there any hardcoded paths/hosts?
+
+DEPENDENCIES:
+□ Are all required dependencies listed (package.json)?
+□ Are dependency versions locked (no floating versions)?
+□ Are there security vulnerabilities in dependencies?
+□ Are unused dependencies removed?
+□ Do dependency versions work together?
+
+================================================================
+8. DOCUMENTATION TESTING
+================================================================
+
+Verify documentation is accurate and complete.
+
+README ACCURACY:
+□ Does the README match the actual code?
+□ Are examples in README actually runnable?
+□ Are install instructions correct?
+□ Do they work exactly as written?
+
+API DOCUMENTATION:
+□ Are all endpoints documented?
+□ Are all parameters documented?
+□ Are response formats documented?
+□ Are error responses documented?
+□ Are examples provided and correct?
+
+DEVELOPER ONBOARDING:
+□ Can a new developer run the project locally with instructions?
+□ Do they know where to start making changes?
+□ Are common tasks documented (run tests, build, deploy)?
+□ Is the architecture clear?
+□ Are there troubleshooting guides?
+
+================================================================
+9. REVIEW REPORT TEMPLATE
+================================================================
+
+After completing the review, document findings:
+
+---
+
+## IMPLEMENTATION CORRECTNESS
+**Score: [0-10] / Status: [PASS/NEEDS WORK]**
+
+**Requirements Met:**
+- ✓ [Requirement 1 implemented correctly]
+- ✓ [Requirement 2 working as expected]
+- ✗ [Missing or partially implemented requirement]
+
+**Issues Found:**
+- [Specific bug or logic error with location]
+- [Input validation missing for X]
+- [Off-by-one error in loop]
+
+**Recommendations:**
+- Fix [issue] by changing [location] to [solution]
+- Add validation for [input] before processing
+
+---
+
+## ERROR HANDLING & EDGE CASES
+**Score: [0-10] / Status: [COMPREHENSIVE/PARTIAL/MISSING]**
+
+**Covered:**
+- ✓ Null/undefined inputs handled
+- ✓ Network errors caught and logged
+- ✗ Empty array edge case crashes
+
+**Gaps:**
+- Missing error handling for API timeout
+- No validation for negative quantities
+- Silent failure on malformed data
+
+**Recommendations:**
+- Add try/catch around API call at line [X]
+- Add validation: `if (quantity < 0) throw Error(...)`
+- Improve error message: "[generic error]" → "[specific explanation]"
+
+---
+
+## DOCUMENTATION
+**Score: [0-10] / Status: [COMPLETE/PARTIAL/MISSING]**
+
+**Covered:**
+- ✓ Function signatures documented
+- ✓ Usage examples provided
+- ✗ No explanation of X architecture decision
+
+**Gaps:**
+- Missing JSDoc on helper functions
+- No README explaining data flow
+- No troubleshooting guide
+- Examples don't show error cases
+
+**Recommendations:**
+- Add JSDoc comments to [functions]
+- Create README section: "How to extend this"
+- Document error scenarios in examples
+
+---
+
+## TEST COVERAGE
+**Score: [0-10] / Status: [COMPREHENSIVE/ADEQUATE/INCOMPLETE]**
+
+**Coverage Metrics:**
+- Statement coverage: X%
+- Branch coverage: X%
+- Function coverage: X%
+- Line coverage: X%
+
+**Tests Present:**
+- ✓ Happy path tested
+- ✓ Null input tested
+- ✗ Network error scenario not tested
+
+**Test Quality Issues:**
+- [Test name] - doesn't actually verify behavior
+- [Test name] - always passes, would miss real bugs
+- [Test name] - tests implementation, not behavior
+
+**Missing Tests:**
+- calculateDiscount with expired coupon
+- Network timeout during API call
+- Concurrent requests (race condition)
+- [Boundary condition]
+
+**Recommendations:**
+- Fix test at [location] to assert [correct behavior]
+- Add test for [scenario]
+- Improve test [name] - currently doesn't prove [behavior]
+
+---
+
+## CODE QUALITY
+**Score: [0-10]**
+
+**Strengths:**
+- Clear variable names and function signatures
+- Good separation of concerns
+- Consistent style with project
+
+**Issues:**
+- [Function name] is 120 lines, should be split
+- [Pattern repeated 3x], should be abstracted
+- [Magic number], should be named constant
+- Unused import: [import]
+
+**Recommendations:**
+- Extract [logic] into separate function `[name]`
+- Create constant: `const [NAME] = [value]`
+- Remove unused: [import]
+
+---
+
+## INTEGRATION & ENVIRONMENT
+**Status: [VERIFIED/NEEDS TESTING]**
+
+**Local Testing:**
+- ✓ Works on localhost
+- ✓ Works with sample data
+- ✗ Not tested with real API
+
+**Environment Issues:**
+- Hard-coded API URL (should be env var)
+- Database query won't work in production schema
+- Missing Node.js version in .nvmrc
+
+**Recommendations:**
+- Move API URL to environment variable
+- Test against production database schema
+- Add .nvmrc specifying Node version
+
+---
+
+## OVERALL ASSESSMENT
+
+**Final Score: [X]/10**
+
+**Status: [READY TO SHIP / NEEDS FIXES BEFORE SHIPPING / SIGNIFICANT REWORK NEEDED]**
+
+**Summary:**
+[One paragraph explaining overall quality and readiness]
+
+**Show-Stoppers (must fix before shipping):**
+1. [Critical issue that blocks deployment]
+2. [Functionality that doesn't work]
+
+**Important (fix before shipping, prevents future pain):**
+1. [Test gap that could hide regressions]
+2. [Documentation missing for critical feature]
+
+**Nice-to-Have (polish):**
+1. [Code quality improvement]
+2. [Performance optimization]
+
+---
+
+## ACTION ITEMS
+
+Priority: CRITICAL (must do before merge)
+- [ ] Fix [bug] at [location]
+- [ ] Add test for [scenario]
+- [ ] Add error handling for [case]
+
+Priority: HIGH (do before shipping)
+- [ ] Document [component/feature]
+- [ ] Refactor [code] to improve readability
+- [ ] Test [scenario] on real environment
+
+Priority: LOW (can do in next iteration)
+- [ ] Optimize [performance]
+- [ ] Add [stretch feature]
+
+---
+
+## SIGN-OFF
+
+**Reviewer:** [Your name]
+**Date:** [Date]
+**Reviewed Commit:** [commit hash]
+
+**Ready to Merge:** YES / NO
+**Ready to Deploy:** YES / NO
+
+---
+
+================================================================
+10. REVIEW WORKFLOW (STEP-BY-STEP)
+================================================================
+
+1. **SETUP**
+   - Checkout the branch/commit to review
+   - Run: `npm test` or equivalent (see the baseline)
+   - Note: any failing tests? Do they pass on main?
+   - Review: git log main..[branch-name] (see all commits)
+
+2. **SKIM THE CODE**
+   - Read the PR description / commit messages
+   - Understand what was supposed to change
+   - Skim the main files changed (don't deep read yet)
+
+3. **READ THE CODE THOROUGHLY**
+   - Start at entry point (main component, API route, etc.)
+   - Trace through the code flow
+   - Read supporting functions/utilities
+   - Note: dependencies, assumptions, edge cases
+
+4. **TEST CORRECTNESS**
+   - Walk through the logic line-by-line
+   - Ask: "Is this correct?" for each decision
+   - Check for obvious bugs
+   - Verify it handles what was requested
+
+5. **CHECK ERROR HANDLING**
+   - What if input is null?
+   - What if the network fails?
+   - What if data is invalid?
+   - Are these handled or would they crash?
+
+6. **REVIEW DOCUMENTATION**
+   - Is there JSDoc on functions?
+   - Is there a README explaining the feature?
+   - Are complex parts explained?
+   - Would a new dev understand this?
+
+7. **VERIFY TESTS**
+   - Read the test file
+   - Does each test make sense?
+   - Do the tests prove the code works?
+   - What's NOT tested?
+   - Run tests: are they passing?
+
+8. **CHECK CODE QUALITY**
+   - Any obvious duplication?
+   - Any functions too long?
+   - Any magic numbers?
+   - Any complex nesting?
+
+9. **VERIFY INTEGRATION**
+   - Does it work on localhost?
+   - Does it work with real data/APIs?
+   - Are there environment issues?
+
+10. **WRITE THE REPORT**
+    - Use the template above
+    - Be specific: include file names, line numbers
+    - Be constructive: suggest fixes, not just problems
+    - Prioritize: what MUST be fixed vs. nice-to-have
+
+11. **PRESENT FINDINGS**
+    - Share the report
+    - Highlight what's good (be honest)
+    - Explain why issues matter
+    - Provide examples of fixes
+    - Ask for clarification on unclear code
+
+================================================================
+11. WHEN TO RUN THIS REVIEW
+================================================================
+
+**MANDATORY:**
+- Before merging ANY feature to main
+- Before deploying to production
+- When code quality feels incomplete
+- When inheriting code from another developer
+
+**RECOMMENDED:**
+- After significant refactoring
+- Before marking a sprint done
+- When adding to critical paths (auth, payments, etc.)
+- During code review rounds (before final approval)
+
+**OPTIONAL (but helpful):**
+- Weekly on random features (catch patterns)
+- Before each developer demo
+- Before planning next sprint (understand code health)
+
+================================================================
+12. FIXING BASED ON REVIEW FEEDBACK
+================================================================
+
+When issues are found:
+
+CRITICAL ISSUES:
+- [ ] Stop work, fix immediately before continuing
+- [ ] Re-run tests after fix
+- [ ] Re-review that section
+- [ ] Update documentation if changed
+
+IMPORTANT ISSUES:
+- [ ] Fix before merge
+- [ ] Add tests if tests were missing
+- [ ] Update docs if docs were wrong
+- [ ] Request re-review after fixes
+
+POLISH ISSUES:
+- [ ] Fix before shipping (can be in same PR)
+- [ ] Can be deferred to next iteration if discussed
+
+FOLLOW-UP REVIEW:
+- [ ] After developer fixes critical/important issues
+- [ ] Re-run this workflow on problem areas
+- [ ] Spot-check the fixes
+- [ ] Get second sign-off if major changes
+
+================================================================
+13. USING THIS REVIEW FOR FUTURE DEVELOPMENT
+================================================================
+
+This review isn't just about THIS code — it's about making FUTURE 
+development easier.
+
+PATTERNS TO CAPTURE:
+- "This pattern works well for [use case]" → reuse it
+- "This mistake happened here" → document so it doesn't happen again
+- "This documentation pattern is clear" → use it elsewhere
+
+UPDATE PROJECT MEMORY:
+- Add lessons learned to `tasks/lessons.md`
+- Update coding standards if new patterns emerged
+- Document architectural decisions made here
+- Add troubleshooting guides if issues found
+
+FUTURE DEVELOPER REFERENCE:
+- This reviewed code becomes a template for similar features
+- Documentation here becomes the standard
+- Test patterns here become the model
+- Your corrections here prevent similar bugs later
+
+================================================================

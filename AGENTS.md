@@ -88,6 +88,40 @@ TESTING CHECKLIST:
 ✓ Edge cases tested (empty states, errors, boundary conditions)
 
 ================================================================
+4.5. POST-PHASE REVIEW GATE (MANDATORY — NO EXCEPTIONS)
+================================================================
+
+After completing ANY phase, feature, or significant change, you MUST run
+both review workflows before marking the work done. This is not optional.
+
+STEP 1 — CODE REVIEW (code-review-workflow.mdc §1–§5):
+Run through these in order for every new file:
+  □ Pre-audit: compiles, no TS errors, no lint violations
+  □ Modularity: single responsibility, injectable deps, no tight coupling
+  □ Expansion-readiness: patterns abstracted, not hardcoded for THIS case
+  □ Architecture: clear layer separation, clean data flow
+  □ Quality: error handling, documentation, consistent naming
+
+STEP 2 — COMPLETENESS CHECK (code-quality-completeness.mdc §1–§6):
+  □ Requirements met: every spec item from features_v6.md is implemented
+  □ Error handling: null inputs, network failures, API errors all handled
+  □ Edge cases: empty states, boundary conditions, concurrent calls
+  □ No TODOs, FIXMEs, or commented-out code left in shipped files
+  □ All async errors caught (no unhandled promise rejections)
+  □ Type safety: no unintended `any` casts beyond the documented nt() pattern
+
+STEP 3 — LESSONS & DECISIONS:
+  □ Any mistake corrected during this phase → add to tasks/lessons.md
+  □ Any architectural decision made → add to tasks/decisions.md
+  □ Any new UI pattern invented → add to memory/ui_ux_patterns.md
+  □ Any new DB column or table → note it needs types regenerated
+
+PHASE IS NOT DONE UNTIL ALL THREE STEPS PASS.
+
+If a critical issue is found in Step 1 or Step 2, fix it before moving on.
+Do not defer critical issues to "next iteration" — that iteration never comes.
+
+================================================================
 5. EXPANSION-READY DESIGN
 ================================================================
 

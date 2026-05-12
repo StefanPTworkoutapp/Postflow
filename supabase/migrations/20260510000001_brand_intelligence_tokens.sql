@@ -85,6 +85,8 @@ ALTER TABLE postflow.tone_feedback
 
 ALTER TABLE postflow.brand_token_events ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "brand_token_events_owner" ON postflow.brand_token_events;
+
 CREATE POLICY "brand_token_events_owner" ON postflow.brand_token_events
   FOR ALL
   USING (

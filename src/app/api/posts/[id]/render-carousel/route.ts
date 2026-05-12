@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { getBrand } from "@/lib/server/brand/getBrand"
 import { renderCarousel } from "@/lib/server/render/renderPost"
 import type { CarouselRenderInput } from "@/lib/server/render/renderPost"
+import { assertCarouselValid } from "@/lib/server/render/validate-carousel"
 
 // Carousel renders can take a while (1 Puppeteer instance per slide, parallelised)
 export const maxDuration = 120
@@ -45,6 +46,7 @@ export async function POST(
     if (!Array.isArray(slideContent) || slideContent.length === 0) {
       throw new Error("slideContent array required")
     }
+    assertCarouselValid(slideContent, templateSlug)
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Invalid request body"
     return NextResponse.json({ error: msg }, { status: 400 })

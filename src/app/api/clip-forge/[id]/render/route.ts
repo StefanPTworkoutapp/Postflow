@@ -1,0 +1,154 @@
+/**
+ * POST /api/clip-forge/[id]/render
+ *
+ * Starts the Shotstack render for a clip-forge job.
+ * Called after the user selects a music track in MusicPicker.
+ *
+ * Body:
+ *   musicSrc    — full_url of the selected track (or null for no music)
+ *   musicVolume — 0–1, defaults to 0.4
+ *   hookText    — optional hook text for first clip
+ *   ctaText     — optional CTA for last clip
+ *   captions    — optional per-clip caption strings (ordered by sortedClips)
+ *
+ * Flow:
+ *   1. Load job + clips (ordered)
+ *   2. Build AssembleSpec from brand kit snapshot + clip data
+ *   3. Submit to Shotstack via assembleBrandedRender() + submitRender()
+ *   4. Store render_id, update status = 'rendering'
+ *   5. Return { ok: true, renderId }
+ */
+
+import { NextRequest, NextResponse }   from "next/server"
+import { createClient }                from "@/lib/supabase/server"
+import { getBrand }                    from "@/lib/server/brand/getBrand"
+import { assembleBrandedRender }       from "@/lib/server/render/brand-assembler"
+import { submitRender }                from "@/lib/server/render/shotstack"
+import type { BrandKit, ClipInput, AssembleSpec } from "@/lib/server/render/brand-assembler"
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const nt = (client: ReturnType<typeof createClient> extends Promise<infer T> ? T : never) => client as any
+
+interface RenderBody {
+  musicSrc?:    string | null
+  musicVolume?: number
+  hookText?:    string
+  ctaText?:     string
+  /** Per-clip captions in sorted order (same order as sortedClips from /create) */
+  captions?:    string[]
+}
+
+export async function POST(
+  req:     NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const { id: jobId } = await params
+
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
+    const brand = await getBrand()
+    if (!brand) return NextResponse.json({ error: "No brand found" }, { status: 400 })
+
+    // ── Load the job ──────────────────────────────────────────────────────────
+    const { data: job, error: jobError } = await (nt(supabase))
+      .from("clip_forge_jobs")
+      .select("id, brand_id, status, goal, platform, brand_kit_snapshot, brand_tokens_snapshot, output_caption, output_hashtags")
+      .eq("id", jobId)
+      .eq("brand_id", brand.id)
+      .maybeSingle()
+
+    if (jobError || !job) {
+      return NextResponse.json({ error: "Job not found" }, { status: 404 })
+    }
+
+    const j = job as {
+      id: string
+      brand_id: string
+      status: string
+      goal: string
+      platform: string
+      brand_kit_snapshot: BrandKit | null
+      brand_tokens_snapshot: Record<string, { value: unknown; confidence: number }> | null
+      output_caption: string | null
+      output_hashtags: string[] | null
+    }
+
+    if (!["pending_music", "analysing"].includes(j.status)) {
+      return NextResponse.json(
+        { error: `Job is in '${j.status}' state — cannot start render` },
+        { status: 409 }
+      )
+    }
+
+    // ── Load clips ordered by order_index ─────────────────────────────────────
+    const { data: clips, error: clipsError } = await (nt(supabase))
+      .from("clip_forge_clips")
+      .select("id, public_url, duration_seconds, order_index")
+      .eq("job_id", jobId)
+      .order("order_index", { ascending: true })
+
+    if (clipsError || !clips?.length) {
+      return NextResponse.json({ error: "No clips found for this job" }, { status: 400 })
+    }
+
+    const body = await req.json() as RenderBody
+    const {
+      musicSrc,
+      musicVolume = 0.4,
+      hookText,
+      ctaText,
+      captions = [],
+    } = body
+
+    // ── Build clip inputs ─────────────────────────────────────────────────────
+    type ClipRow = { id: string; public_url: string | null; duration_seconds: number | null; order_index: number }
+    const clipInputs: ClipInput[] = (clips as ClipRow[]).map((c, i) => ({
+      publicUrl:       c.public_url ?? "",
+      durationSeconds: c.duration_seconds ?? 5,
+      hookText:        i === 0 ? hookText : undefined,
+      ctaText:         i === (clips as ClipRow[]).length - 1 ? ctaText : undefined,
+      captionText:     captions[i] ?? undefined,
+    }))
+
+    // ── Extract text_overlay_style from brand token snapshot ──────────────────
+    const tokensSnap = j.brand_tokens_snapshot ?? {}
+    const textOverlayStyle = (tokensSnap.text_overlay_style?.value as string | undefined) ?? "bold_center"
+
+    // ── Assemble render spec ──────────────────────────────────────────────────
+    const assembleSpec: AssembleSpec = {
+      clips:            clipInputs,
+      platform:         j.platform,
+      goal:             j.goal,
+      brandKit:         j.brand_kit_snapshot,
+      textOverlayStyle,
+      music: musicSrc
+        ? { src: musicSrc, volume: musicVolume }
+        : undefined,
+    }
+
+    const renderSpec  = assembleBrandedRender(assembleSpec)
+
+    // ── Submit to Shotstack ───────────────────────────────────────────────────
+    const renderResult = await submitRender(renderSpec)
+
+    // ── Update job ────────────────────────────────────────────────────────────
+    await (nt(supabase))
+      .from("clip_forge_jobs")
+      .update({
+        status:               "rendering",
+        render_progress:      0,
+        shotstack_render_id:  renderResult.renderId,
+      })
+      .eq("id", jobId)
+
+    return NextResponse.json({ ok: true, renderId: renderResult.renderId })
+
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error"
+    console.error("[clip-forge/render] error:", err)
+    return NextResponse.json({ error: message }, { status: 500 })
+  }
+}

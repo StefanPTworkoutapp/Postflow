@@ -7,6 +7,9 @@ import { weeklyTrendEmail }          from "@/inngest/jobs/weeklyTrendEmail"
 import { schedulePostReminders }     from "@/inngest/jobs/postReminders"
 import { toneLearningLoop }          from "@/inngest/jobs/toneLearningLoop"
 import { tagMediaUpload }            from "@/inngest/jobs/tagMediaUpload"
+import { nicheResearchSync }         from "@/inngest/jobs/nicheResearchSync"
+import { templatePulse }             from "@/inngest/jobs/templatePulse"
+import { nicheBenchmarkRefresh }     from "@/inngest/jobs/nicheBenchmarkRefresh"
 
 export const { GET, POST, PUT } = serve({
   client:    inngest,
@@ -18,5 +21,8 @@ export const { GET, POST, PUT } = serve({
     schedulePostReminders,
     toneLearningLoop,
     tagMediaUpload,
+    nicheResearchSync,
+    templatePulse,
+    nicheBenchmarkRefresh,
   ],
 })

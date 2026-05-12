@@ -151,7 +151,7 @@ export async function renderCarousel(input: CarouselRenderInput): Promise<Buffer
     const data = buildTemplateData(resolvedInput, width, height, {
       slideIndex:   idx,
       totalSlides,
-      slideContent: input.slideContent,
+      slideContent: resolvedInput.slideContent,  // use resolved data URIs, not raw URLs
     })
     const html = template.buildHtml(data)
     return renderHtmlToPng(html, width, height)

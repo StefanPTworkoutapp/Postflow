@@ -12,6 +12,10 @@ import {
   Palette,
   Settings,
   Zap,
+  Link2,
+  LayoutTemplate,
+  Wand2,
+  TrendingUp,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
@@ -22,8 +26,12 @@ const navItems = [
   { label: "Upload", href: "/upload", icon: Upload },
   { label: "Posts", href: "/posts", icon: FileText },
   { label: "Stories & Reels", href: "/stories", icon: Clapperboard },
+  { label: "Create Video",    href: "/create",  icon: Wand2 },
+  { label: "Trend Builder",  href: "/trend",   icon: TrendingUp },
   { label: "Analytics", href: "/analytics", icon: BarChart2 },
   { label: "Brand", href: "/brand", icon: Palette },
+  { label: "Templates", href: "/templates", icon: LayoutTemplate },
+  { label: "Connections", href: "/settings/connections", icon: Link2 },
   { label: "Settings", href: "/settings", icon: Settings },
 ]
 

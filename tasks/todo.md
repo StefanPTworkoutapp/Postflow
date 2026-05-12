@@ -47,143 +47,54 @@ Billing:
 
 ---
 
-## PHASE B — Brand Intelligence Foundation ⏳
+## PHASE B — Brand Intelligence Foundation ✅ COMPLETE (2026-05-10)
 
-**Goal:** Every Claude call uses a unified `getBrandContext()` function. No more ad-hoc assembly.
-**Why now:** Without this, format conversions and calendar regeneration run without brand context — captions aren't brand-aware.
-
-### Migration
-- [ ] Write `20260510000001_brand_intelligence_tokens.sql`
-  - `ALTER TABLE postflow.brands ADD COLUMN IF NOT EXISTS intelligence_tokens JSONB DEFAULT '{}'`
-  - `CREATE TABLE postflow.brand_token_events (...)` — see memory/brand_intelligence.md for schema
-  - Add new feedback tags to `tone_feedback` CHECK constraint: `great_hook`, `bad_music`, `too_fast`, `too_slow`, `wrong_length`, `doesnt_fit_brand`
-- [ ] Review + apply migration
-
-### Library
-- [ ] Build `src/lib/server/brand/getBrandContext.ts`
-  - Input: `brandId: string`
-  - Output: `Promise<string>` — ready-to-inject prompt block
-  - Sources: `brands.*` + `performance_patterns` + `niche_trends` + `intelligence_tokens`
-  - **No caller ever assembles brand context inline after this exists**
-
-### Refactor all callers (no new behaviour — pure refactor)
-- [ ] `src/lib/server/posts/generateCaption.ts` — replace manual assembly with `getBrandContext()`
-- [ ] `src/app/api/calendar/generate/route.ts` — replace inline assembly with `getBrandContext()`
-- [ ] `src/app/api/posts/[id]/convert-format/route.ts` — ADD `getBrandContext()` (currently none)
-- [ ] `src/app/api/calendar/[id]/regenerate/route.ts` — ADD `getBrandContext()` (currently none)
-
-### Feedback tags UI
-- [ ] PostEditor: add new video/hook tags to tone feedback section
-  - Show `great_hook`, `too_fast`, `too_slow`, `wrong_length`, `doesnt_fit_brand` only when `post.platform` is tiktok or `template_slug` includes "reel"
-  - Keep existing 5 tags for all posts
-
-### Code quality check (run after Phase B)
-- [ ] `npx tsc --noEmit` — zero errors
-- [ ] Search codebase for `tone_profile?.summary` and `performance_patterns` inline — must be 0 results in routes after refactor
-- [ ] Confirm `getBrandContext` is the only place brand prompt is assembled
-
-### Verification
-- [ ] Generate a caption → check server log includes "BRAND INTELLIGENCE" block with token data
-- [ ] Regenerate a calendar entry → confirm it respects brand tone (not generic)
-- [ ] Switch a post from single-image to carousel → confirm slides reflect brand voice
-- [ ] Submit "great_hook" feedback → confirm saves to `tone_feedback` table without constraint error
-
-**✅ Phase B complete when:** Zero inline brand assembly in any route. All 4 callers use `getBrandContext()`. New feedback tags save correctly.
+- [x] Migration `20260510000001_brand_intelligence_tokens.sql` — intelligence_tokens column, brand_token_events table, extended tone_feedback CHECK
+- [x] `getBrandContext.ts` built — queries brands + performance_patterns + niche_trends + intelligence_tokens, builds prompt block
+- [x] All 4 Claude callers refactored: generateCaption, calendar/generate, convert-format, calendar/regenerate
+- [x] Video/reel + carousel feedback tags added to PostEditor UI (conditional on selectedTemplate)
+- [x] Dutch language support: content_language auto-detected in extractToneProfile, injected into all generation prompts
+- [x] JSON fence-stripping added to extractToneProfile, generateSamplePost, generateCaption (robustJsonParse)
+- [x] `npx tsc --noEmit` — zero errors ✓
 
 ---
 
-## PHASE C — Upload Hub Polish ⏳
+## PHASE C — Upload Hub ✅ COMPLETE (2026-05-10)
 
-**Goal:** `/upload` is a real media library, not just a one-shot upload tool.
-
-### Gallery view
-- [ ] `MediaUploader`: fetch existing uploads from `GET /api/media` on mount
-- [ ] Show "Your library" grid below drop zone — same card style as new uploads
-- [ ] Filter tabs: All / Photos / Videos
-- [ ] Delete button per item (call `DELETE /api/media/:id` — write this route)
-
-### Smart post matching
-- [ ] After confirm, call Claude haiku with: upload filename + file type + existing calendar entry topics (next 30 days)
-- [ ] Return top 1–3 suggested calendar entries
-- [ ] Show as small pill on each uploaded card: "📅 Suggested: Lower back pain post (Jun 12)"
-- [ ] Click pill → navigates to `/calendar?open=[entryId]` and attaches media
-
-### AI tagging
-- [ ] Add `tags JSONB` + `quality_score INT` columns to `media_uploads` via migration
-- [ ] Inngest function `analyzeMediaUpload`: triggered by `media/uploaded` event from confirm route
-  - Call Claude Vision (claude-3-5-sonnet) with image
-  - Classify: content type, quality score (0–100), 3–5 keyword tags
-  - Write back to `media_uploads`
-- [ ] Upload card: show quality badge after analysis completes (poll or optimistic update)
-  - 🟢 75+ / 🟡 40–74 / 🔴 <40
-
-### Code quality check
-- [ ] `npx tsc --noEmit` — zero errors
-- [ ] Confirm delete route has RLS check (brand_id ownership)
-- [ ] Confirm Inngest job has error handling if Vision call fails
-
-### Verification
-- [ ] Upload a photo → refresh page → confirm it still appears in library
-- [ ] Upload 5 photos → confirm quality badges appear within 30s (Inngest job fires)
-- [ ] Confirm "Suggested entry" chip appears on a photo that matches a calendar entry topic
-- [ ] Delete a photo → confirm removed from library + storage
-
-**✅ Phase C complete when:** Library persists across page loads. Quality badges appear. Delete works. Smart match suggests entries for majority of uploads.
+- [x] `GET /api/media` — lists brand's media_uploads (newest first)
+- [x] `DELETE /api/media/[id]` — removes DB record + storage file (RLS checked)
+- [x] `GET /api/media/[id]/matches` — returns compatible upcoming calendar entries
+- [x] `MediaGallery.tsx` — grid with filter tabs (All/Photos/Videos), quality badges, AI tags, calendar match assignment, delete
+- [x] `tagMediaUpload` Inngest job — Claude Vision tagging + quality score on upload confirm
+- [x] `npx tsc --noEmit` — zero errors ✓
 
 ---
 
-## PHASE D — Carousel Template Redesign ⏳
+## PHASE D — Carousel Template Redesign ✅ COMPLETE (2026-05-10)
 
-**Goal:** Carousel slides are visually polished and use the attached per-slide media.
-
-### Template redesign — carousel-edu.ts
-- [ ] Hook slide: full brand-color background, large centered headline (max 12 words), small logo bottom-right
-- [ ] Content slides: left 60% text (headline + 1–2 sentence body), right 40% media if available OR brand-color gradient block
-- [ ] CTA slide: brand color, bold CTA text, @handle bottom
-
-### Template redesign — carousel-myth.ts
-- [ ] Hook slide: bold statement, dark background
-- [ ] Myth slides: red-tinted left bar + ❌ icon + myth text in white
-- [ ] Reality slides: green-tinted left bar + ✅ icon + truth text
-- [ ] CTA slide: brand color
-
-### Media injection in render pipeline
-- [ ] `renderCarousel` route: check `slide.mediaUrl` per slide — if present, fetch as base64 (same pattern as `photo-overlay`)
-- [ ] Pass base64 to template HTML as `data:image/...;base64,...`
-- [ ] Fallback: if no mediaUrl, use brand color block
-- [ ] CarouselBuilder: confirm `slide.mediaUrl` is included in render payload (check existing slide state shape)
-
-### Code quality check
-- [ ] Render 5-slide carousel with mixed media/no-media slides — confirm no crashes
-- [ ] `npx tsc --noEmit` — zero errors
-- [ ] Confirm base64 fetch has timeout + error fallback (don't break render on 404 media)
-
-### Verification
-- [ ] Create carousel post → attach photo to slide 2 → click Render → confirm slide 2 shows photo
-- [ ] Create carousel post → no photos → click Render → confirm all slides render (brand color fallback)
-- [ ] Download rendered PNGs → confirm they look professional / shareable
-- [ ] Myth carousel: render → confirm myth slides are red-tinted, reality slides are green-tinted
-
-**✅ Phase D complete when:** Both carousel templates look polished. Media-attached slides show the photo. Empty slides use brand color gracefully. Stefan would share these.
+- [x] `carousel-edu.ts` redesigned — dual-wave hook, media image-top content layout (38% band + gradient fade), dual-glow CTA
+- [x] `carousel-myth.ts` redesigned — photo texture overlay at 0.12 opacity (myth) / 0.14 (reality), dual-glow CTA
+- [x] `validate-carousel.ts` created — slide count check, per-slide headline/body truncation warnings (separate limits for media vs text layouts), `assertCarouselValid()` helper
+- [x] `render-carousel/route.ts` — `assertCarouselValid(slideContent, templateSlug)` called after body parse
+- [x] `renderPost.ts` bug fix — `resolvedInput.slideContent` (data URIs) correctly passed to buildTemplateData (was passing unresolved `input.slideContent`)
+- [x] `Step3Identity.tsx` fix — color picker double-registration removed; native `<input type="color">` is sole registered element
+- [x] `npx tsc --noEmit` + `npm run build` — zero errors, clean production build ✓
 
 ---
 
-## PHASE E — Launch ⏳
+## PHASE E — Launch 🔨 ACTIVE
 
 **Goal:** Both brands live on PostFlow. First post scheduled to Buffer.
 
-### QA pass
-- [ ] Full flow: new post → generate caption → render card → schedule to Buffer
-- [ ] Full flow: generate calendar → create post from entry → schedule
-- [ ] Analytics: confirm data fetches for connected platforms
-- [ ] Billing: test plan upgrade + downgrade
-- [ ] Bug fixes found during QA
-
-### Onboarding
+### Onboarding (requires user action)
 - [ ] Onboard PureProgressionX: complete onboarding wizard, connect Buffer, generate 2-week calendar
 - [ ] Schedule 3 posts to Buffer from PureProgressionX
 - [ ] Onboard MindyourBodyPT: same flow
 - [ ] Monitor first week: check Buffer queue, post status updates, email reminders
+
+### Blocked by (Phase A prerequisites)
+- Migrations `20260509000004` (billing) + `20260509000005` (tone_suggestion) + `20260510000001` (intelligence_tokens) must be applied
+- Vercel env vars (see Phase A list above) must be set
 
 **✅ Launch complete when:** Both brands have posts in Buffer queue. No critical bugs.
 

@@ -1,0 +1,136 @@
+---
+description: Workflow, quality, and database safety rules for all coding tasks
+alwaysApply: true
+---
+
+# Workflow & Quality Rules
+
+These rules govern HOW you work, not WHAT you build. All technical and
+architectural decisions live in the existing project memory — defer to
+those. This file only sets the process for planning, verifying, and
+self-correcting, plus database safety.
+
+================================================================
+1. PLAN MODE DEFAULT
+================================================================
+- Enter plan mode for ANY non-trivial task (3+ steps or any
+  architectural decision).
+- Write detailed specs upfront to reduce ambiguity.
+- Use plan mode for verification steps too, not just building.
+- If something goes sideways: STOP and re-plan immediately. Do not
+  keep pushing through.
+
+================================================================
+2. SUBAGENT STRATEGY
+================================================================
+- Use subagents liberally to keep the main context window clean.
+- Offload research, exploration, and parallel analysis to subagents.
+- For complex problems, throw more compute at it via subagents.
+- One task per subagent for focused execution.
+
+================================================================
+3. SELF-IMPROVEMENT LOOP
+================================================================
+- After ANY correction from the user: update `tasks/lessons.md` with
+  the pattern (not just the one-off fix).
+- Write rules for yourself that prevent the same mistake from
+  recurring.
+- Ruthlessly iterate on these lessons until the mistake rate drops.
+- Review lessons at session start for the relevant area of the project.
+
+================================================================
+4. VERIFICATION BEFORE DONE
+================================================================
+- Never mark a task complete without proving it works.
+- Diff behavior between the working version and your changes when
+  relevant.
+- Ask yourself: "Would a staff engineer approve this?"
+- Run tests, check logs, confirm the output matches what was expected.
+
+================================================================
+5. DEMAND ELEGANCE (BALANCED WITH PRAGMATISM)
+================================================================
+- For non-trivial changes: pause and ask if there's a cleaner approach
+  before committing.
+- If a fix feels hacky: "Knowing everything I know now, implement the
+  elegant solution."
+- Skip this for simple, obvious fixes — don't over-engineer.
+- Challenge your own work before presenting it as done.
+
+================================================================
+6. AUTONOMOUS BUG FIXING
+================================================================
+- When given a bug report: just fix it. Don't ask for clarification on
+  what's already obvious from logs/errors/tests.
+- Point at logs, errors, failing tests — then diagnose and patch.
+- Zero context-switching should be required from the user.
+- Go fix failing CI tests without being told to.
+
+================================================================
+7. DATABASE SAFETY (SUPABASE + BRANCHING)
+================================================================
+
+GENERAL RULES
+- NEVER run schema changes (CREATE/ALTER/DROP TABLE, ALTER COLUMN,
+  DROP COLUMN, etc.) directly against any database.
+- ALL schema changes must be written as migration files in
+  `supabase/migrations/`. The user applies them by pushing to GitHub,
+  not by you running commands.
+- Before proposing any migration: write the SQL to `tasks/todo.md`
+  with a plain-English explanation of what it does, what it changes,
+  and what could break. Wait for explicit approval.
+- Destructive operations (DROP, TRUNCATE, DELETE without WHERE,
+  renaming or removing columns, changing column types in ways that
+  lose data) require an EXPLICIT "yes, do that" from the user.
+- Never modify production data. Test data goes in `supabase/seed.sql`
+  and only runs against preview branches.
+- When unsure about an existing schema: read it first
+  (`supabase/migrations/` or by inspecting types). Do not guess.
+- RLS policies are part of the schema. Treat changes to them with the
+  same care as table changes.
+
+BRANCHING WORKFLOW (HOW MIGRATIONS REACH PRODUCTION)
+This project uses Supabase Branching with GitHub + Vercel. The flow is:
+
+  1. You write migration files to `supabase/migrations/`.
+  2. The user reviews the SQL and commits to a feature branch.
+  3. Pushing to GitHub auto-creates a preview Supabase branch DB,
+     applies the migration there, and deploys a Vercel preview.
+  4. The user tests on the Vercel preview URL.
+  5. Merging the PR to `main` is what applies the migration to
+     production. Nothing else does.
+
+NEVER tell the user to run any of these against production:
+  - `supabase db push`
+  - `supabase db reset`
+  - Direct SQL via the dashboard SQL editor (for schema changes)
+  - Any command that targets the production project ref
+
+If you genuinely need to test something against the database during
+development, target the preview branch only, and confirm with the
+user first.
+
+================================================================
+TASK MANAGEMENT
+================================================================
+- Plan First: write the plan to `tasks/todo.md` with clear steps.
+- Verify Plan: check in before starting implementation.
+- Track Progress: mark items complete as you go.
+- Explain Changes: high-level summary at each checkpoint.
+- Document Results: add review notes to the task file.
+- Capture Lessons: update `tasks/lessons.md` with anything learned.
+
+================================================================
+CORE PRINCIPLES
+================================================================
+- Simplicity First: prefer the smallest change that solves the problem.
+- No Laziness: finish the job — no shortcuts, no half-measures, no
+  silent "good enough."
+
+================================================================
+NOTE ON SCOPE
+================================================================
+This file does not override existing project memory, architecture
+decisions, or stack choices already stored in Cursor. When this file
+and project memory disagree on a technical matter, project memory wins.
+This file only governs process, quality discipline, and database safety.

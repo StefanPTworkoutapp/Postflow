@@ -1,0 +1,329 @@
+---
+description: Code Review & Architecture Audit Workflow - Evaluate modularity, expansion-readiness, and build quality
+alwaysApply: false
+---
+
+# Code Review & Architecture Audit Workflow
+
+This workflow evaluates code quality, architectural decisions, and whether 
+builds are truly modular and expansion-ready. Use this to audit completed 
+features or entire codebases before shipping.
+
+**When to use:** After a feature is "complete" before final merge, or to 
+audit existing code for tech debt and refactoring opportunities.
+
+================================================================
+1. PRE-AUDIT CHECKLIST
+================================================================
+
+Before diving into detailed review, verify basics:
+
+□ Code compiles/runs without errors
+□ Test suite passes (100% pass rate)
+□ No console errors or warnings during execution
+□ No eslint/lint violations (or documented exceptions)
+□ Documentation exists (at least function-level docs)
+□ Git history is clean (commits are logical, messages are clear)
+
+If any of these fail, STOP and fix them before proceeding to the audit.
+
+================================================================
+2. MODULARITY AUDIT
+================================================================
+
+Evaluate whether the code is actually decomposed into independent units.
+
+COMPONENT/FUNCTION SCOPE:
+□ Does each component/function have ONE clear reason to change?
+□ Can you describe what it does in one sentence without "and"?
+□ If it does multiple things, should it be split?
+□ Are its inputs/outputs explicit (parameters, return values)?
+
+DEPENDENCIES:
+□ What other components does this depend on?
+□ Are dependencies injected (passed in) or hardcoded (imported)?
+□ Can you swap a dependency without rewriting the component?
+□ Does it depend on implementation details or interfaces?
+
+COUPLING ANALYSIS:
+□ How many other parts of the codebase import/use this?
+□ If you change this, how many places break?
+□ Are there circular dependencies (A imports B, B imports A)?
+□ Can this component exist and be tested without the rest of the system?
+
+SYMPTOMS OF BAD MODULARITY:
+❌ "This function does validation AND formatting AND persistence"
+❌ "I can't test this without mocking 10 things"
+❌ "Changing this requires changes in 5 other files"
+❌ "The imports form a tangled web"
+❌ "This component only works inside Framework X, can't reuse elsewhere"
+
+================================================================
+3. EXPANSION-READINESS AUDIT
+================================================================
+
+Evaluate if the design supports future variations and extensions without 
+major refactoring.
+
+PATTERN ABSTRACTION:
+□ Is the solution hardcoded for THIS case or abstracted to a PATTERN?
+   Example: 
+   ❌ "Submit button that saves to database"
+   ✓ "Generic async action button (can save, delete, publish, etc.)"
+□ Can someone add a variant without copying-and-pasting code?
+□ Are decision points in the code, or in configuration?
+
+EXTENSION POINTS:
+□ Where would someone add a new feature like this?
+□ Would they modify existing code or create new files?
+□ Is there a clear hook/callback/event system for extensions?
+□ Can new behavior be added WITHOUT touching the original code?
+
+TESTABILITY FOR EXPANSION:
+□ Can you test a new variant with NEW tests, not modifying old ones?
+□ Are core behaviors tested separately from variant-specific logic?
+□ Is there a test pattern that new features can follow?
+
+CONFIGURATION VS HARDCODING:
+□ Hardcoded: values, strings, logic in source code
+□ Configurable: values come from config files, environment, or parameters
+□ Which does this code use?
+□ Should any hardcoded values be configurable for variants?
+
+SYMPTOMS OF POOR EXPANSION-READINESS:
+❌ "To add Feature B, we'd need to refactor Feature A"
+❌ "This only works for X use case, would need a rewrite for Y"
+❌ "We'd have to duplicate this code for the variant"
+❌ "The tests are too tightly coupled to this specific implementation"
+❌ "Adding an option would require changing 3 different files"
+
+================================================================
+4. ARCHITECTURE ASSESSMENT
+================================================================
+
+Evaluate the overall structure and design patterns.
+
+SEPARATION OF CONCERNS:
+□ Can you identify clear layers? (UI, Business Logic, Data, etc.)
+□ Does each layer have a specific responsibility?
+□ Do changes in one layer require changes in another?
+□ Is there a clean boundary between layers?
+
+DATA FLOW:
+□ Can you trace how data moves through the system?
+□ Is it one-way (easier to reason about) or tangled (props everywhere)?
+□ Are state mutations isolated or scattered?
+□ Is the flow documented or implicit?
+
+NAMING & CLARITY:
+□ Do class/function/variable names clearly express intent?
+□ Could a new developer understand the architecture in 10 minutes?
+□ Are there magic numbers, unclear abbreviations, or cryptic names?
+□ Does code structure reflect the business domain?
+
+REUSABILITY:
+□ Which parts could be used in another project?
+□ Are utilities actually generic or just "private functions"?
+□ Is there duplicated logic that should be abstracted?
+□ Could this be a library/package or is it too coupled to context?
+
+================================================================
+5. QUALITY ASSESSMENT
+================================================================
+
+Verify the quality standard is actually met.
+
+TESTING:
+□ Is every public API covered by tests?
+□ Are edge cases tested (empty, null, error states)?
+□ Do tests prove the feature works or just that code runs?
+□ What percentage of code is covered? (aim for 80%+)
+□ Are integration tests present, not just unit tests?
+
+DOCUMENTATION:
+□ Is the purpose of each component documented?
+□ Are complex algorithms explained?
+□ Is there a README explaining the architecture?
+□ Are breaking changes documented?
+□ Would someone new understand "how to use this" from the docs?
+
+ERROR HANDLING:
+□ What happens on bad input?
+□ What happens on network failure / API errors?
+□ Are errors logged with context (not silent failures)?
+□ Are error messages helpful to users/developers?
+□ Is there recovery/retry logic where appropriate?
+
+CODE STYLE:
+□ Is the codebase consistent?
+□ Are there lint warnings or style violations?
+□ Is complexity reasonable (functions not 500 lines)?
+□ Are there obvious performance issues?
+
+================================================================
+6. DETAILED FEEDBACK TEMPLATE
+================================================================
+
+After completing the audit, provide feedback in this format:
+
+---
+
+## MODULARITY SCORE: [0-10]
+
+**Strengths:**
+- [Specific example of good decomposition]
+- [Example of clear separation of concerns]
+
+**Issues:**
+- [Specific coupling problem with example]
+- [Component that does too much]
+
+**Recommendations:**
+```
+BEFORE (problematic code):
+[code snippet]
+
+AFTER (refactored):
+[code snippet]
+```
+
+---
+
+## EXPANSION-READINESS SCORE: [0-10]
+
+**Strengths:**
+- [Specific design that enables extension]
+- [Good abstraction or pattern that supports variants]
+
+**Issues:**
+- [Hardcoded assumption that would break with new requirement]
+- [Design that requires duplication for a variant]
+
+**Recommendations:**
+- Change [X] from hardcoded to configurable
+- Extract [Y] into a reusable abstraction
+- Add extension point at [Z]
+
+---
+
+## ARCHITECTURE SCORE: [0-10]
+
+**Strengths:**
+- [Clear layering / separation]
+- [Good data flow / isolation]
+
+**Issues:**
+- [Tangled coupling / unclear boundaries]
+- [Logic in the wrong layer]
+
+**Recommendations:**
+- Move [X] from [Layer A] to [Layer B]
+- Create abstraction for [Y]
+- Simplify [Z] by removing tight coupling
+
+---
+
+## OVERALL QUALITY ASSESSMENT
+
+**Score: [X]/10**
+
+**Summary:**
+This code [will/will not] be easy to expand. [Specific reason].
+
+**Priority Fixes (before shipping):**
+1. [Critical issue that blocks expansion]
+2. [Important issue that will cause pain later]
+
+**Nice-to-Have Improvements:**
+1. [Quality improvement]
+2. [Documentation gap]
+
+---
+
+## ACTION ITEMS
+
+- [ ] Fix [issue] by doing [action]
+- [ ] Refactor [component] to support [use case]
+- [ ] Add tests for [scenario]
+- [ ] Document [architecture decision]
+
+---
+
+================================================================
+7. AUDIT WORKFLOW (STEP-BY-STEP)
+================================================================
+
+1. **SETUP**
+   - Checkout the feature branch
+   - Run: npm test (or equivalent)
+   - Review: git log [base-branch]..HEAD (see all commits)
+
+2. **READ THE CODE**
+   - Start with the entry point (main component, API route, etc.)
+   - Trace through to understand the happy path
+   - Note dependencies and data flow as you go
+   - Identify the "core" vs "supporting" logic
+
+3. **CHECK MODULARITY**
+   - For each main component/function, run through Modularity Audit
+   - Identify tight couplings
+   - Note components doing multiple things
+
+4. **CHECK EXPANSION-READINESS**
+   - Ask: "How would someone add Feature B?"
+   - Identify hardcoded assumptions
+   - Check if patterns are abstracted or duplicated
+
+5. **ASSESS ARCHITECTURE**
+   - Step back and look at the whole thing
+   - Does it have clear layers?
+   - Can you explain it in 2 minutes?
+
+6. **VERIFY QUALITY**
+   - Run test suite (should be 100%)
+   - Check code coverage
+   - Review test quality (do they prove it works?)
+   - Verify documentation is complete
+
+7. **WRITE FEEDBACK**
+   - Use the template above
+   - Be specific with examples
+   - Suggest fixes, not just problems
+   - Prioritize: critical vs nice-to-have
+
+8. **PRESENT FINDINGS**
+   - Share the audit report
+   - Highlight what's working well (be honest about good decisions)
+   - Explain why certain changes matter (expansion, maintainability)
+   - Provide code examples for suggested fixes
+
+================================================================
+8. WHEN TO RUN THIS AUDIT
+================================================================
+
+**MANDATORY:**
+- Before merging a major feature
+- When code quality feels "off"
+- Before refactoring a large section
+- When planning to reuse code in another project
+
+**OPTIONAL (but recommended):**
+- Weekly/bi-weekly on key components
+- After adding 5+ new features to a module
+- When onboarding someone new (test your docs)
+
+================================================================
+9. FOLLOWING UP ON FEEDBACK
+================================================================
+
+After the audit and fixes:
+
+□ Re-run tests (should all pass)
+□ Re-check modularity (improved coupling?)
+□ Verify expansion examples actually work (can someone extend it?)
+□ Update documentation if needed
+□ Re-run audit if major changes made
+
+This is iterative — quality improves each cycle.
+
+================================================================

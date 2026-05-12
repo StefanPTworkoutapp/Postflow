@@ -1,0 +1,49 @@
+---
+description: Mandatory quality gate — run after every phase, feature, or significant change
+alwaysApply: true
+---
+
+# Quality Gate (PostFlow)
+
+Run these three steps after completing ANY phase, feature, or non-trivial change.
+This gate is not optional. A phase is not done until all three steps pass.
+
+================================================================
+STEP 1 — PRE-SHIP CHECKS
+================================================================
+□ Code compiles — no TypeScript errors, no lint violations
+□ Test suite passes (npm test)
+□ No console errors or unhandled promise rejections
+□ No TODOs, FIXMEs, or commented-out code in shipped files
+□ Every public code path has error handling (null inputs, network failure, API errors)
+□ All async operations wrapped in try/catch or .catch()
+
+================================================================
+STEP 2 — MODULARITY & ARCHITECTURE
+================================================================
+□ Business logic lives in src/lib/ — NOT in API routes or components
+□ Each module/function has ONE clear responsibility (describable without "and")
+□ No new circular dependencies introduced
+□ New tables/columns: `nt()` cast used for untyped rows; types regeneration noted
+□ All queries use `postflow` schema — never `public`
+□ Layer separation maintained: route → lib → DB (no shortcuts)
+
+================================================================
+STEP 3 — LESSONS & DECISIONS
+================================================================
+□ Any mistake corrected during this phase → add pattern to tasks/lessons.md
+□ Any architectural decision made → add to tasks/decisions.md
+□ Any new UI component pattern → add to memory/ui_ux_patterns.md
+□ Any new DB table or column → note types regeneration needed
+
+================================================================
+QUALITY STANDARD
+================================================================
+The bar is not "it works." The bar is "a staff engineer would approve this."
+- Edge cases handled (empty, null, error, concurrent)
+- Tests prove behavior, not just that code runs
+- Code supports future expansion without major refactoring
+- Documentation explains WHY, not just WHAT
+
+If any Step 1 or Step 2 item fails: fix it before marking done.
+Do not defer critical issues — that iteration never comes.
