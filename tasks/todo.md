@@ -1,18 +1,21 @@
 # PostFlow — Task Tracker
 
-Reconciled 2026-05-10. Weeks 1–6 are done. Active work starts at Phase A.
+Reconciled 2026-05-12. Phases A–F complete (code). Remaining = user-action deploy steps.
 For full spec on each phase see `memory/implementation_plan.md`.
 
 ---
 
 ## PHASE A — Deploy Blockers 🔨 ACTIVE
 
-**Goal:** Get production fully operational — billing, analytics, trends, and tone loop all live.
-**Blocked by:** pending migrations + missing env vars.
+**Goal:** Get production fully operational — billing, analytics, trends, tone loop, Instagram OAuth, and all Phase F features live.
+**Blocked by:** pending migrations + missing env vars (user actions).
 
 ### Migrations to apply (push to GitHub → Vercel preview → merge)
 - [ ] `20260509000004_billing_tables.sql` — billing schema (required for Stripe/Mollie)
 - [ ] `20260509000005_tone_suggestion_to_brands.sql` — tone_suggestion column (required for tone loop)
+- [ ] `20260510000001_brand_intelligence_tokens.sql` — brand intelligence tokens (applied locally, confirm on prod)
+- [ ] `20260512000001_inspiration_posts.sql` — inspiration_posts table (Phase F5: Inspiration Link)
+- [ ] `20260512000002_calibration_status.sql` — CHECK constraint on calibration_status (Phase F5: Onboarding)
 
 ### Env vars to set in Vercel production
 Analytics / trends / email:
@@ -24,7 +27,14 @@ Analytics / trends / email:
 - [ ] `RESEND_API_KEY`
 - [ ] `CALENDAR_LINK_SECRET`
 - [ ] `BUFFER_WEBHOOK_SECRET`
-- [ ] `NEXT_PUBLIC_APP_URL`
+- [ ] `NEXT_PUBLIC_APP_URL` → must be `https://postflow-amber.vercel.app` (NOT localhost)
+- [ ] `SUPADATA_API_KEY` — Inspiration Link scraping (Phase F5)
+
+Instagram OAuth (Meta):
+- [ ] `INSTAGRAM_APP_ID` → `2149364262528334`
+- [ ] `INSTAGRAM_APP_SECRET` → from Meta Developer Suite
+- [ ] Register `https://postflow-amber.vercel.app/api/auth/instagram/callback` in Meta Valid OAuth Redirect URIs
+- [ ] Add Instagram account as Tester in Meta app → Roles → Instagram Testers
 
 Billing:
 - [ ] `STRIPE_SECRET_KEY`
@@ -43,7 +53,30 @@ Billing:
 - [ ] Inngest: open Inngest dashboard → confirm all 6 functions registered + scheduled
 - [ ] Buffer webhook: publish a post via Buffer → confirm post status updates to "published" in PostFlow
 
-**✅ Phase A complete when:** All env vars set, both migrations applied, above 6 checks pass.
+Instagram OAuth verification:
+- [ ] Connect Instagram at `/settings/connections` → completes OAuth → green "Instagram connected" banner
+- [ ] Inspiration Link: paste an Instagram post URL → analysis runs → signals applied to brand tokens
+- [ ] Onboarding calibration: complete wizard → Step 10 shows 3 sample posts → approve/adjust each → "Finish calibration" reaches dashboard
+
+Preview URL fix:
+- [ ] Vercel: ensure `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KEY` are set for **Preview** environment (not just Production)
+
+**✅ Phase A complete when:** All env vars set, all 5 migrations applied, all verification checks pass.
+
+---
+
+## PHASE F — V6 Spec Build ✅ COMPLETE (2026-05-12)
+
+- [x] Smart Video Builder (clip-forge) — upload clips → Shotstack assembly → brand overlay
+- [x] Trend Builder — Google Trends + NewsAPI → Claude concept cards → brand-fit score → accept/skip flow
+- [x] Template Health Engine — usage analytics, performance scoring, archival
+- [x] Meta webhook — GET challenge verification ✓, POST analytics ingest (comments/reactions)
+- [x] Instagram Business Login OAuth — `/api/auth/instagram` → callback → token stored in `social_accounts`
+- [x] `ConnectionsClient` — Direct connections section with Connect button + success/error banners
+- [x] Stories & Reels page — 3-step wizard: upload → customise → schedule
+- [x] Inspiration Link — Supadata scrape → Claude signal extraction → nudgeToken() per signal
+- [x] Onboarding Step 10: First Post Calibration — 3 sample posts (A/B/C), approve/adjust/refine, confirm seeds 13 tokens
+- [x] `TOTAL_STEPS` bumped to 10, Step9 calls `next()` → flows into Step10
 
 ---
 
