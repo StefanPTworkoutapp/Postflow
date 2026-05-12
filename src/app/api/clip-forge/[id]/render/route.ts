@@ -24,6 +24,7 @@ import { createClient }                from "@/lib/supabase/server"
 import { getBrand }                    from "@/lib/server/brand/getBrand"
 import { assembleBrandedRender }       from "@/lib/server/render/brand-assembler"
 import { submitRender }                from "@/lib/server/render/shotstack"
+import { transcribeClips }             from "@/lib/server/clip-forge/whisper-captions"
 import type { BrandKit, ClipInput, AssembleSpec } from "@/lib/server/render/brand-assembler"
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -103,14 +104,31 @@ export async function POST(
       captions = [],
     } = body
 
-    // ── Build clip inputs ─────────────────────────────────────────────────────
+    // ── Auto-transcribe clips via Whisper (if no captions provided) ──────────
     type ClipRow = { id: string; public_url: string | null; duration_seconds: number | null; order_index: number }
-    const clipInputs: ClipInput[] = (clips as ClipRow[]).map((c, i) => ({
+    const clipRows = clips as ClipRow[]
+
+    let resolvedCaptions: string[] = captions
+
+    // Only auto-transcribe when caller didn't supply captions AND OPENAI_API_KEY is set
+    if (!captions.length && process.env.OPENAI_API_KEY) {
+      try {
+        const clipUrls   = clipRows.map(c => c.public_url ?? "").filter(Boolean)
+        const transcripts = await transcribeClips(clipUrls)
+        resolvedCaptions  = transcripts.map(t => t.summary)
+        console.log(`[clip-forge/render] Whisper transcribed ${transcripts.length} clips`)
+      } catch (err) {
+        console.warn("[clip-forge/render] Whisper transcription failed, proceeding without captions:", err)
+      }
+    }
+
+    // ── Build clip inputs ─────────────────────────────────────────────────────
+    const clipInputs: ClipInput[] = clipRows.map((c, i) => ({
       publicUrl:       c.public_url ?? "",
       durationSeconds: c.duration_seconds ?? 5,
       hookText:        i === 0 ? hookText : undefined,
-      ctaText:         i === (clips as ClipRow[]).length - 1 ? ctaText : undefined,
-      captionText:     captions[i] ?? undefined,
+      ctaText:         i === clipRows.length - 1 ? ctaText : undefined,
+      captionText:     resolvedCaptions[i] ?? undefined,
     }))
 
     // ── Extract text_overlay_style from brand token snapshot ──────────────────

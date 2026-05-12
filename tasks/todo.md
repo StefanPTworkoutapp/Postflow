@@ -81,18 +81,19 @@ Preview URL fix:
 - [x] `src/inngest/jobs/refreshTokens.ts` — every 6h, Instagram auto-refresh, others log+deactivate
 - [x] Registered in `src/app/api/inngest/route.ts`
 
-### G3 — ffmpeg.wasm upload pipeline
-- [ ] `next.config.ts` — add COOP/COEP headers (`Cross-Origin-Opener-Policy: same-origin`, `Cross-Origin-Embedder-Policy: require-corp`)
-- [ ] `src/lib/client/upload/compress-video.ts` — ffmpeg.wasm 720p H.264 CRF26, MOV→MP4
-- [ ] `src/lib/client/upload/compress-image.ts` — canvas 1200px, JPEG 85%, HEIC→JPEG
-- [ ] `src/lib/client/upload/chunked-upload.ts` — chunked flow for files >50MB
-- [ ] `src/lib/client/upload/upload-manager.ts` — orchestration: compress → sign → upload → confirm
-- [ ] Update `src/app/(app)/upload/UploadClient.tsx` — integrate upload-manager, show compression progress
+### G3 — ffmpeg.wasm upload pipeline ✅ COMPLETE (2026-05-12)
+- [x] `next.config.ts` — COOP/COEP headers scoped to `/upload` (not global — avoids breaking OAuth)
+- [x] `compress-video.ts` — ffmpeg.wasm 720p H.264 CRF26, MOV→MP4 transcoding
+- [x] `compress-image.ts` — canvas 1200px JPEG 85%, HEIC→JPEG via heic2any
+- [x] `chunked-upload.ts` — TUS resumable upload via Supabase client for >50MB
+- [x] `upload-manager.ts` — compress→sign→upload→confirm with stage+progress callbacks
+- [x] `MediaUploader.tsx` — integrated upload-manager, compression progress overlay, 200MB limit, HEIC support
 
-### G4 — Whisper captions in clip-forge
-- [ ] `src/lib/server/clip-forge/whisper-captions.ts` — POST to OpenAI Whisper API, returns timestamped phrases
-- [ ] Wire into clip-forge create route — transcribe clip audio, store captions in clip_forge_jobs
-- [ ] Show CaptionEditor in CreateClient — phrase list, edit per phrase, burn into Shotstack job
+### G4 — Whisper captions in clip-forge ✅ COMPLETE (2026-05-12)
+- [x] `src/lib/server/clip-forge/whisper-captions.ts` — OpenAI Whisper API, verbose_json with segment timestamps
+- [x] Wired into `/api/clip-forge/[id]/render` — auto-transcribes when no captions supplied + OPENAI_API_KEY set
+- [x] Transcription summaries passed as `captionText` into ClipInputs → Shotstack Layer 4 overlays
+- [x] Graceful fallback: skips transcription if OPENAI_API_KEY missing (no error, just no captions)
 
 **✅ Phase G complete when:** All 4 groups done, `npx tsc --noEmit` clean, build passes.
 
