@@ -115,7 +115,13 @@ export async function POST(request: Request) {
       }
     }
 
-    return NextResponse.json({ success: true, buffer_post_id: bufferUpdate.id })
+    // Instagram (and some other platforms) require the user to tap a push notification
+    // in the Buffer mobile app to actually publish the post — this is normal platform behaviour.
+    // Signal this to the UI so it can show the "Almost there" banner instead of plain success.
+    const notificationPublish =
+      (post.platform === "instagram" || post.platform === "facebook") && mediaUrls.length > 0
+
+    return NextResponse.json({ success: true, buffer_post_id: bufferUpdate.id, notificationPublish })
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error"
     return NextResponse.json({ error: message }, { status: 500 })

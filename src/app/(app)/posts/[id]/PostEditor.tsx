@@ -115,6 +115,7 @@ export function PostEditor({ post, brandName, industry }: Props) {
   const [saving,      setSaving]      = useState(false)
   const [scheduling,  setScheduling]  = useState(false)
   const [scheduleMsg, setScheduleMsg] = useState<{ type: "success" | "warn"; text: string } | null>(null)
+  const [notifyPublish, setNotifyPublish] = useState(false)
   const [deleting,    setDeleting]    = useState(false)
   const [regen,       setRegen]       = useState(false)
   const [error,       setError]       = useState<string | null>(null)
@@ -233,7 +234,12 @@ export function PostEditor({ post, brandName, industry }: Props) {
       const bufJson = await bufRes.json()
 
       if (bufRes.ok) {
-        setScheduleMsg({ type: "success", text: "✅ Sent to Buffer! It will auto-publish at the scheduled time." })
+        if (bufJson.notificationPublish) {
+          // Instagram / Facebook require a tap in the Buffer mobile app to go live
+          setNotifyPublish(true)
+        } else {
+          setScheduleMsg({ type: "success", text: "✅ Sent to Buffer! It will auto-publish at the scheduled time." })
+        }
       } else {
         // Buffer not connected or other soft error — post is still saved as "scheduled"
         const msg = bufJson.error ?? "Buffer not connected."
@@ -1023,7 +1029,37 @@ export function PostEditor({ post, brandName, industry }: Props) {
             {scheduleMsg.text}
           </p>
         )}
-        {status === "scheduled" && !scheduleMsg && (
+
+        {/* Notification-publish banner (Instagram/Facebook require a tap in Buffer app) */}
+        {notifyPublish && (
+          <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-4 space-y-3">
+            <div>
+              <p className="font-semibold text-sm text-[hsl(var(--foreground))]">Almost there</p>
+              <p className="text-xs text-[hsl(var(--muted-foreground))] mt-1">
+                This post needs one tap in the Buffer app to go live on Instagram.
+                You&apos;ll get a push notification at the scheduled time — just tap to publish.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setNotifyPublish(false)}
+                className="flex-1 text-xs px-3 py-2 rounded-lg border border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))]/40 transition-colors"
+              >
+                Got it
+              </button>
+              <a
+                href="https://buffer.com/app"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 text-xs px-3 py-2 rounded-lg bg-[var(--pf-teal)] text-white font-medium text-center hover:opacity-90 transition-opacity"
+              >
+                Open Buffer →
+              </a>
+            </div>
+          </div>
+        )}
+
+        {status === "scheduled" && !scheduleMsg && !notifyPublish && (
           <p className="text-xs text-[hsl(var(--muted-foreground))] bg-[hsl(var(--muted))]/40 rounded-lg px-3 py-2">
             📌 This post is scheduled. If Buffer is connected, it will auto-publish at the scheduled time.
           </p>
