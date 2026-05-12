@@ -132,4 +132,4 @@ export const FONTS = [
   "Open Sans",
 ]
 
-export const TOTAL_STEPS = 9
+export const TOTAL_STEPS = 10

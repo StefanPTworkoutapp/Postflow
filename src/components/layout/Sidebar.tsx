@@ -16,6 +16,7 @@ import {
   LayoutTemplate,
   Wand2,
   TrendingUp,
+  Sparkles,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
@@ -30,7 +31,8 @@ const navItems = [
   { label: "Trend Builder",  href: "/trend",   icon: TrendingUp },
   { label: "Analytics", href: "/analytics", icon: BarChart2 },
   { label: "Brand", href: "/brand", icon: Palette },
-  { label: "Templates", href: "/templates", icon: LayoutTemplate },
+  { label: "Templates",    href: "/templates",   icon: LayoutTemplate },
+  { label: "Inspiration",  href: "/inspiration", icon: Sparkles },
   { label: "Connections", href: "/settings/connections", icon: Link2 },
   { label: "Settings", href: "/settings", icon: Settings },
 ]

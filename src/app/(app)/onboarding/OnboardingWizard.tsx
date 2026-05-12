@@ -15,6 +15,7 @@ import { Step6Analysis } from "./steps/Step6Analysis"
 import { Step7SamplePost } from "./steps/Step7SamplePost"
 import { Step8Socials } from "./steps/Step8Socials"
 import { Step9Frequency } from "./steps/Step9Frequency"
+import { Step10Calibration } from "./steps/Step10Calibration"
 
 type Brand = Database["postflow"]["Tables"]["brands"]["Row"]
 
@@ -106,6 +107,14 @@ export function OnboardingWizard({ existingBrand }: Props) {
               {...stepProps}
               onComplete={async (freq) => {
                 await saveToApi({ posting_frequency: freq })
+                next()
+              }}
+            />
+          )}
+          {step === 10 && (
+            <Step10Calibration
+              {...stepProps}
+              onComplete={async () => {
                 router.push("/dashboard")
               }}
             />
