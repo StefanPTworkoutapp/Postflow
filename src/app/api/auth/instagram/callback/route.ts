@@ -4,20 +4,21 @@
  * OAuth 2.0 callback for Instagram Business Login.
  *
  * Meta redirects here after the user completes the Instagram Business Login
- * flow. We exchange the short-lived code for a long-lived access token, then
- * store it in `social_connections` against the user's brand.
+ * flow. We exchange the short-lived code for a long-lived access token, fetch
+ * the Instagram Business Account ID (needed for Graph API insights), then
+ * upsert into `social_accounts`.
  *
  * Flow:
- *   1. User clicks "Connect Instagram" → redirected to Meta OAuth URL
- *   2. User authorises → Meta redirects to this URL with ?code=xxx&state=yyy
- *   3. We exchange code for short-lived token (POST to /oauth/access_token)
- *   4. Exchange short-lived for long-lived token (GET /access_token?grant_type=ig_exchange_token)
- *   5. Fetch basic profile (/me?fields=id,username)
- *   6. Upsert into social_connections
- *   7. Redirect to /settings/connections
+ *   1. Exchange code → short-lived token
+ *   2. Exchange short-lived → long-lived token (60-day)
+ *   3. GET /me/accounts to find the connected Facebook Page
+ *   4. From the Page, extract instagram_business_account.id
+ *   5. GET /me?fields=id,username for the basic IG profile
+ *   6. Upsert social_accounts row
+ *   7. Redirect to /settings/connections?connected=instagram
  *
  * Error path:
- *   Meta sends ?error=xxx&error_description=yyy → redirect with error param
+ *   Any failure → redirect with ?error=<reason>
  *
  * Required env vars:
  *   INSTAGRAM_APP_ID      — from Meta App dashboard
@@ -29,10 +30,14 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient }              from "@/lib/supabase/server"
 import { getBrand }                  from "@/lib/server/brand/getBrand"
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const nt = (client: any) => client as any
-
+const GRAPH = "https://graph.facebook.com/v21.0"
 const REDIRECT_BASE = process.env.NEXT_PUBLIC_APP_URL ?? "https://postflow-amber.vercel.app"
+
+function errorRedirect(reason: string) {
+  return NextResponse.redirect(
+    `${REDIRECT_BASE}/settings/connections?error=${encodeURIComponent(reason)}`
+  )
+}
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
@@ -42,42 +47,27 @@ export async function GET(req: NextRequest) {
   if (metaError) {
     const desc = searchParams.get("error_description") ?? metaError
     console.error("[instagram-callback] Meta returned error:", metaError, desc)
-    return NextResponse.redirect(
-      `${REDIRECT_BASE}/settings/connections?error=${encodeURIComponent(desc)}`
-    )
+    return errorRedirect(desc)
   }
 
-  // ── Auth code ──────────────────────────────────────────────────────────────
   const code = searchParams.get("code")
-  if (!code) {
-    return NextResponse.redirect(
-      `${REDIRECT_BASE}/settings/connections?error=missing_code`
-    )
-  }
+  if (!code) return errorRedirect("missing_code")
 
   // ── Supabase session ───────────────────────────────────────────────────────
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) {
-    return NextResponse.redirect(`${REDIRECT_BASE}/login`)
-  }
+  if (!user) return NextResponse.redirect(`${REDIRECT_BASE}/login`)
 
   const brand = await getBrand()
-  if (!brand) {
-    return NextResponse.redirect(
-      `${REDIRECT_BASE}/settings/connections?error=no_brand`
-    )
-  }
+  if (!brand) return errorRedirect("no_brand")
 
-  const appId     = process.env.INSTAGRAM_APP_ID
-  const appSecret = process.env.INSTAGRAM_APP_SECRET
+  const appId      = process.env.INSTAGRAM_APP_ID
+  const appSecret  = process.env.INSTAGRAM_APP_SECRET
   const redirectUri = `${REDIRECT_BASE}/api/auth/instagram/callback`
 
   if (!appId || !appSecret) {
-    console.error("[instagram-callback] INSTAGRAM_APP_ID or INSTAGRAM_APP_SECRET not set")
-    return NextResponse.redirect(
-      `${REDIRECT_BASE}/settings/connections?error=server_misconfigured`
-    )
+    console.error("[instagram-callback] Missing INSTAGRAM_APP_ID or INSTAGRAM_APP_SECRET")
+    return errorRedirect("server_misconfigured")
   }
 
   try {
@@ -95,69 +85,85 @@ export async function GET(req: NextRequest) {
     })
 
     if (!tokenRes.ok) {
-      const err = await tokenRes.text()
-      console.error("[instagram-callback] Token exchange failed:", err)
-      return NextResponse.redirect(
-        `${REDIRECT_BASE}/settings/connections?error=token_exchange_failed`
-      )
+      console.error("[instagram-callback] Short-lived token exchange failed:", await tokenRes.text())
+      return errorRedirect("token_exchange_failed")
     }
 
-    const shortToken = await tokenRes.json() as {
-      access_token: string
-      user_id:      number
-    }
+    const shortToken = await tokenRes.json() as { access_token: string; user_id: number }
 
     // ── Step 2: Exchange for long-lived token (60-day) ───────────────────────
     const longTokenRes = await fetch(
       `https://graph.instagram.com/access_token?grant_type=ig_exchange_token&client_secret=${appSecret}&access_token=${shortToken.access_token}`
     )
 
-    let accessToken = shortToken.access_token
+    let accessToken   = shortToken.access_token
     let expiresAt: string | null = null
 
     if (longTokenRes.ok) {
-      const longToken = await longTokenRes.json() as {
-        access_token: string
-        token_type:   string
-        expires_in:   number
-      }
-      accessToken = longToken.access_token
-      expiresAt   = new Date(Date.now() + longToken.expires_in * 1000).toISOString()
+      const lt = await longTokenRes.json() as { access_token: string; expires_in: number }
+      accessToken = lt.access_token
+      expiresAt   = new Date(Date.now() + lt.expires_in * 1000).toISOString()
     }
 
-    // ── Step 3: Fetch profile ────────────────────────────────────────────────
+    // ── Step 3: Fetch Instagram Business Account ID via Pages ────────────────
+    // The Instagram Graph API insights endpoint requires the IG Business Account ID
+    // (different from the IG User ID). It lives on the connected Facebook Page.
+    let igBusinessAccountId: string | null = null
+
+    const pagesRes = await fetch(
+      `${GRAPH}/me/accounts?fields=id,name,instagram_business_account&access_token=${accessToken}`
+    )
+    if (pagesRes.ok) {
+      const pages = await pagesRes.json() as {
+        data: Array<{
+          id: string
+          name: string
+          instagram_business_account?: { id: string }
+        }>
+      }
+      // Take the first page that has an IG business account linked
+      const page = pages.data?.find(p => p.instagram_business_account?.id)
+      igBusinessAccountId = page?.instagram_business_account?.id ?? null
+    }
+
+    // ── Step 4: Fetch IG profile (username) ───────────────────────────────────
+    let username = "instagram_user"
+    let igUserId = String(shortToken.user_id)
+
     const profileRes = await fetch(
       `https://graph.instagram.com/me?fields=id,username&access_token=${accessToken}`
     )
-
-    let username = "instagram"
-    let igUserId = String(shortToken.user_id)
-
     if (profileRes.ok) {
       const profile = await profileRes.json() as { id: string; username: string }
       username = profile.username
       igUserId = profile.id
     }
 
-    // ── Step 4: Upsert social_connections ───────────────────────────────────
-    await nt(supabase)
-      .from("social_connections")
+    // ── Step 5: Upsert social_accounts ────────────────────────────────────────
+    const { error: upsertError } = await supabase
+      .from("social_accounts")
       .upsert(
         {
-          brand_id:         brand.id,
-          platform:         "instagram",
-          account_handle:   username,
-          account_url:      `https://instagram.com/${username}`,
-          platform_user_id: igUserId,
-          access_token:     accessToken,
-          token_expires_at: expiresAt,
-          is_active:        true,
-          updated_at:       new Date().toISOString(),
+          brand_id:              brand.id,
+          platform:              "instagram",
+          account_handle:        username,
+          account_url:           `https://instagram.com/${username}`,
+          platform_access_token: accessToken,
+          platform_account_id:   igBusinessAccountId ?? igUserId,
+          token_expires_at:      expiresAt,
+          is_active:             true,
         },
         { onConflict: "brand_id,platform" }
       )
 
-    console.log(`[instagram-callback] Connected @${username} (${igUserId}) for brand ${brand.id}`)
+    if (upsertError) {
+      console.error("[instagram-callback] DB upsert failed:", upsertError.message)
+      return errorRedirect("db_error")
+    }
+
+    console.log(
+      `[instagram-callback] Connected @${username} (ig_account: ${igBusinessAccountId ?? igUserId}) for brand ${brand.id}`
+    )
 
     return NextResponse.redirect(
       `${REDIRECT_BASE}/settings/connections?connected=instagram`
@@ -165,8 +171,6 @@ export async function GET(req: NextRequest) {
 
   } catch (err) {
     console.error("[instagram-callback] Unexpected error:", err)
-    return NextResponse.redirect(
-      `${REDIRECT_BASE}/settings/connections?error=unexpected`
-    )
+    return errorRedirect("unexpected")
   }
 }
