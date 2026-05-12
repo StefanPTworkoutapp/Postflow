@@ -110,7 +110,9 @@ export async function scheduleBufferPost(opts: {
   const mode  = opts.scheduledAt ? "customScheduled" : "addToQueue"
   const dueAt = opts.scheduledAt ? opts.scheduledAt.toISOString() : null
 
-  const images = (opts.mediaUrls ?? []).map(url => ({ url }))
+  // Buffer API v2 assets shape: ordered array of { image: { url } }
+  // (changed from { images: [{ url }] } — deadline May 25 2026)
+  const assets = (opts.mediaUrls ?? []).map(url => ({ image: { url } }))
 
   // Fetch org ID (needed by createPost)
   const organizationId = await getOrganizationId(opts.accessToken)
@@ -139,8 +141,8 @@ export async function scheduleBufferPost(opts: {
     organizationId,
     schedulingType: "automatic",
     mode,
-    ...(dueAt          ? { dueAt }              : {}),
-    ...(images.length  ? { assets: { images } } : {}),
+    ...(dueAt         ? { dueAt }   : {}),
+    ...(assets.length ? { assets }  : {}),
   }
 
   const data = await gql<{
