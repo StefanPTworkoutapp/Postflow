@@ -6,6 +6,21 @@ const nextConfig: NextConfig = {
       bodySizeLimit: "10mb",
     },
   },
+
+  // COOP/COEP headers required for ffmpeg.wasm (SharedArrayBuffer).
+  // Scoped to /upload only — applying globally would break OAuth redirects
+  // and Supabase Auth iframes on other routes.
+  async headers() {
+    return [
+      {
+        source: "/upload/:path*",
+        headers: [
+          { key: "Cross-Origin-Opener-Policy",   value: "same-origin" },
+          { key: "Cross-Origin-Embedder-Policy",  value: "require-corp" },
+        ],
+      },
+    ]
+  },
   // Turbopack is the default dev bundler in Next.js 16 — declare it explicitly
   // so the webpack config below doesn't trigger a conflict warning.
   turbopack: {},

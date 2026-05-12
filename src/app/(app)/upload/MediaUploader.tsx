@@ -1,23 +1,40 @@
 "use client"
 
 import { useCallback, useRef, useState } from "react"
-import { Upload, X, CheckCircle2, AlertCircle, Loader2, Image as ImageIcon, Video } from "lucide-react"
+import { Upload, X, CheckCircle2, AlertCircle, Loader2, Image as ImageIcon, Video, Zap } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import { uploadFile, type UploadStage } from "@/lib/client/upload/upload-manager"
 
 interface UploadFile {
-  id:       string
-  file:     File
-  preview:  string | null
-  status:   "pending" | "uploading" | "done" | "error"
-  error?:   string
+  id:         string
+  file:       File
+  preview:    string | null
+  status:     "pending" | "uploading" | "done" | "error"
+  stage?:     UploadStage
+  progress?:  number
+  error?:     string
   publicUrl?: string
 }
 
-const ACCEPTED = ["image/jpeg", "image/png", "image/webp", "image/gif", "video/mp4", "video/quicktime"]
-const MAX_SIZE = 50 * 1024 * 1024 // 50 MB
+// Accept HEIC + increased size limit (compression handles oversized files)
+const ACCEPTED = [
+  "image/jpeg", "image/png", "image/webp", "image/gif",
+  "image/heic", "image/heif",
+  "video/mp4", "video/quicktime", "video/mov", "video/avi",
+]
+const MAX_SIZE = 200 * 1024 * 1024 // 200 MB — compression brings it down before upload
 
 function uid() { return Math.random().toString(36).slice(2) }
+
+const STAGE_LABEL: Record<UploadStage, string> = {
+  idle:        "",
+  compressing: "Compressing…",
+  uploading:   "Uploading…",
+  confirming:  "Saving…",
+  done:        "Done",
+  error:       "Error",
+}
 
 export function MediaUploader({ onUploadComplete }: { onUploadComplete?: () => void }) {
   const [files, setFiles] = useState<UploadFile[]>([])
@@ -47,55 +64,38 @@ export function MediaUploader({ onUploadComplete }: { onUploadComplete?: () => v
     })
   }
 
-  async function uploadFile(item: UploadFile) {
-    setFiles(prev => prev.map(f => f.id === item.id ? { ...f, status: "uploading" } : f))
+  async function processUpload(item: UploadFile) {
+    setFiles(prev => prev.map(f =>
+      f.id === item.id ? { ...f, status: "uploading", stage: "idle", progress: 0 } : f
+    ))
 
     try {
-      // 1. Get signed URL
-      const urlRes = await fetch("/api/media/upload-url", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          filename:    item.file.name,
-          contentType: item.file.type,
-          size:        item.file.size,
-        }),
+      const result = await uploadFile(item.file, {
+        onStageChange: (stage) => {
+          setFiles(prev => prev.map(f =>
+            f.id === item.id ? { ...f, stage } : f
+          ))
+        },
+        onProgress: (pct) => {
+          setFiles(prev => prev.map(f =>
+            f.id === item.id ? { ...f, progress: pct } : f
+          ))
+        },
       })
-      const { signedUrl, path, publicUrl, error: urlError } = await urlRes.json()
-      if (urlError) throw new Error(urlError)
-
-      // 2. Upload directly to Supabase Storage
-      const uploadRes = await fetch(signedUrl, {
-        method:  "PUT",
-        headers: { "Content-Type": item.file.type },
-        body:    item.file,
-      })
-      if (!uploadRes.ok) throw new Error(`Storage upload failed (${uploadRes.status})`)
-
-      // 3. Confirm with our API
-      const confirmRes = await fetch("/api/media/confirm", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          path, publicUrl,
-          filename:    item.file.name,
-          contentType: item.file.type,
-          size:        item.file.size,
-        }),
-      })
-      const { error: confirmError } = await confirmRes.json()
-      if (confirmError) throw new Error(confirmError)
-
-      setFiles(prev => prev.map(f => f.id === item.id ? { ...f, status: "done", publicUrl } : f))
+      setFiles(prev => prev.map(f =>
+        f.id === item.id ? { ...f, status: "done", stage: "done", progress: 100, publicUrl: result.publicUrl } : f
+      ))
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Upload failed"
-      setFiles(prev => prev.map(f => f.id === item.id ? { ...f, status: "error", error: msg } : f))
+      setFiles(prev => prev.map(f =>
+        f.id === item.id ? { ...f, status: "error", stage: "error", error: msg } : f
+      ))
     }
   }
 
   async function uploadAll() {
     const pending = files.filter(f => f.status === "pending" || f.status === "error")
-    await Promise.all(pending.map(uploadFile))
+    await Promise.all(pending.map(processUpload))
     onUploadComplete?.()
   }
 
@@ -126,7 +126,7 @@ export function MediaUploader({ onUploadComplete }: { onUploadComplete?: () => v
         <div className="text-center space-y-1">
           <p className="text-sm font-medium">Drop files here or click to browse</p>
           <p className="text-xs text-[hsl(var(--muted-foreground))]">
-            JPG, PNG, WebP, GIF, MP4, MOV · max 50 MB per file
+            JPG, PNG, WebP, HEIC, GIF, MP4, MOV · up to 200 MB · compressed automatically
           </p>
         </div>
       </div>
@@ -168,8 +168,16 @@ export function MediaUploader({ onUploadComplete }: { onUploadComplete?: () => v
 
                   {/* Overlay for status */}
                   {f.status === "uploading" && (
-                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                      <Loader2 className="h-6 w-6 text-white animate-spin" />
+                    <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center gap-1.5">
+                      {f.stage === "compressing"
+                        ? <Zap className="h-6 w-6 text-amber-300 animate-pulse" />
+                        : <Loader2 className="h-6 w-6 text-white animate-spin" />
+                      }
+                      {f.progress !== undefined && (
+                        <span className="text-white text-xs font-semibold tabular-nums">
+                          {f.progress}%
+                        </span>
+                      )}
                     </div>
                   )}
                   {f.status === "done" && (
@@ -185,7 +193,7 @@ export function MediaUploader({ onUploadComplete }: { onUploadComplete?: () => v
                 </div>
 
                 {/* File info */}
-                <div className="p-2 space-y-0.5">
+                <div className="p-2 space-y-1">
                   <div className="flex items-center gap-1">
                     {f.file.type.startsWith("video/")
                       ? <Video className="h-3 w-3 shrink-0 text-[hsl(var(--muted-foreground))]" />
@@ -196,6 +204,24 @@ export function MediaUploader({ onUploadComplete }: { onUploadComplete?: () => v
                   <p className="text-xs text-[hsl(var(--muted-foreground))]">
                     {(f.file.size / 1024 / 1024).toFixed(1)} MB
                   </p>
+
+                  {/* Stage label + progress bar */}
+                  {f.status === "uploading" && f.stage && f.stage !== "idle" && (
+                    <div className="space-y-0.5">
+                      <p className="text-xs text-indigo-500 dark:text-indigo-400">
+                        {STAGE_LABEL[f.stage]}
+                      </p>
+                      {f.progress !== undefined && (
+                        <div className="h-0.5 w-full rounded-full bg-[hsl(var(--muted))] overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-indigo-500 transition-all duration-200"
+                            style={{ width: `${f.progress}%` }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {f.error && <p className="text-xs text-[hsl(var(--destructive))] leading-tight">{f.error}</p>}
                 </div>
 
