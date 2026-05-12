@@ -80,15 +80,19 @@ export async function GET(req: NextRequest) {
     tokenUrl.searchParams.set("redirect_uri",  redirectUri)
     tokenUrl.searchParams.set("code",          code)
 
+    console.log("[instagram-callback] Step 1: Exchanging code for short-lived token")
+    console.log("[instagram-callback] tokenUrl (redacted secret):", tokenUrl.toString().replace(appSecret, "***"))
     const tokenRes = await fetch(tokenUrl.toString())
+    const tokenBody = await tokenRes.text()
 
     if (!tokenRes.ok) {
-      const body = await tokenRes.text()
-      console.error("[instagram-callback] Short-lived token exchange failed:", body)
+      console.error("[instagram-callback] Short-lived token exchange failed. Status:", tokenRes.status, "Body:", tokenBody)
       return errorRedirect("token_exchange_failed")
     }
 
-    const shortToken = await tokenRes.json() as { access_token: string; token_type: string; user_id?: number }
+    console.log("[instagram-callback] Step 1 OK. Raw response:", tokenBody.slice(0, 120))
+
+    const shortToken = JSON.parse(tokenBody) as { access_token: string; token_type: string; user_id?: number }
 
     // ── Step 2: Exchange for long-lived token (60-day) ───────────────────────
     // Facebook long-lived exchange also uses graph.facebook.com with grant_type=fb_exchange_token
