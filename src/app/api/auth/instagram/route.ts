@@ -22,7 +22,10 @@ export async function GET() {
   const redirectUri = `${REDIRECT_BASE}/api/auth/instagram/callback`
 
   if (!appId) {
-    return NextResponse.json({ error: "INSTAGRAM_APP_ID not configured" }, { status: 500 })
+    console.error("[instagram-auth] INSTAGRAM_APP_ID not set in environment")
+    return NextResponse.redirect(
+      `${REDIRECT_BASE}/settings/connections?error=instagram_not_configured`
+    )
   }
 
   const scopes = [
