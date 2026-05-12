@@ -71,38 +71,43 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // ── Step 1: Exchange code for short-lived token ──────────────────────────
-    const tokenRes = await fetch("https://api.instagram.com/oauth/access_token", {
-      method:  "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id:     appId,
-        client_secret: appSecret,
-        grant_type:    "authorization_code",
-        redirect_uri:  redirectUri,
-        code,
-      }),
-    })
+    // ── Step 1: Exchange code for short-lived Facebook user token ────────────
+    // Facebook Login OAuth codes must be exchanged at graph.facebook.com,
+    // NOT api.instagram.com (that endpoint is Instagram Basic Display API only).
+    const tokenUrl = new URL(`${GRAPH}/oauth/access_token`)
+    tokenUrl.searchParams.set("client_id",     appId)
+    tokenUrl.searchParams.set("client_secret", appSecret)
+    tokenUrl.searchParams.set("redirect_uri",  redirectUri)
+    tokenUrl.searchParams.set("code",          code)
+
+    const tokenRes = await fetch(tokenUrl.toString())
 
     if (!tokenRes.ok) {
-      console.error("[instagram-callback] Short-lived token exchange failed:", await tokenRes.text())
+      const body = await tokenRes.text()
+      console.error("[instagram-callback] Short-lived token exchange failed:", body)
       return errorRedirect("token_exchange_failed")
     }
 
-    const shortToken = await tokenRes.json() as { access_token: string; user_id: number }
+    const shortToken = await tokenRes.json() as { access_token: string; token_type: string; user_id?: number }
 
     // ── Step 2: Exchange for long-lived token (60-day) ───────────────────────
-    const longTokenRes = await fetch(
-      `https://graph.instagram.com/access_token?grant_type=ig_exchange_token&client_secret=${appSecret}&access_token=${shortToken.access_token}`
-    )
+    // Facebook long-lived exchange also uses graph.facebook.com with grant_type=fb_exchange_token
+    const longTokenUrl = new URL(`${GRAPH}/oauth/access_token`)
+    longTokenUrl.searchParams.set("grant_type",      "fb_exchange_token")
+    longTokenUrl.searchParams.set("client_id",       appId)
+    longTokenUrl.searchParams.set("client_secret",   appSecret)
+    longTokenUrl.searchParams.set("fb_exchange_token", shortToken.access_token)
+
+    const longTokenRes = await fetch(longTokenUrl.toString())
 
     let accessToken   = shortToken.access_token
     let expiresAt: string | null = null
 
     if (longTokenRes.ok) {
-      const lt = await longTokenRes.json() as { access_token: string; expires_in: number }
+      const lt = await longTokenRes.json() as { access_token: string; expires_in?: number }
       accessToken = lt.access_token
-      expiresAt   = new Date(Date.now() + lt.expires_in * 1000).toISOString()
+      // Facebook long-lived tokens last ~60 days (5_184_000 seconds)
+      expiresAt   = new Date(Date.now() + (lt.expires_in ?? 5_184_000) * 1000).toISOString()
     }
 
     // ── Step 3: Fetch Instagram Business Account ID via Pages ────────────────
