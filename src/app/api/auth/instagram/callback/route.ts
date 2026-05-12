@@ -87,7 +87,14 @@ export async function GET(req: NextRequest) {
 
     if (!tokenRes.ok) {
       console.error("[instagram-callback] Short-lived token exchange failed. Status:", tokenRes.status, "Body:", tokenBody)
-      return errorRedirect("token_exchange_failed")
+      // Expose the raw Facebook error in the redirect so it's visible in the UI without needing Vercel logs.
+      // Facebook error bodies look like: {"error":{"message":"...","type":"OAuthException","code":191}}
+      let fbMsg = "token_exchange_failed"
+      try {
+        const fbErr = JSON.parse(tokenBody) as { error?: { message?: string; code?: number } }
+        if (fbErr.error?.message) fbMsg = `fb_${fbErr.error.code ?? 0}: ${fbErr.error.message}`
+      } catch { /* leave default */ }
+      return errorRedirect(fbMsg)
     }
 
     console.log("[instagram-callback] Step 1 OK. Raw response:", tokenBody.slice(0, 120))

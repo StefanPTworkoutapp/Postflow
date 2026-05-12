@@ -57,7 +57,10 @@ function ConnectionsInner({ initialAccounts, brandId }: Props) {
         .then(r => r.json())
         .then(d => { if (d.connections) setAccounts(d.connections) })
     } else if (errParam) {
-      setError(`Connection failed: ${errParam.replace(/_/g, " ")}`)
+      // errParam may be a short code (e.g. "server_misconfigured") or a full Facebook error
+      // (e.g. "fb_191: Given URL is not allowed by the Application configuration.")
+      const isFbError = errParam.startsWith("fb_")
+      setError(isFbError ? `Facebook error — ${errParam}` : `Connection failed: ${errParam.replace(/_/g, " ")}`)
       router.replace("/settings/connections", { scroll: false })
     }
   }, [searchParams, router])
