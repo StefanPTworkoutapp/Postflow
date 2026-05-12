@@ -1,6 +1,6 @@
 # PostFlow — Task Tracker
 
-Reconciled 2026-05-12. Phases A–F complete (code). Remaining = user-action deploy steps.
+Reconciled 2026-05-12. Active: Phase G (V1 remaining spec items). Phase A = user-action deploy steps.
 For full spec on each phase see `memory/implementation_plan.md`.
 
 ---
@@ -62,6 +62,39 @@ Preview URL fix:
 - [ ] Vercel: ensure `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KEY` are set for **Preview** environment (not just Production)
 
 **✅ Phase A complete when:** All env vars set, all 5 migrations applied, all verification checks pass.
+
+---
+
+## PHASE G — V1 Remaining Spec Items 🔨 ACTIVE
+
+**Goal:** Complete every v1 spec item not yet built. Grouped by scope.
+
+### G1 — Quick wins: standalone components + design token wiring ✅ COMPLETE (2026-05-12)
+- [x] `globals.css` — `--pf-*` CSS vars already present and matching tokens (verified)
+- [x] `src/components/shared/HealthBar.tsx` — standalone, score + size + showLabel, tier-colour logic
+- [x] `src/components/shared/HealthScore.tsx` — badge/pill numeric score with tier colour
+- [x] `src/components/shared/RenderQueueDrawer.tsx` — polling drawer, clip_forge + trend jobs
+- [x] `src/app/api/render/queue/route.ts` — feeds RenderQueueDrawer with aggregated job list
+- [x] `TemplatesClient.tsx` + `TemplateSuggestionCard.tsx` — now use shared HealthBar + HealthScore
+
+### G2 — OAuth token refresh ✅ COMPLETE (2026-05-12)
+- [x] `src/inngest/jobs/refreshTokens.ts` — every 6h, Instagram auto-refresh, others log+deactivate
+- [x] Registered in `src/app/api/inngest/route.ts`
+
+### G3 — ffmpeg.wasm upload pipeline
+- [ ] `next.config.ts` — add COOP/COEP headers (`Cross-Origin-Opener-Policy: same-origin`, `Cross-Origin-Embedder-Policy: require-corp`)
+- [ ] `src/lib/client/upload/compress-video.ts` — ffmpeg.wasm 720p H.264 CRF26, MOV→MP4
+- [ ] `src/lib/client/upload/compress-image.ts` — canvas 1200px, JPEG 85%, HEIC→JPEG
+- [ ] `src/lib/client/upload/chunked-upload.ts` — chunked flow for files >50MB
+- [ ] `src/lib/client/upload/upload-manager.ts` — orchestration: compress → sign → upload → confirm
+- [ ] Update `src/app/(app)/upload/UploadClient.tsx` — integrate upload-manager, show compression progress
+
+### G4 — Whisper captions in clip-forge
+- [ ] `src/lib/server/clip-forge/whisper-captions.ts` — POST to OpenAI Whisper API, returns timestamped phrases
+- [ ] Wire into clip-forge create route — transcribe clip audio, store captions in clip_forge_jobs
+- [ ] Show CaptionEditor in CreateClient — phrase list, edit per phrase, burn into Shotstack job
+
+**✅ Phase G complete when:** All 4 groups done, `npx tsc --noEmit` clean, build passes.
 
 ---
 

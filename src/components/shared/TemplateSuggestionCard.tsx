@@ -14,6 +14,8 @@
 import { useState } from "react"
 import { CheckCircle2, X, ArrowRight, TrendingDown, TrendingUp } from "lucide-react"
 import { PlatformBadge } from "@/components/shared/PlatformBadge"
+import { HealthBar }     from "@/components/shared/HealthBar"
+import { HealthScore }   from "@/components/shared/HealthScore"
 import { cn } from "@/lib/utils"
 
 export interface TemplateSuggestion {
@@ -38,28 +40,10 @@ interface Props {
 
 function ScoreBadge({ score, label }: { score: number | null; label: string }) {
   if (score == null) return null
-  const tier = score >= 75 ? "high" : score >= 45 ? "medium" : "low"
-  const styles = {
-    high:   "bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400",
-    medium: "bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400",
-    low:    "bg-red-50   text-red-700   dark:bg-red-950/30   dark:text-red-400",
-  }
   return (
     <div className="text-center">
-      <span className={cn("inline-block rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums", styles[tier])}>
-        {score}
-      </span>
+      <HealthScore score={score} variant="pill" size="md" />
       <p className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">{label}</p>
-    </div>
-  )
-}
-
-function HealthBar({ score }: { score: number | null }) {
-  if (score == null) return null
-  const tier = score >= 75 ? "bg-green-500" : score >= 45 ? "bg-amber-400" : "bg-red-500"
-  return (
-    <div className="h-1 w-full rounded-full bg-[hsl(var(--muted))] overflow-hidden">
-      <div className={cn("h-full rounded-full transition-all", tier)} style={{ width: `${score}%` }} />
     </div>
   )
 }

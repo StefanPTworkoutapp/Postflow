@@ -4,6 +4,8 @@ import { useState } from "react"
 import { Lock, Unlock, TrendingUp, TrendingDown, Minus, LayoutTemplate, AlertCircle } from "lucide-react"
 import { TemplateSuggestionCard, type TemplateSuggestion } from "@/components/shared/TemplateSuggestionCard"
 import { PlatformBadge } from "@/components/shared/PlatformBadge"
+import { HealthBar }     from "@/components/shared/HealthBar"
+import { HealthScore }   from "@/components/shared/HealthScore"
 import { cn } from "@/lib/utils"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -35,24 +37,6 @@ function TrendIcon({ trend }: { trend: string }) {
   return null  // insufficient_data
 }
 
-function HealthBar({ score }: { score: number }) {
-  const color = score >= 75 ? "bg-green-500" : score >= 45 ? "bg-amber-400" : "bg-red-500"
-  return (
-    <div className="flex items-center gap-2">
-      <div className="flex-1 h-1.5 rounded-full bg-[hsl(var(--muted))] overflow-hidden">
-        <div className={cn("h-full rounded-full transition-all", color)} style={{ width: `${score}%` }} />
-      </div>
-      <span className={cn(
-        "tabular-nums text-xs font-semibold w-7 text-right",
-        score >= 75 ? "text-green-600 dark:text-green-400" :
-        score >= 45 ? "text-amber-600 dark:text-amber-400" :
-                      "text-red-600 dark:text-red-400"
-      )}>
-        {score}
-      </span>
-    </div>
-  )
-}
 
 function templateLabel(slug: string): string {
   return slug.replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase())
@@ -133,7 +117,10 @@ export function TemplatesClient({ templateHealth, suggestions }: Props) {
                       </span>
                     )}
                   </div>
-                  <HealthBar score={t.health_score} />
+                  <div className="flex items-center gap-2">
+                    <HealthBar score={t.health_score} size="lg" className="flex-1" />
+                    <HealthScore score={t.health_score} variant="badge" size="md" />
+                  </div>
                   <div className="flex items-center gap-3 text-xs text-[hsl(var(--muted-foreground))]">
                     <span>{t.posts_count} post{t.posts_count !== 1 ? "s" : ""}</span>
                     {t.last_checked_at && <span>Checked {relativeTime(t.last_checked_at)}</span>}
