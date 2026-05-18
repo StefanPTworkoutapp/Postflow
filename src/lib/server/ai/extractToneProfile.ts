@@ -1,4 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk"
+import { MODELS } from "@/lib/ai/models"
+import { logAiUsage } from "@/lib/ai/logUsage"
 
 const client = new Anthropic({ apiKey: process.env.POSTFLOW_ANTHROPIC_KEY })
 
@@ -26,10 +28,11 @@ export async function extractToneProfile(
   brandName: string,
   industry: string,
   adjectives: string[],
-  toneLevel: number
+  toneLevel: number,
+  brandId?: string | null,
 ): Promise<ToneProfile> {
   const response = await client.messages.create({
-    model: "claude-sonnet-4-6",
+    model: MODELS.toneExtraction,
     max_tokens: 1024,
     messages: [
       {
@@ -65,6 +68,8 @@ For content_language: detect the primary language of the example posts (e.g. "Du
       },
     ],
   })
+
+  logAiUsage({ brandId: brandId ?? null, model: MODELS.toneExtraction, feature: "tone_extraction", usage: response.usage })
 
   const raw   = response.content[0].type === "text" ? response.content[0].text : ""
   // Strip markdown code fences that Claude occasionally adds despite being asked not to

@@ -23,6 +23,7 @@ export async function POST(request: Request) {
       do_not_mention,
       previous_feedback,
       goals,
+      brand_id,
     }: {
       brand_name: string
       industry: string
@@ -32,6 +33,7 @@ export async function POST(request: Request) {
       do_not_mention?: string
       previous_feedback?: string
       goals?: string[]
+      brand_id?: string | null
     } = await request.json()
 
     const result = await generateSamplePost(
@@ -43,6 +45,7 @@ export async function POST(request: Request) {
       do_not_mention,
       previous_feedback,
       goals,
+      brand_id,
     )
 
     return NextResponse.json(result)

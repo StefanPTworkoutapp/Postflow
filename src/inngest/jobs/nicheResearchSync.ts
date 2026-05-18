@@ -15,6 +15,8 @@
 import { inngest }            from "../client"
 import { createServiceClient } from "@/lib/supabase/service"
 import Anthropic               from "@anthropic-ai/sdk"
+import { MODELS }              from "@/lib/ai/models"
+import { logAiUsage }          from "@/lib/ai/logUsage"
 
 /**
  * Type-bypass helper for tables not yet in the generated database.types.ts.
@@ -70,10 +72,11 @@ Respond with ONLY the JSON array, no other text.`
 
   try {
     const response = await claude.messages.create({
-      model:      "claude-opus-4-5",
+      model:      MODELS.nicheResearch,
       max_tokens: 1024,
       messages:   [{ role: "user", content: prompt }],
     })
+    logAiUsage({ brandId: null, model: MODELS.nicheResearch, feature: "niche_research", usage: response.usage })
 
     const text = response.content
       .filter(b => b.type === "text")

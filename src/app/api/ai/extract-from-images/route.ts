@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server"
 import Anthropic from "@anthropic-ai/sdk"
+import { MODELS } from "@/lib/ai/models"
+import { logAiUsage } from "@/lib/ai/logUsage"
 
 export const maxDuration = 60 // seconds — vision calls can be slow
 
@@ -47,10 +49,12 @@ One entry per screenshot. If a screenshot has no readable post text, omit it.`,
     ]
 
     const message = await client.messages.create({
-      model: "claude-sonnet-4-6",
+      model: MODELS.imageExtraction,
       max_tokens: 2048,
       messages: [{ role: "user", content }],
     })
+
+    logAiUsage({ brandId: null, model: MODELS.imageExtraction, feature: "image_extraction", usage: message.usage })
 
     const text = message.content[0].type === "text" ? message.content[0].text : ""
     const jsonMatch = text.match(/\{[\s\S]*\}/)

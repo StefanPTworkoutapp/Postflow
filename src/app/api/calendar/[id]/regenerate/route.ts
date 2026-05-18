@@ -3,6 +3,8 @@ import Anthropic from "@anthropic-ai/sdk"
 import { createClient } from "@/lib/supabase/server"
 import { getBrand } from "@/lib/server/brand/getBrand"
 import { getBrandContext } from "@/lib/server/brand/getBrandContext"
+import { MODELS } from "@/lib/ai/models"
+import { logAiUsage } from "@/lib/ai/logUsage"
 import type { Json, Database } from "@/types/database.types"
 
 type CalendarUpdate = Database["postflow"]["Tables"]["content_calendar"]["Update"]
@@ -110,10 +112,11 @@ Return ONLY valid JSON (no markdown, no explanation):
   try {
     const anthropic = new Anthropic({ apiKey: process.env.POSTFLOW_ANTHROPIC_KEY! })
     const msg = await anthropic.messages.create({
-      model:      "claude-haiku-4-5",
+      model:      MODELS.calendarRegen,
       max_tokens: 800,
       messages:   [{ role: "user", content: prompt }],
     })
+    logAiUsage({ brandId: brand.id, model: MODELS.calendarRegen, feature: "calendar_regen", usage: msg.usage })
     const raw   = msg.content[0].type === "text" ? msg.content[0].text : ""
     const clean = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim()
     result = JSON.parse(clean)

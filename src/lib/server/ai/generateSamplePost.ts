@@ -1,5 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk"
 import type { ToneProfile } from "./extractToneProfile"
+import { MODELS } from "@/lib/ai/models"
+import { logAiUsage } from "@/lib/ai/logUsage"
 
 const client = new Anthropic({ apiKey: process.env.POSTFLOW_ANTHROPIC_KEY })
 
@@ -20,6 +22,7 @@ export async function generateSamplePost(
   doNotMention?: string,
   previousFeedback?: string,
   goals?: string[] | null,
+  brandId?: string | null,
 ): Promise<{ caption: string; hashtags: string[] }> {
   const feedbackLine = previousFeedback
     ? `\nPREVIOUS FEEDBACK TO ADDRESS: ${previousFeedback}\n`
@@ -30,7 +33,7 @@ export async function generateSamplePost(
     : ""
 
   const response = await client.messages.create({
-    model: "claude-sonnet-4-6",
+    model: MODELS.samplePost,
     max_tokens: 512,
     messages: [
       {
@@ -57,6 +60,8 @@ Write an engaging post that demonstrates their authentic voice. Return ONLY vali
       },
     ],
   })
+
+  logAiUsage({ brandId: brandId ?? null, model: MODELS.samplePost, feature: "sample_post", usage: response.usage })
 
   const raw   = response.content[0].type === "text" ? response.content[0].text : ""
   // Strip markdown code fences that Claude occasionally adds despite being asked not to

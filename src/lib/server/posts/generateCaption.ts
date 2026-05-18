@@ -1,6 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk"
 import type { PostTemplate } from "@/lib/shared/posts/templates"
 import type { ToneProfile } from "@/lib/server/ai/extractToneProfile"
+import { MODELS, getModels } from "@/lib/ai/models"
+import { logAiUsage } from "@/lib/ai/logUsage"
 
 const client = new Anthropic({ apiKey: process.env.POSTFLOW_ANTHROPIC_KEY })
 
@@ -37,6 +39,10 @@ export interface CaptionInput {
   performance?: PerformanceContext | null
   /** Optional: this week's trending topics (from niche_trends) */
   trends?: TrendContext[] | null
+  /** Override the model used — pass getModels(brandTier(brand)).caption from the calling route. */
+  model?: string
+  /** Brand ID for usage logging — pass brand.id from the calling route. */
+  brand_id?: string | null
 }
 
 export interface GeneratedCaption {
@@ -206,11 +212,13 @@ Rules:
 - cta is the last sentence of the caption extracted separately
 - Do not add any explanation outside the JSON`
 
+  const usedModel = input.model ?? getModels("standard").caption
   const message = await client.messages.create({
-    model: "claude-sonnet-4-6",
+    model: usedModel,
     max_tokens: 1024,
     messages: [{ role: "user", content: prompt }],
   })
+  logAiUsage({ brandId: input.brand_id, model: usedModel, feature: "caption", usage: message.usage })
 
   const text = message.content[0].type === "text" ? message.content[0].text : ""
   const jsonMatch = text.match(/\{[\s\S]*\}/)

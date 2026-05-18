@@ -9,6 +9,8 @@
 import Anthropic from "@anthropic-ai/sdk"
 import type { BrandContext }      from "@/lib/server/brand/getBrandContext"
 import type { InspirationSignal } from "./analyse-post"
+import { MODELS } from "@/lib/ai/models"
+import { logAiUsage } from "@/lib/ai/logUsage"
 
 const claude = new Anthropic({ apiKey: process.env.POSTFLOW_ANTHROPIC_KEY })
 
@@ -21,8 +23,9 @@ const claude = new Anthropic({ apiKey: process.env.POSTFLOW_ANTHROPIC_KEY })
  * @returns          A 2–4 sentence plain-English explanation
  */
 export async function generateInspirationExplanation(
-  signals: InspirationSignal[],
-  brand:   BrandContext,
+  signals:  InspirationSignal[],
+  brand:    BrandContext,
+  brandId?: string | null,
 ): Promise<string> {
   if (signals.length === 0) {
     return "No specific patterns were strong enough to apply to your brand profile — but the analysis has been saved for reference."
@@ -50,10 +53,11 @@ Rules:
 - Do NOT use jargon like "token" or "confidence delta" — speak like a creative director`
 
   const message = await claude.messages.create({
-    model:      "claude-haiku-4-5",
+    model:      MODELS.explanations,
     max_tokens: 256,
     messages:   [{ role: "user", content: prompt }],
   })
+  logAiUsage({ brandId: brandId ?? null, model: MODELS.explanations, feature: "explanation", usage: message.usage })
 
   const text = message.content
     .filter(b => b.type === "text")

@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "13.0.4"
+    PostgrestVersion: "14.5"
   }
   postflow: {
     Tables: {
@@ -52,6 +52,123 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      ai_usage_logs: {
+        Row: {
+          brand_id: string | null
+          cache_read_tokens: number
+          cache_write_tokens: number
+          cost_usd: number
+          created_at: string
+          feature: string
+          id: string
+          input_tokens: number
+          model: string
+          output_tokens: number
+        }
+        Insert: {
+          brand_id?: string | null
+          cache_read_tokens?: number
+          cache_write_tokens?: number
+          cost_usd?: number
+          created_at?: string
+          feature: string
+          id?: string
+          input_tokens?: number
+          model: string
+          output_tokens?: number
+        }
+        Update: {
+          brand_id?: string | null
+          cache_read_tokens?: number
+          cache_write_tokens?: number
+          cost_usd?: number
+          created_at?: string
+          feature?: string
+          id?: string
+          input_tokens?: number
+          model?: string
+          output_tokens?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_usage_logs_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      analytics_processed: {
+        Row: {
+          brand_id: string
+          id: string
+          platform: string
+          post_id: string
+          processed_at: string
+          signals_applied: number
+        }
+        Insert: {
+          brand_id: string
+          id?: string
+          platform: string
+          post_id: string
+          processed_at?: string
+          signals_applied?: number
+        }
+        Update: {
+          brand_id?: string
+          id?: string
+          platform?: string
+          post_id?: string
+          processed_at?: string
+          signals_applied?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "analytics_processed_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      analytics_sync_errors: {
+        Row: {
+          brand_id: string | null
+          created_at: string
+          error_detail: Json | null
+          error_type: string | null
+          id: string
+          platform: string | null
+        }
+        Insert: {
+          brand_id?: string | null
+          created_at?: string
+          error_detail?: Json | null
+          error_type?: string | null
+          id?: string
+          platform?: string | null
+        }
+        Update: {
+          brand_id?: string | null
+          created_at?: string
+          error_detail?: Json | null
+          error_type?: string | null
+          id?: string
+          platform?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "analytics_sync_errors_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       brand_token_events: {
         Row: {
@@ -107,6 +224,7 @@ export type Database = {
         Row: {
           accent_color: string
           account_id: string
+          ai_tier: string
           brand_kit: Json
           calibration_done_at: string | null
           calibration_status: string
@@ -118,7 +236,6 @@ export type Database = {
           font_body: string
           font_heading: string
           geographic_location: string | null
-          goals: string[] | null
           id: string
           industry: string | null
           intelligence_tokens: Json
@@ -144,6 +261,7 @@ export type Database = {
         Insert: {
           accent_color?: string
           account_id: string
+          ai_tier?: string
           brand_kit?: Json
           calibration_done_at?: string | null
           calibration_status?: string
@@ -155,7 +273,6 @@ export type Database = {
           font_body?: string
           font_heading?: string
           geographic_location?: string | null
-          goals?: string[] | null
           id?: string
           industry?: string | null
           intelligence_tokens?: Json
@@ -181,6 +298,7 @@ export type Database = {
         Update: {
           accent_color?: string
           account_id?: string
+          ai_tier?: string
           brand_kit?: Json
           calibration_done_at?: string | null
           calibration_status?: string
@@ -192,7 +310,6 @@ export type Database = {
           font_body?: string
           font_heading?: string
           geographic_location?: string | null
-          goals?: string[] | null
           id?: string
           industry?: string | null
           intelligence_tokens?: Json
@@ -221,6 +338,160 @@ export type Database = {
             columns: ["account_id"]
             isOneToOne: false
             referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      clip_forge_clips: {
+        Row: {
+          created_at: string
+          duration_seconds: number | null
+          id: string
+          job_id: string
+          order_index: number
+          public_url: string | null
+          quality_score: number | null
+          storage_path: string
+          upload_status: string
+        }
+        Insert: {
+          created_at?: string
+          duration_seconds?: number | null
+          id?: string
+          job_id: string
+          order_index?: number
+          public_url?: string | null
+          quality_score?: number | null
+          storage_path: string
+          upload_status?: string
+        }
+        Update: {
+          created_at?: string
+          duration_seconds?: number | null
+          id?: string
+          job_id?: string
+          order_index?: number
+          public_url?: string | null
+          quality_score?: number | null
+          storage_path?: string
+          upload_status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clip_forge_clips_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "clip_forge_jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      clip_forge_feedback: {
+        Row: {
+          brand_id: string
+          brand_tokens_snapshot: Json | null
+          created_at: string
+          id: string
+          job_id: string
+          rating: string
+          tags: string[] | null
+        }
+        Insert: {
+          brand_id: string
+          brand_tokens_snapshot?: Json | null
+          created_at?: string
+          id?: string
+          job_id: string
+          rating: string
+          tags?: string[] | null
+        }
+        Update: {
+          brand_id?: string
+          brand_tokens_snapshot?: Json | null
+          created_at?: string
+          id?: string
+          job_id?: string
+          rating?: string
+          tags?: string[] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clip_forge_feedback_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clip_forge_feedback_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "clip_forge_jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      clip_forge_jobs: {
+        Row: {
+          approved_at: string | null
+          brand_id: string
+          brand_kit_snapshot: Json | null
+          brand_tokens_snapshot: Json | null
+          created_at: string
+          goal: string
+          id: string
+          input_clips: Json
+          output_caption: string | null
+          output_hashtags: string[] | null
+          output_video_url: string | null
+          platform: string
+          rejected_at: string | null
+          render_progress: number
+          shotstack_render_id: string | null
+          status: string
+        }
+        Insert: {
+          approved_at?: string | null
+          brand_id: string
+          brand_kit_snapshot?: Json | null
+          brand_tokens_snapshot?: Json | null
+          created_at?: string
+          goal: string
+          id?: string
+          input_clips?: Json
+          output_caption?: string | null
+          output_hashtags?: string[] | null
+          output_video_url?: string | null
+          platform: string
+          rejected_at?: string | null
+          render_progress?: number
+          shotstack_render_id?: string | null
+          status?: string
+        }
+        Update: {
+          approved_at?: string | null
+          brand_id?: string
+          brand_kit_snapshot?: Json | null
+          brand_tokens_snapshot?: Json | null
+          created_at?: string
+          goal?: string
+          id?: string
+          input_clips?: Json
+          output_caption?: string | null
+          output_hashtags?: string[] | null
+          output_video_url?: string | null
+          platform?: string
+          rejected_at?: string | null
+          render_progress?: number
+          shotstack_render_id?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clip_forge_jobs_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
             referencedColumns: ["id"]
           },
         ]
@@ -342,6 +613,47 @@ export type Database = {
             columns: ["account_id"]
             isOneToOne: false
             referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inspiration_posts: {
+        Row: {
+          analysis: Json
+          applied_at: string | null
+          brand_id: string
+          created_at: string
+          id: string
+          platform: string | null
+          source_url: string
+          token_signals: Json | null
+        }
+        Insert: {
+          analysis: Json
+          applied_at?: string | null
+          brand_id: string
+          created_at?: string
+          id?: string
+          platform?: string | null
+          source_url: string
+          token_signals?: Json | null
+        }
+        Update: {
+          analysis?: Json
+          applied_at?: string | null
+          brand_id?: string
+          created_at?: string
+          id?: string
+          platform?: string | null
+          source_url?: string
+          token_signals?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inspiration_posts_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
             referencedColumns: ["id"]
           },
         ]
@@ -502,12 +814,62 @@ export type Database = {
           },
         ]
       }
+      niche_benchmarks: {
+        Row: {
+          avg_carousel_save_rate: number | null
+          avg_carousel_slide_count: number | null
+          avg_carousel_swipe_through_rate: number | null
+          avg_completion_rate: number | null
+          avg_engagement_rate: number | null
+          avg_save_rate: number | null
+          calculated_at: string
+          id: string
+          niche_tag: string
+          platform: string
+          sample_size: number
+          top_carousel_content_mix: string | null
+          top_template_slugs: string[] | null
+        }
+        Insert: {
+          avg_carousel_save_rate?: number | null
+          avg_carousel_slide_count?: number | null
+          avg_carousel_swipe_through_rate?: number | null
+          avg_completion_rate?: number | null
+          avg_engagement_rate?: number | null
+          avg_save_rate?: number | null
+          calculated_at?: string
+          id?: string
+          niche_tag: string
+          platform: string
+          sample_size?: number
+          top_carousel_content_mix?: string | null
+          top_template_slugs?: string[] | null
+        }
+        Update: {
+          avg_carousel_save_rate?: number | null
+          avg_carousel_slide_count?: number | null
+          avg_carousel_swipe_through_rate?: number | null
+          avg_completion_rate?: number | null
+          avg_engagement_rate?: number | null
+          avg_save_rate?: number | null
+          calculated_at?: string
+          id?: string
+          niche_tag?: string
+          platform?: string
+          sample_size?: number
+          top_carousel_content_mix?: string | null
+          top_template_slugs?: string[] | null
+        }
+        Relationships: []
+      }
       niche_trends: {
         Row: {
           brand_id: string
+          expires_at: string | null
           fetched_at: string
           headline: string | null
           id: string
+          niche_tags: string[] | null
           relevance_score: number | null
           source: string
           topic: string
@@ -516,9 +878,11 @@ export type Database = {
         }
         Insert: {
           brand_id: string
+          expires_at?: string | null
           fetched_at?: string
           headline?: string | null
           id?: string
+          niche_tags?: string[] | null
           relevance_score?: number | null
           source: string
           topic: string
@@ -527,9 +891,11 @@ export type Database = {
         }
         Update: {
           brand_id?: string
+          expires_at?: string | null
           fetched_at?: string
           headline?: string | null
           id?: string
+          niche_tags?: string[] | null
           relevance_score?: number | null
           source?: string
           topic?: string
@@ -611,11 +977,55 @@ export type Database = {
           },
         ]
       }
+      portal_invites: {
+        Row: {
+          brand_id: string
+          created_at: string
+          email: string
+          expires_at: string | null
+          id: string
+          last_viewed_at: string | null
+          role: string
+          token: string
+        }
+        Insert: {
+          brand_id: string
+          created_at?: string
+          email: string
+          expires_at?: string | null
+          id?: string
+          last_viewed_at?: string | null
+          role?: string
+          token: string
+        }
+        Update: {
+          brand_id?: string
+          created_at?: string
+          email?: string
+          expires_at?: string | null
+          id?: string
+          last_viewed_at?: string | null
+          role?: string
+          token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portal_invites_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       post_analytics: {
         Row: {
+          brand_tokens_snapshot: Json | null
           click_through_rate: number | null
           clicks: number
+          clip_forge_job_id: string | null
           comments: number
+          completion_rate: number | null
           created_at: string
           engagement_rate: number | null
           fetched_at: string
@@ -627,11 +1037,15 @@ export type Database = {
           reach: number
           saves: number
           shares: number
+          swipe_through_rate: number | null
         }
         Insert: {
+          brand_tokens_snapshot?: Json | null
           click_through_rate?: number | null
           clicks?: number
+          clip_forge_job_id?: string | null
           comments?: number
+          completion_rate?: number | null
           created_at?: string
           engagement_rate?: number | null
           fetched_at?: string
@@ -643,11 +1057,15 @@ export type Database = {
           reach?: number
           saves?: number
           shares?: number
+          swipe_through_rate?: number | null
         }
         Update: {
+          brand_tokens_snapshot?: Json | null
           click_through_rate?: number | null
           clicks?: number
+          clip_forge_job_id?: string | null
           comments?: number
+          completion_rate?: number | null
           created_at?: string
           engagement_rate?: number | null
           fetched_at?: string
@@ -659,8 +1077,16 @@ export type Database = {
           reach?: number
           saves?: number
           shares?: number
+          swipe_through_rate?: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "post_analytics_clip_forge_job_id_fkey"
+            columns: ["clip_forge_job_id"]
+            isOneToOne: false
+            referencedRelation: "clip_forge_jobs"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "post_analytics_post_id_fkey"
             columns: ["post_id"]
@@ -672,13 +1098,17 @@ export type Database = {
       }
       posts: {
         Row: {
+          actual_performance: Json | null
           ai_caption_original: string | null
           brand_id: string
           buffer_post_id: string | null
           calendar_entry_id: string
           caption: string | null
           carousel_image_urls: string[] | null
+          client_approval_status: string | null
           client_edits_count: number
+          client_reviewed_at: string | null
+          client_reviewer_email: string | null
           created_at: string
           cta: string | null
           edit_history: Json[] | null
@@ -689,6 +1119,7 @@ export type Database = {
           platform: string
           posted_at: string | null
           posted_url: string | null
+          predicted_performance: Json | null
           scheduled_for: string | null
           slide_content: Json | null
           status: string
@@ -697,13 +1128,17 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          actual_performance?: Json | null
           ai_caption_original?: string | null
           brand_id: string
           buffer_post_id?: string | null
           calendar_entry_id: string
           caption?: string | null
           carousel_image_urls?: string[] | null
+          client_approval_status?: string | null
           client_edits_count?: number
+          client_reviewed_at?: string | null
+          client_reviewer_email?: string | null
           created_at?: string
           cta?: string | null
           edit_history?: Json[] | null
@@ -714,6 +1149,7 @@ export type Database = {
           platform: string
           posted_at?: string | null
           posted_url?: string | null
+          predicted_performance?: Json | null
           scheduled_for?: string | null
           slide_content?: Json | null
           status?: string
@@ -722,13 +1158,17 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          actual_performance?: Json | null
           ai_caption_original?: string | null
           brand_id?: string
           buffer_post_id?: string | null
           calendar_entry_id?: string
           caption?: string | null
           carousel_image_urls?: string[] | null
+          client_approval_status?: string | null
           client_edits_count?: number
+          client_reviewed_at?: string | null
+          client_reviewer_email?: string | null
           created_at?: string
           cta?: string | null
           edit_history?: Json[] | null
@@ -739,6 +1179,7 @@ export type Database = {
           platform?: string
           posted_at?: string | null
           posted_url?: string | null
+          predicted_performance?: Json | null
           scheduled_for?: string | null
           slide_content?: Json | null
           status?: string
@@ -762,6 +1203,30 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      research_runs: {
+        Row: {
+          id: string
+          niche: string
+          platform: string
+          ran_at: string
+          signals_found: number
+        }
+        Insert: {
+          id?: string
+          niche: string
+          platform: string
+          ran_at?: string
+          signals_found?: number
+        }
+        Update: {
+          id?: string
+          niche?: string
+          platform?: string
+          ran_at?: string
+          signals_found?: number
+        }
+        Relationships: []
       }
       social_accounts: {
         Row: {
@@ -893,6 +1358,160 @@ export type Database = {
           },
         ]
       }
+      sync_runs: {
+        Row: {
+          ended_at: string | null
+          error_count: number
+          id: string
+          platform: string
+          started_at: string
+          status: string
+          success_count: number
+          user_count_attempted: number
+        }
+        Insert: {
+          ended_at?: string | null
+          error_count?: number
+          id?: string
+          platform: string
+          started_at?: string
+          status?: string
+          success_count?: number
+          user_count_attempted?: number
+        }
+        Update: {
+          ended_at?: string | null
+          error_count?: number
+          id?: string
+          platform?: string
+          started_at?: string
+          status?: string
+          success_count?: number
+          user_count_attempted?: number
+        }
+        Relationships: []
+      }
+      template_health: {
+        Row: {
+          avg_completion_rate: number | null
+          avg_engagement_rate: number | null
+          avg_save_rate: number | null
+          brand_id: string
+          created_at: string
+          health_score: number
+          id: string
+          last_checked_at: string | null
+          locked_by_user: boolean
+          mode: string
+          next_check_at: string
+          platform: string
+          posts_count: number
+          template_slug: string
+          trend: string
+        }
+        Insert: {
+          avg_completion_rate?: number | null
+          avg_engagement_rate?: number | null
+          avg_save_rate?: number | null
+          brand_id: string
+          created_at?: string
+          health_score?: number
+          id?: string
+          last_checked_at?: string | null
+          locked_by_user?: boolean
+          mode?: string
+          next_check_at?: string
+          platform: string
+          posts_count?: number
+          template_slug: string
+          trend?: string
+        }
+        Update: {
+          avg_completion_rate?: number | null
+          avg_engagement_rate?: number | null
+          avg_save_rate?: number | null
+          brand_id?: string
+          created_at?: string
+          health_score?: number
+          id?: string
+          last_checked_at?: string | null
+          locked_by_user?: boolean
+          mode?: string
+          next_check_at?: string
+          platform?: string
+          posts_count?: number
+          template_slug?: string
+          trend?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "template_health_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      template_suggestions: {
+        Row: {
+          brand_id: string
+          created_at: string
+          current_score: number | null
+          current_slug: string
+          dismissed_count: number
+          expires_at: string | null
+          id: string
+          platform: string
+          preview_render_url: string | null
+          reason: string
+          responded_at: string | null
+          status: string
+          suggested_score: number | null
+          suggested_slug: string
+        }
+        Insert: {
+          brand_id: string
+          created_at?: string
+          current_score?: number | null
+          current_slug: string
+          dismissed_count?: number
+          expires_at?: string | null
+          id?: string
+          platform: string
+          preview_render_url?: string | null
+          reason: string
+          responded_at?: string | null
+          status?: string
+          suggested_score?: number | null
+          suggested_slug: string
+        }
+        Update: {
+          brand_id?: string
+          created_at?: string
+          current_score?: number | null
+          current_slug?: string
+          dismissed_count?: number
+          expires_at?: string | null
+          id?: string
+          platform?: string
+          preview_render_url?: string | null
+          reason?: string
+          responded_at?: string | null
+          status?: string
+          suggested_score?: number | null
+          suggested_slug?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "template_suggestions_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       templates: {
         Row: {
           brand_id: string | null
@@ -993,6 +1612,141 @@ export type Database = {
             columns: ["post_id"]
             isOneToOne: false
             referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trend_builder_jobs: {
+        Row: {
+          approved_at: string | null
+          brand_id: string
+          chosen_version: string | null
+          created_at: string
+          id: string
+          output_caption: string | null
+          output_hashtags: string[] | null
+          regenerate_nudge: string | null
+          regenerated: boolean
+          rejected_at: string | null
+          render_progress: number
+          selected_concept_id: string | null
+          status: string
+          version_a_tokens_snapshot: Json | null
+          version_a_url: string | null
+          version_b_tokens_snapshot: Json | null
+          version_b_url: string | null
+        }
+        Insert: {
+          approved_at?: string | null
+          brand_id: string
+          chosen_version?: string | null
+          created_at?: string
+          id?: string
+          output_caption?: string | null
+          output_hashtags?: string[] | null
+          regenerate_nudge?: string | null
+          regenerated?: boolean
+          rejected_at?: string | null
+          render_progress?: number
+          selected_concept_id?: string | null
+          status?: string
+          version_a_tokens_snapshot?: Json | null
+          version_a_url?: string | null
+          version_b_tokens_snapshot?: Json | null
+          version_b_url?: string | null
+        }
+        Update: {
+          approved_at?: string | null
+          brand_id?: string
+          chosen_version?: string | null
+          created_at?: string
+          id?: string
+          output_caption?: string | null
+          output_hashtags?: string[] | null
+          regenerate_nudge?: string | null
+          regenerated?: boolean
+          rejected_at?: string | null
+          render_progress?: number
+          selected_concept_id?: string | null
+          status?: string
+          version_a_tokens_snapshot?: Json | null
+          version_a_url?: string | null
+          version_b_tokens_snapshot?: Json | null
+          version_b_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trend_builder_jobs_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trend_concepts: {
+        Row: {
+          brand_fit_score: number | null
+          brand_id: string
+          concept_index: number
+          created_at: string
+          description: string
+          format_spec: Json | null
+          id: string
+          job_id: string
+          niche_trend_id: string | null
+          platform: string
+          selected: boolean
+          title: string
+        }
+        Insert: {
+          brand_fit_score?: number | null
+          brand_id: string
+          concept_index?: number
+          created_at?: string
+          description: string
+          format_spec?: Json | null
+          id?: string
+          job_id: string
+          niche_trend_id?: string | null
+          platform: string
+          selected?: boolean
+          title: string
+        }
+        Update: {
+          brand_fit_score?: number | null
+          brand_id?: string
+          concept_index?: number
+          created_at?: string
+          description?: string
+          format_spec?: Json | null
+          id?: string
+          job_id?: string
+          niche_trend_id?: string | null
+          platform?: string
+          selected?: boolean
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trend_concepts_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trend_concepts_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "trend_builder_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trend_concepts_niche_trend_id_fkey"
+            columns: ["niche_trend_id"]
+            isOneToOne: false
+            referencedRelation: "niche_trends"
             referencedColumns: ["id"]
           },
         ]

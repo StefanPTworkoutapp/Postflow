@@ -11,6 +11,8 @@
 import Anthropic from "@anthropic-ai/sdk"
 import type { BrandContext }    from "@/lib/server/brand/getBrandContext"
 import type { SupportedPlatform } from "./url-validator"
+import { MODELS } from "@/lib/ai/models"
+import { logAiUsage } from "@/lib/ai/logUsage"
 
 const claude = new Anthropic({ apiKey: process.env.POSTFLOW_ANTHROPIC_KEY })
 
@@ -155,6 +157,7 @@ export async function analyseInspirationPost(
   url:      string,
   platform: SupportedPlatform,
   brand:    BrandContext,
+  brandId?: string | null,
 ): Promise<PostAnalysis> {
   // 1. Fetch from Supadata (throws InspirationFetchError on failure)
   const scraped = await fetchPostFromSupadata(url)
@@ -169,10 +172,11 @@ export async function analyseInspirationPost(
   )
 
   const message = await claude.messages.create({
-    model:      "claude-opus-4-5",
+    model:      MODELS.inspireAnalyze,
     max_tokens: 1024,
     messages:   [{ role: "user", content: prompt }],
   })
+  logAiUsage({ brandId: brandId ?? null, model: MODELS.inspireAnalyze, feature: "inspire_analyze", usage: message.usage })
 
   const rawText = message.content
     .filter(b => b.type === "text")

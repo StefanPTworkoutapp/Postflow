@@ -13,6 +13,8 @@
 import { inngest }             from "../client"
 import { createServiceClient } from "@/lib/supabase/service"
 import Anthropic               from "@anthropic-ai/sdk"
+import { MODELS }              from "@/lib/ai/models"
+import { logAiUsage }          from "@/lib/ai/logUsage"
 
 interface TagResult {
   tags:          string[]
@@ -20,7 +22,12 @@ interface TagResult {
   quality_score: number
 }
 
-async function analyzeImage(publicUrl: string): Promise<TagResult | null> {
+interface AnalyzeResult {
+  result:  TagResult
+  usage:   { input_tokens: number; output_tokens: number }
+}
+
+async function analyzeImage(publicUrl: string): Promise<AnalyzeResult | null> {
   // Fetch image bytes
   const res = await fetch(publicUrl)
   if (!res.ok) throw new Error(`Failed to fetch image: ${res.status}`)
@@ -38,7 +45,7 @@ async function analyzeImage(publicUrl: string): Promise<TagResult | null> {
   const client = new Anthropic({ apiKey: process.env.POSTFLOW_ANTHROPIC_KEY! })
 
   const msg = await client.messages.create({
-    model:      "claude-haiku-4-5",
+    model:      MODELS.mediaTag,
     max_tokens: 512,
     messages: [{
       role:    "user",
@@ -72,11 +79,14 @@ Quality score (0–10 float): rate lighting (0-3), composition (0-3), clarity (0
   try {
     const parsed = JSON.parse(clean) as TagResult
     return {
-      tags:          Array.isArray(parsed.tags) ? parsed.tags.slice(0, 10) : [],
-      description:   typeof parsed.description === "string" ? parsed.description : "",
-      quality_score: typeof parsed.quality_score === "number"
-        ? Math.max(0, Math.min(10, parsed.quality_score))
-        : 5,
+      result: {
+        tags:          Array.isArray(parsed.tags) ? parsed.tags.slice(0, 10) : [],
+        description:   typeof parsed.description === "string" ? parsed.description : "",
+        quality_score: typeof parsed.quality_score === "number"
+          ? Math.max(0, Math.min(10, parsed.quality_score))
+          : 5,
+      },
+      usage: msg.usage,
     }
   } catch {
     console.error("tagMediaUpload: failed to parse Claude response:", raw)
@@ -114,14 +124,16 @@ export const tagMediaUpload = inngest.createFunction(
       return { skipped: true, reason: "analysis failed" }
     }
 
+    logAiUsage({ brandId, model: MODELS.mediaTag, feature: "media_tag", usage: result.usage })
+
     await step.run("write-tags", async () => {
       const supabase = createServiceClient()
       const { error } = await supabase
         .from("media_uploads")
         .update({
-          ai_tags:          result.tags,
-          ai_description:   result.description,
-          ai_quality_score: result.quality_score,
+          ai_tags:          result.result.tags,
+          ai_description:   result.result.description,
+          ai_quality_score: result.result.quality_score,
         })
         .eq("id", mediaId)
         .eq("brand_id", brandId)
@@ -132,8 +144,8 @@ export const tagMediaUpload = inngest.createFunction(
     return {
       success:       true,
       mediaId,
-      tags:          result.tags,
-      quality_score: result.quality_score,
+      tags:          result.result.tags,
+      quality_score: result.result.quality_score,
     }
   }
 )

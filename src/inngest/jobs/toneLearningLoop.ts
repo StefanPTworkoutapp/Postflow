@@ -13,6 +13,8 @@
 import { inngest }             from "../client"
 import { createServiceClient } from "@/lib/supabase/service"
 import Anthropic               from "@anthropic-ai/sdk"
+import { MODELS }              from "@/lib/ai/models"
+import { logAiUsage }          from "@/lib/ai/logUsage"
 
 const FEEDBACK_THRESHOLD = 5
 
@@ -29,6 +31,7 @@ const FEEDBACK_LABELS: Record<string, string> = {
 }
 
 async function generateToneSuggestion(opts: {
+  brandId:      string
   brandName:    string
   currentTone:  string | null
   feedbackType: string
@@ -36,7 +39,7 @@ async function generateToneSuggestion(opts: {
 }): Promise<string> {
   const label = FEEDBACK_LABELS[opts.feedbackType] ?? opts.feedbackType
   const msg   = await getAnthropic().messages.create({
-    model:      "claude-haiku-4-5",
+    model:      MODELS.toneLoop,
     max_tokens: 250,
     messages: [{
       role:    "user",
@@ -47,6 +50,7 @@ Current tone of voice notes: ${opts.currentTone ?? "not specified"}
 Write a single short, actionable suggestion (2–3 sentences max) for how to update the brand's tone of voice guidelines to fix this pattern. Be specific and practical. No preamble, no sign-off.`,
     }],
   })
+  logAiUsage({ brandId: opts.brandId, model: MODELS.toneLoop, feature: "tone_loop", usage: msg.usage })
   return msg.content[0].type === "text" ? msg.content[0].text.trim() : ""
 }
 
@@ -102,6 +106,7 @@ export const toneLearningLoop = inngest.createFunction(
           const currentTone = brand.tone_examples?.join("; ") ?? null
 
           const suggestion = await generateToneSuggestion({
+            brandId:      brand.id,
             brandName:    brand.name,
             currentTone,
             feedbackType,

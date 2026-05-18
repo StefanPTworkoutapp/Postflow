@@ -39,6 +39,7 @@ export const step5Schema = z.object({
 
 export const step9Schema = z.object({
   posting_frequency: z.enum(["weekly", "monthly"]),
+  ai_tier: z.enum(["standard", "economy"]).default("standard"),
 })
 
 // ── Merged brand draft (all steps combined) ─────────────────
@@ -71,6 +72,7 @@ export type OnboardingDraft = {
   tone_profile?: Record<string, unknown>
   // Step 9
   posting_frequency?: "weekly" | "monthly"
+  ai_tier?: "standard" | "economy"
 }
 
 export const INDUSTRIES = [

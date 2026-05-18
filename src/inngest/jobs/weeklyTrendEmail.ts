@@ -8,12 +8,15 @@ import { Resend } from "resend"
 import Anthropic from "@anthropic-ai/sdk"
 import { buildTrendEmailHtml } from "@/lib/server/email/trendEmailTemplate"
 import { SignJWT } from "jose"
+import { MODELS } from "@/lib/ai/models"
+import { logAiUsage } from "@/lib/ai/logUsage"
 
 // Lazy init — avoids throwing at build time when env vars are absent
 function getResend()    { return new Resend(process.env.RESEND_API_KEY!) }
 function getAnthropic() { return new Anthropic({ apiKey: process.env.POSTFLOW_ANTHROPIC_KEY! }) }
 
 async function generateNarrative(opts: {
+  brandId:      string
   brandName:    string
   industry:     string | null
   niche:        string | null
@@ -26,7 +29,7 @@ async function generateNarrative(opts: {
   ).join("\n")
 
   const msg = await getAnthropic().messages.create({
-    model:      "claude-haiku-4-5",
+    model:      MODELS.trendEmail,
     max_tokens: 600,
     messages: [{
       role:    "user",
@@ -55,6 +58,7 @@ Return only the 3 paragraphs, separated by blank lines.`,
     }],
   })
 
+  logAiUsage({ brandId: opts.brandId, model: MODELS.trendEmail, feature: "trend_email", usage: msg.usage })
   return msg.content[0].type === "text" ? msg.content[0].text : ""
 }
 
@@ -144,6 +148,7 @@ export const weeklyTrendEmail = inngest.createFunction(
             .eq("brand_id", brand.id)
 
           const narrative = await generateNarrative({
+            brandId:      brand.id,
             brandName:    brand.name,
             industry:     brand.industry,
             niche:        brand.niche,

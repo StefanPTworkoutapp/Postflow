@@ -21,6 +21,8 @@
 
 import Anthropic from "@anthropic-ai/sdk"
 import type { BrandContext } from "@/lib/server/brand/getBrandContext"
+import { MODELS } from "@/lib/ai/models"
+import { logAiUsage } from "@/lib/ai/logUsage"
 
 const claude = new Anthropic({ apiKey: process.env.POSTFLOW_ANTHROPIC_KEY })
 
@@ -131,6 +133,7 @@ export function scoreBrandFit(
 export async function generateTrendConcepts(
   ctx:       BrandContext,
   platform:  string,
+  brandId?:  string | null,
 ): Promise<TrendConcept[]> {
   const tokens  = ctx.intelligence_tokens
   const trends  = ctx.trends.slice(0, 5)  // top 5 trends for the brand's niche
@@ -181,10 +184,11 @@ Respond with ONLY the JSON array. No markdown, no extra text.`
 
   try {
     const response = await claude.messages.create({
-      model:      "claude-haiku-4-5",
+      model:      MODELS.trendFilter,
       max_tokens: 1024,
       messages: [{ role: "user", content: prompt }],
     })
+    logAiUsage({ brandId: brandId ?? null, model: MODELS.trendFilter, feature: "trend_filter", usage: response.usage })
 
     const text = response.content
       .filter(b => b.type === "text")

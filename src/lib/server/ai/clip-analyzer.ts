@@ -17,6 +17,8 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk"
+import { MODELS } from "@/lib/ai/models"
+import { logAiUsage } from "@/lib/ai/logUsage"
 
 const claude = new Anthropic({ apiKey: process.env.POSTFLOW_ANTHROPIC_KEY })
 
@@ -44,6 +46,7 @@ export async function analyseClip(
   frameUrl:   string,
   clipIndex:  number,
   goal:       string,
+  brandId?:   string | null,
 ): Promise<ClipAnalysis> {
   const prompt = `You are a social media video editor analysing a clip frame for a brand content creator.
 
@@ -63,7 +66,7 @@ Respond with ONLY the JSON object, no other text.`
 
   try {
     const response = await claude.messages.create({
-      model:      "claude-opus-4-5",
+      model:      MODELS.clipAnalyzer,
       max_tokens: 256,
       messages: [{
         role:    "user",
@@ -84,6 +87,8 @@ Respond with ONLY the JSON object, no other text.`
       .map(b => (b as { type: "text"; text: string }).text)
       .join("")
       .trim()
+
+    logAiUsage({ brandId: brandId ?? null, model: MODELS.clipAnalyzer, feature: "clip_analyzer", usage: response.usage })
 
     const json = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim()
     const parsed = JSON.parse(json) as Partial<ClipAnalysis>
