@@ -4,6 +4,7 @@ import { getBrand } from "@/lib/server/brand/getBrand"
 import { getBrandContext } from "@/lib/server/brand/getBrandContext"
 import { generateCaption } from "@/lib/server/posts/generateCaption"
 import { getTemplate } from "@/lib/shared/posts/templates"
+import { getModels, brandTier } from "@/lib/ai/models"
 
 export async function POST(request: Request) {
   try {
@@ -28,6 +29,8 @@ export async function POST(request: Request) {
     const ctx = await getBrandContext(brand.id, platform)
     if (!ctx) return NextResponse.json({ error: "Brand context unavailable" }, { status: 500 })
 
+    const models = getModels(brandTier(brand as { ai_tier?: string | null }))
+
     const result = await generateCaption({
       brand_name:        ctx.brand_name,
       industry:          ctx.industry,
@@ -43,6 +46,8 @@ export async function POST(request: Request) {
       emoji_favorites:   ctx.emoji_favorites,
       performance:       ctx.performance,
       trends:            ctx.trends,
+      model:             models.caption,
+      brand_id:          brand.id,
     })
 
     return NextResponse.json(result)

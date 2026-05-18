@@ -4,6 +4,8 @@ import { createClient } from "@/lib/supabase/server"
 import { getBrand } from "@/lib/server/brand/getBrand"
 import { getBrandContext } from "@/lib/server/brand/getBrandContext"
 import type { Json } from "@/types/database.types"
+import { getModels, brandTier } from "@/lib/ai/models"
+import { logAiUsage } from "@/lib/ai/logUsage"
 
 const client = new Anthropic({ apiKey: process.env.POSTFLOW_ANTHROPIC_KEY })
 
@@ -83,6 +85,7 @@ export async function POST(request: Request) {
     const from = `${year}-${String(month).padStart(2, "0")}-01`
     const to   = `${year}-${String(month).padStart(2, "0")}-${String(daysInMonth).padStart(2, "0")}`
     const monthName = new Date(year, month - 1, 1).toLocaleString("en-GB", { month: "long" })
+    const today = new Date().toISOString().split("T")[0]
 
     // Get existing entries to avoid overwriting
     const { data: existing } = await supabase
@@ -99,6 +102,10 @@ export async function POST(request: Request) {
     if (!ctx) return NextResponse.json({ error: "Brand context unavailable" }, { status: 500 })
 
     const prompt = `You are an expert social media strategist. Plan a content calendar for ${monthName} ${year}.
+
+Today's date: ${today}. All generated post dates MUST fall within ${from} to ${to}.
+Consider what is seasonally relevant, culturally timely, and topically fresh for ${monthName} ${year} specifically.
+Topics that worked well last month should be approached from a fresh angle this month.
 
 ${ctx.promptBlock}
 
@@ -239,11 +246,13 @@ Goals: engagement | conversion | brand_awareness | lead_generation
 Post types: carousel | single_image | reel | story | text_only
 Required media types: photo | video | carousel | stock | none`
 
+    const models = getModels(brandTier(brand as { ai_tier?: string | null }))
     const message = await client.messages.create({
-      model:      "claude-sonnet-4-6",
+      model:      models.calendar,
       max_tokens: 4096,
       messages:   [{ role: "user", content: prompt }],
     })
+    logAiUsage({ brandId: brand.id, model: models.calendar, feature: "calendar", usage: message.usage })
 
     const raw = message.content[0].type === "text" ? message.content[0].text : ""
     const suggestions = robustJsonParse(raw)

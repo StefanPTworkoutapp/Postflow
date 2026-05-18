@@ -1,7 +1,7 @@
 "use client"
 
 import { useRef, useState } from "react"
-import { ImagePlus, Lightbulb, Loader2, X } from "lucide-react"
+import { FileText, ImagePlus, Lightbulb, Loader2, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -79,12 +79,22 @@ export function BrandEditor({ brand }: Props) {
   const [extractError, setExtractError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // Document upload state
+  const [docFile, setDocFile] = useState<File | null>(null)
+  const [docExtracting, setDocExtracting] = useState(false)
+  const [docExtracted, setDocExtracted] = useState(false)
+  const [docExtractError, setDocExtractError] = useState<string | null>(null)
+  const docInputRef = useRef<HTMLInputElement>(null)
+
   // ── Goals ─────────────────────────────────────────────────
   const [goals, setGoals] = useState<string[]>(
     (brand as unknown as { goals?: string[] }).goals ?? (brand.primary_goal ? [brand.primary_goal] : [])
   )
   const [postingFrequency, setPostingFrequency] = useState<"weekly" | "monthly">(
     (brand.posting_frequency as "weekly" | "monthly") ?? "monthly"
+  )
+  const [aiTier, setAiTier] = useState<"standard" | "economy">(
+    ((brand as unknown as { ai_tier?: string }).ai_tier as "standard" | "economy") ?? "standard"
   )
 
   // ── Image helpers ─────────────────────────────────────────
@@ -158,6 +168,28 @@ export function BrandEditor({ brand }: Props) {
       setExtractError("Network error. Please try again.")
     } finally {
       setExtracting(false)
+    }
+  }
+
+  async function handleDocExtract() {
+    if (!docFile) return
+    setDocExtracting(true)
+    setDocExtractError(null)
+    try {
+      const formData = new FormData()
+      formData.append("file", docFile)
+      const res = await fetch("/api/ai/extract-from-document", { method: "POST", body: formData })
+      const json = await res.json()
+      if (!res.ok || json.error) { setDocExtractError(json.error ?? "Extraction failed"); return }
+      setVoiceExamples((prev) => {
+        const sep = prev.trim() ? "\n\n---\n\n" : ""
+        return prev.trim() + sep + json.text
+      })
+      setDocExtracted(true)
+    } catch {
+      setDocExtractError("Network error. Please try again.")
+    } finally {
+      setDocExtracting(false)
     }
   }
 
@@ -246,6 +278,7 @@ export function BrandEditor({ brand }: Props) {
         goals: goals.length ? goals : null,
         primary_goal: goals[0] ?? null,
         posting_frequency: postingFrequency,
+        ai_tier: aiTier,
       })
     }
 
@@ -536,6 +569,87 @@ export function BrandEditor({ brand }: Props) {
               )}
             </div>
 
+            {/* Document upload */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="flex-1 border-t" />
+                <span className="text-xs text-[hsl(var(--muted-foreground))]">or upload a ToV document</span>
+                <div className="flex-1 border-t" />
+              </div>
+
+              <p className="text-xs text-[hsl(var(--muted-foreground))]">
+                Brand guide, style document, or any file with writing examples.
+                Supports PDF, Word (.docx), and plain text.
+              </p>
+
+              {/* Drop zone */}
+              <button
+                type="button"
+                onClick={() => docInputRef.current?.click()}
+                className="w-full rounded-xl border-2 border-dashed border-[hsl(var(--border))] hover:border-indigo-300 p-5 flex flex-col items-center gap-2 transition-colors"
+              >
+                <FileText className="h-6 w-6 text-[hsl(var(--muted-foreground))]" />
+                <p className="text-sm text-[hsl(var(--muted-foreground))]">Click to upload a document</p>
+                <p className="text-xs text-[hsl(var(--muted-foreground))]">PDF, DOCX, or TXT · max 10 MB</p>
+              </button>
+              <input
+                ref={docInputRef}
+                type="file"
+                accept=".pdf,.docx,.doc,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown"
+                className="hidden"
+                onChange={e => {
+                  const f = e.target.files?.[0] ?? null
+                  setDocFile(f)
+                  setDocExtracted(false)
+                  setDocExtractError(null)
+                  e.target.value = ""
+                }}
+              />
+
+              {docFile && (
+                <div className="flex items-center justify-between rounded-lg border px-3 py-2.5 bg-[hsl(var(--muted))]/40">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <FileText className="h-4 w-4 shrink-0 text-indigo-500" />
+                    <span className="text-sm truncate">{docFile.name}</span>
+                    <span className="text-xs text-[hsl(var(--muted-foreground))] shrink-0">
+                      {(docFile.size / 1024).toFixed(0)} KB
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { setDocFile(null); setDocExtracted(false) }}
+                    className="ml-2 shrink-0 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
+
+              {docExtractError && (
+                <p className="text-xs text-[hsl(var(--destructive))]">{docExtractError}</p>
+              )}
+
+              {docFile && !docExtracted && (
+                <Button
+                  variant="outline"
+                  onClick={handleDocExtract}
+                  disabled={docExtracting}
+                  className="gap-2"
+                >
+                  {docExtracting
+                    ? <><Loader2 className="h-4 w-4 animate-spin" />Extracting voice examples…</>
+                    : `Extract voice examples from ${docFile.name} →`
+                  }
+                </Button>
+              )}
+
+              {docExtracted && (
+                <p className="text-xs text-green-600 dark:text-green-400">
+                  ✓ Voice examples extracted and added below
+                </p>
+              )}
+            </div>
+
             {/* Emoji policy */}
             <div className="space-y-2">
               <Label>Emoji usage in posts</Label>
@@ -618,6 +732,56 @@ export function BrandEditor({ brand }: Props) {
                     )}
                   >
                     {freq}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>AI generation quality</Label>
+              <p className="text-xs text-[hsl(var(--muted-foreground))]">
+                Controls which Claude model generates your captions and calendar.
+              </p>
+              <div className="space-y-2">
+                {([
+                  {
+                    value:   "standard" as const,
+                    label:   "Standard",
+                    badge:   "Recommended",
+                    desc:    "Claude Sonnet — best quality for captions and calendars.",
+                    detail:  "Full reasoning, nuanced tone, stronger brand voice adherence.",
+                    badgeCn: "bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300",
+                  },
+                  {
+                    value:   "economy" as const,
+                    label:   "Economy",
+                    badge:   "Cost-effective",
+                    desc:    "Claude Haiku for captions — lower cost, slightly simpler output.",
+                    detail:  "Great for high-volume posting. Calendar stays on Sonnet.",
+                    badgeCn: "bg-green-100 text-green-700 dark:bg-green-950/60 dark:text-green-300",
+                  },
+                ]).map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setAiTier(opt.value)}
+                    className={cn(
+                      "w-full text-left rounded-lg border-2 px-4 py-3 transition-colors",
+                      aiTier === opt.value
+                        ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-950/40"
+                        : "border-[hsl(var(--border))] hover:border-indigo-300"
+                    )}
+                  >
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className={cn("text-sm font-medium", aiTier === opt.value && "text-indigo-700 dark:text-indigo-300")}>
+                        {opt.label}
+                      </span>
+                      <span className={cn("text-xs px-1.5 py-0.5 rounded font-medium", opt.badgeCn)}>
+                        {opt.badge}
+                      </span>
+                    </div>
+                    <p className="text-xs text-[hsl(var(--muted-foreground))]">{opt.desc}</p>
+                    <p className="text-xs text-[hsl(var(--muted-foreground))] opacity-70">{opt.detail}</p>
                   </button>
                 ))}
               </div>

@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server"
 import { getBrand } from "@/lib/server/brand/getBrand"
 import { getBrandContext } from "@/lib/server/brand/getBrandContext"
 import Anthropic from "@anthropic-ai/sdk"
+import { MODELS } from "@/lib/ai/models"
+import { logAiUsage } from "@/lib/ai/logUsage"
 
 /**
  * POST /api/onboarding/calibrate
@@ -79,7 +81,7 @@ export async function POST(request: Request) {
 
     // Otherwise generate all 3 in parallel
     const posts = await Promise.all(
-      POST_TYPES.map(def => generateCalibrationPost(ctx, def))
+      POST_TYPES.map(def => generateCalibrationPost(ctx, def, undefined, brand.id))
     )
 
     return NextResponse.json({ posts })
@@ -94,6 +96,7 @@ async function generateCalibrationPost(
   ctx: Awaited<ReturnType<typeof getBrandContext>> & object,
   def: typeof POST_TYPES[number],
   adjustment?: string,
+  brandId?: string,
 ): Promise<CalibrationPost> {
   const adjustmentLine = adjustment
     ? `\nUSER REQUESTED ADJUSTMENT: ${adjustment}\nAddress this adjustment in the regenerated post.\n`
@@ -118,10 +121,11 @@ Return ONLY valid JSON — no explanation outside the JSON:
 }`
 
   const response = await client.messages.create({
-    model: "claude-sonnet-4-6",
+    model: MODELS.calibration,
     max_tokens: 700,
     messages: [{ role: "user", content: prompt }],
   })
+  logAiUsage({ brandId: brandId ?? null, model: MODELS.calibration, feature: "calibration", usage: response.usage })
 
   const raw   = response.content[0].type === "text" ? response.content[0].text : ""
   const clean = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim()

@@ -56,6 +56,7 @@ export function Step7SamplePost({ draft, brandId, back, onApproved }: Props) {
           do_not_mention: draft.do_not_mention,
           previous_feedback: previousFeedback,
           goals: draft.goals ?? [],
+          brand_id: brandId ?? null,
         }),
       })
       const json = await res.json()

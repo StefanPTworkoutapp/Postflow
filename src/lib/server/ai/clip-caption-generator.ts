@@ -9,6 +9,8 @@
 
 import Anthropic from "@anthropic-ai/sdk"
 import type { BrandContext } from "@/lib/server/brand/getBrandContext"
+import { MODELS } from "@/lib/ai/models"
+import { logAiUsage } from "@/lib/ai/logUsage"
 
 const claude = new Anthropic({ apiKey: process.env.POSTFLOW_ANTHROPIC_KEY })
 
@@ -32,6 +34,7 @@ export async function generateClipCaption(
   platform:  string,
   hookText?: string,
   ctaText?:  string,
+  brandId?:  string | null,
 ): Promise<ClipCaptionResult> {
   const platformGuidance: Record<string, string> = {
     instagram: "Instagram Reels: 1–3 short punchy lines + 5–10 hashtags. Caption length ≤ 150 words.",
@@ -71,13 +74,14 @@ No markdown, no extra text. Just the JSON.`
 
   try {
     const response = await claude.messages.create({
-      model:      "claude-haiku-4-5",
+      model:      MODELS.clipCaptions,
       max_tokens: 512,
       messages: [{
         role:    "user",
         content: prompt,
       }],
     })
+    logAiUsage({ brandId: brandId ?? null, model: MODELS.clipCaptions, feature: "clip_caption", usage: response.usage })
 
     const text = response.content
       .filter(b => b.type === "text")

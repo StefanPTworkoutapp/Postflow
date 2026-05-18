@@ -3,6 +3,8 @@ import Anthropic from "@anthropic-ai/sdk"
 import { createClient } from "@/lib/supabase/server"
 import { getBrand } from "@/lib/server/brand/getBrand"
 import { getBrandContext } from "@/lib/server/brand/getBrandContext"
+import { MODELS } from "@/lib/ai/models"
+import { logAiUsage } from "@/lib/ai/logUsage"
 import type { Json } from "@/types/database.types"
 
 /**
@@ -116,9 +118,10 @@ No markdown, no explanation.`
     let result: { caption: string; hashtags: string[]; cta: string }
     try {
       const message = await client.messages.create({
-        model: "claude-haiku-4-5", max_tokens: 1024,
+        model: MODELS.formatConvert, max_tokens: 1024,
         messages: [{ role: "user", content: flattenPrompt }],
       })
+      logAiUsage({ brandId: brand.id, model: MODELS.formatConvert, feature: "format_convert", usage: message.usage })
       const raw = message.content[0].type === "text" ? message.content[0].text : "{}"
       const clean = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim()
       result = JSON.parse(clean)
@@ -206,10 +209,11 @@ Return ONLY a JSON array:
   let slideContent: SlideContentItem[]
   try {
     const message = await client.messages.create({
-      model:      "claude-haiku-4-5",
+      model:      MODELS.formatConvert,
       max_tokens: 1024,
       messages:   [{ role: "user", content: prompt }],
     })
+    logAiUsage({ brandId: brand.id, model: MODELS.formatConvert, feature: "format_convert", usage: message.usage })
     const raw = message.content[0].type === "text" ? message.content[0].text : "[]"
     slideContent = robustJsonParse(raw)
   } catch (err) {

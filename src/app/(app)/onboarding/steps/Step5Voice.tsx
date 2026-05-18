@@ -1,7 +1,7 @@
 "use client"
 
 import { useRef, useState } from "react"
-import { ImagePlus, Loader2, X } from "lucide-react"
+import { FileText, ImagePlus, Loader2, X } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
@@ -18,7 +18,7 @@ interface Props {
   back: () => void
 }
 
-type InputMode = "text" | "images"
+type InputMode = "text" | "images" | "document"
 
 interface PreviewImage {
   file: File
@@ -41,6 +41,13 @@ export function Step5Voice({ draft, mergeDraft, saveToApi, next, back }: Props) 
   const [extracting, setExtracting] = useState(false)
   const [extracted, setExtracted] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Document mode state
+  const [docFile, setDocFile] = useState<File | null>(null)
+  const [docExtracting, setDocExtracting] = useState(false)
+  const [docExtracted, setDocExtracted] = useState(false)
+  const [docError, setDocError] = useState<string | null>(null)
+  const docInputRef = useRef<HTMLInputElement>(null)
 
   /**
    * Resize image to max 900px on the longest side, then return base64 JPEG.
@@ -116,11 +123,33 @@ export function Step5Voice({ draft, mergeDraft, saveToApi, next, back }: Props) 
     }
   }
 
+  async function handleDocExtract() {
+    if (!docFile) return
+    setDocExtracting(true)
+    setDocError(null)
+
+    try {
+      const formData = new FormData()
+      formData.append("file", docFile)
+      const res = await fetch("/api/ai/extract-from-document", { method: "POST", body: formData })
+      const json = await res.json()
+      if (!res.ok || json.error) { setDocError(json.error ?? "Extraction failed"); return }
+      setExamples(json.text)
+      setDocExtracted(true)
+    } catch {
+      setDocError("Network error. Please try again.")
+    } finally {
+      setDocExtracting(false)
+    }
+  }
+
   async function handleNext() {
     if (examples.trim().length < 50) {
       setError(
         mode === "images" && !extracted
           ? "Extract text from your screenshots first, or switch to text mode."
+          : mode === "document" && !docExtracted
+          ? "Extract voice examples from your document first, or switch to text mode."
           : "Paste at least one example post (50+ characters)"
       )
       return
@@ -147,30 +176,25 @@ export function Step5Voice({ draft, mergeDraft, saveToApi, next, back }: Props) 
       <div className="space-y-5">
         {/* Mode toggle */}
         <div className="flex rounded-lg border overflow-hidden w-fit">
-          <button
-            type="button"
-            onClick={() => setMode("text")}
-            className={cn(
-              "px-4 py-2 text-sm font-medium transition-colors",
-              mode === "text"
-                ? "bg-indigo-500 text-white"
-                : "text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))]"
-            )}
-          >
-            Paste text
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode("images")}
-            className={cn(
-              "px-4 py-2 text-sm font-medium transition-colors",
-              mode === "images"
-                ? "bg-indigo-500 text-white"
-                : "text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))]"
-            )}
-          >
-            Upload screenshots
-          </button>
+          {([
+            { id: "text",     label: "Paste text" },
+            { id: "images",   label: "Screenshots" },
+            { id: "document", label: "Document" },
+          ] as const).map(opt => (
+            <button
+              key={opt.id}
+              type="button"
+              onClick={() => setMode(opt.id)}
+              className={cn(
+                "px-4 py-2 text-sm font-medium transition-colors",
+                mode === opt.id
+                  ? "bg-indigo-500 text-white"
+                  : "text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))]"
+              )}
+            >
+              {opt.label}
+            </button>
+          ))}
         </div>
 
         {/* Text mode */}
@@ -264,6 +288,96 @@ export function Step5Voice({ draft, mergeDraft, saveToApi, next, back }: Props) 
                 </p>
                 <textarea
                   rows={6}
+                  className="flex w-full rounded-md border border-[hsl(var(--input))] bg-transparent px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[hsl(var(--ring))]"
+                  value={examples}
+                  onChange={(e) => setExamples(e.target.value)}
+                />
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Document upload mode */}
+        {mode === "document" && (
+          <div className="space-y-3">
+            <Label>Tone-of-voice document *</Label>
+            <p className="text-xs text-[hsl(var(--muted-foreground))]">
+              Upload a brand guide, style document, or any file with writing examples.
+              Supported: PDF, Word (.docx), plain text.
+            </p>
+
+            {/* Drop zone */}
+            <button
+              type="button"
+              onClick={() => docInputRef.current?.click()}
+              className="w-full rounded-xl border-2 border-dashed border-[hsl(var(--border))] hover:border-indigo-300 p-8 flex flex-col items-center gap-2 transition-colors"
+            >
+              <FileText className="h-8 w-8 text-[hsl(var(--muted-foreground))]" />
+              <p className="text-sm font-medium">Click to upload a document</p>
+              <p className="text-xs text-[hsl(var(--muted-foreground))]">
+                PDF, DOCX, or TXT · max 10 MB
+              </p>
+            </button>
+            <input
+              ref={docInputRef}
+              type="file"
+              accept=".pdf,.docx,.doc,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown"
+              className="hidden"
+              onChange={e => {
+                const f = e.target.files?.[0] ?? null
+                setDocFile(f)
+                setDocExtracted(false)
+                setDocError(null)
+                e.target.value = ""
+              }}
+            />
+
+            {/* Selected file info */}
+            {docFile && (
+              <div className="flex items-center justify-between rounded-lg border px-3 py-2.5 bg-[hsl(var(--muted))]/40">
+                <div className="flex items-center gap-2 min-w-0">
+                  <FileText className="h-4 w-4 shrink-0 text-indigo-500" />
+                  <span className="text-sm truncate">{docFile.name}</span>
+                  <span className="text-xs text-[hsl(var(--muted-foreground))] shrink-0">
+                    {(docFile.size / 1024).toFixed(0)} KB
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => { setDocFile(null); setDocExtracted(false) }}
+                  className="ml-2 shrink-0 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+
+            {docError && <p className="text-xs text-[hsl(var(--destructive))]">{docError}</p>}
+
+            {/* Extract button */}
+            {docFile && !docExtracted && (
+              <Button
+                variant="outline"
+                onClick={handleDocExtract}
+                disabled={docExtracting}
+                className="gap-2"
+              >
+                {docExtracting ? (
+                  <><Loader2 className="h-4 w-4 animate-spin" />Extracting voice examples…</>
+                ) : (
+                  "Extract voice examples with Claude →"
+                )}
+              </Button>
+            )}
+
+            {/* Extracted preview */}
+            {docExtracted && examples && (
+              <div className="rounded-lg bg-[hsl(var(--muted))]/50 border p-3 space-y-1">
+                <p className="text-xs font-medium text-green-600 dark:text-green-400">
+                  ✓ Voice examples extracted — review and edit below
+                </p>
+                <textarea
+                  rows={7}
                   className="flex w-full rounded-md border border-[hsl(var(--input))] bg-transparent px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[hsl(var(--ring))]"
                   value={examples}
                   onChange={(e) => setExamples(e.target.value)}

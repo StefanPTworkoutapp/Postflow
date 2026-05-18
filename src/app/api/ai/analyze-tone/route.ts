@@ -25,7 +25,8 @@ export async function POST(request: Request) {
       brand_name,
       industry,
       adjectives ?? [],
-      tone_level ?? 5
+      tone_level ?? 5,
+      brand_id ?? null,
     )
 
     // Save to brand row if we have a brand_id

@@ -36,6 +36,7 @@ export function OnboardingWizard({ existingBrand }: Props) {
     font_heading: existingBrand?.font_heading ?? "Montserrat",
     font_body: existingBrand?.font_body ?? "Inter",
     posting_frequency: (existingBrand?.posting_frequency as "weekly" | "monthly") ?? "monthly",
+    ai_tier: ((existingBrand as unknown as { ai_tier?: string })?.ai_tier as "standard" | "economy") ?? "standard",
   })
 
   function next() { setStep((s) => Math.min(s + 1, TOTAL_STEPS)) }
@@ -105,8 +106,8 @@ export function OnboardingWizard({ existingBrand }: Props) {
           {step === 9 && (
             <Step9Frequency
               {...stepProps}
-              onComplete={async (freq) => {
-                await saveToApi({ posting_frequency: freq })
+              onComplete={async (freq, tier) => {
+                await saveToApi({ posting_frequency: freq, ai_tier: tier })
                 next()
               }}
             />

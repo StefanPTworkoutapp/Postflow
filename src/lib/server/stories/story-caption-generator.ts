@@ -10,6 +10,8 @@
 
 import Anthropic from "@anthropic-ai/sdk"
 import type { BrandContext } from "@/lib/server/brand/getBrandContext"
+import { MODELS } from "@/lib/ai/models"
+import { logAiUsage } from "@/lib/ai/logUsage"
 
 const claude = new Anthropic({ apiKey: process.env.POSTFLOW_ANTHROPIC_KEY })
 
@@ -46,6 +48,7 @@ export async function generateStoryCaption(
   platform:  string,
   mediaType: StoryMediaType,
   template:  string,
+  brandId?:  string | null,
 ): Promise<StoryCaptionResult> {
   const guidance     = PLATFORM_GUIDANCE[platform] ?? PLATFORM_GUIDANCE.instagram
   const templateCtx  = TEMPLATE_CONTEXT[template] ?? ""
@@ -77,10 +80,11 @@ No markdown, no extra text. Just the JSON.`
 
   try {
     const response = await claude.messages.create({
-      model:      "claude-haiku-4-5",
+      model:      MODELS.storyCaptions,
       max_tokens: 512,
       messages: [{ role: "user", content: prompt }],
     })
+    logAiUsage({ brandId: brandId ?? null, model: MODELS.storyCaptions, feature: "story_caption", usage: response.usage })
 
     const text = response.content
       .filter(b => b.type === "text")
