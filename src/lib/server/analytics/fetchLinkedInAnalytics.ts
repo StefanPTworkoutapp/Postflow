@@ -5,6 +5,10 @@
  *   - platform_access_token: OAuth2 token with r_organization_social scope
  *   - platform_account_id:   LinkedIn Organization URN (urn:li:organization:12345)
  *
+ * V2A additions:
+ *   - click_through_rate = clicks / impressions (not clicks / reach)
+ *   - actual_performance update on posts row
+ *
  * Docs: https://learn.microsoft.com/en-us/linkedin/marketing/integrations/community-management/organizations/share-statistics
  */
 
@@ -14,13 +18,13 @@ const LI_BASE = "https://api.linkedin.com/v2"
 
 interface LiShareStat {
   totalShareStatistics: {
-    impressionCount:     number
+    impressionCount:        number
     uniqueImpressionsCount: number
-    clickCount:          number
-    engagementCount:     number
-    likeCount:           number
-    commentCount:        number
-    shareCount:          number
+    clickCount:             number
+    engagementCount:        number
+    likeCount:              number
+    commentCount:           number
+    shareCount:             number
   }
 }
 
@@ -96,27 +100,47 @@ export async function fetchAndStoreLinkedInAnalytics(brandId: string): Promise<{
     const stats = await fetchShareStats(post.buffer_post_id, social.platform_access_token)
     if (!stats) { errors++; continue }
 
-    const reach = stats.uniqueImpressionsCount || 1
-    const engagementRate = (stats.engagementCount / reach)
+    const reach           = stats.uniqueImpressionsCount || 1
+    const impressions     = stats.impressionCount || 1
+    const engagementRate  = stats.engagementCount / reach
+    // V2A: CTR = clicks ÷ impressions (not ÷ reach)
+    const clickThroughRate = stats.clickCount / impressions
 
     const { error } = await supabase
       .from("post_analytics")
       .upsert({
-        post_id:           post.id,
-        impressions:       stats.impressionCount,
-        reach:             stats.uniqueImpressionsCount,
-        likes:             stats.likeCount,
-        comments:          stats.commentCount,
-        shares:            stats.shareCount,
-        saves:             0,
-        clicks:            stats.clickCount,
-        engagement_rate:   engagementRate,
-        fetched_at:        new Date().toISOString(),
-        performance_score: Math.min(100, Math.round(engagementRate * 500)),
+        post_id:            post.id,
+        impressions:        stats.impressionCount,
+        reach:              stats.uniqueImpressionsCount,
+        likes:              stats.likeCount,
+        comments:           stats.commentCount,
+        shares:             stats.shareCount,
+        saves:              0,
+        clicks:             stats.clickCount,
+        engagement_rate:    engagementRate,
+        click_through_rate: clickThroughRate,
+        fetched_at:         new Date().toISOString(),
+        performance_score:  Math.min(100, Math.round(engagementRate * 500)),
       }, { onConflict: "post_id" })
 
-    if (error) { errors++ }
-    else processed++
+    if (error) { errors++; continue }
+
+    // V2A: update posts.actual_performance
+    const actualPerformance = {
+      engagement_rate:    engagementRate,
+      impressions:        stats.impressionCount,
+      reach:              stats.uniqueImpressionsCount,
+      clicks:             stats.clickCount,
+      click_through_rate: clickThroughRate,
+      fetched_at:         new Date().toISOString(),
+    }
+
+    await supabase
+      .from("posts")
+      .update({ actual_performance: actualPerformance })
+      .eq("id", post.id)
+
+    processed++
   }
 
   return { processed, errors }

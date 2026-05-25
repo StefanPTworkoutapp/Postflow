@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
-import { ChevronLeft, ChevronRight, PlusCircle, Sparkles, LayoutGrid, List, Loader2, ArrowRight, Upload, X, Camera, Video, Palette, Trash2, RefreshCw } from "lucide-react"
+import { ChevronLeft, ChevronRight, PlusCircle, Sparkles, LayoutGrid, List, Loader2, ArrowRight, Upload, X, Camera, Video, Palette, Trash2, RefreshCw, CalendarDays, Columns3 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { GenerateCalendarModal } from "./GenerateCalendarModal"
@@ -100,7 +100,21 @@ export function CalendarView({ initialEntries, initialYear, initialMonth }: Prop
   const [dragging,      setDragging]      = useState<string | null>(null)
   const [dragOver,      setDragOver]      = useState<string | null>(null)
   const [showGenerate,  setShowGenerate]  = useState(false)
-  const [view,          setView]          = useState<"month" | "list">("month")
+  const [view,          setView]          = useState<"month" | "list" | "week" | "kanban">("month")
+  // Week view: tracks the Monday of the visible week (as YYYY-MM-DD string)
+  const [weekStart, setWeekStart] = useState<string>(() => {
+    const d = new Date()
+    // Roll back to Monday
+    const day = d.getDay() // 0=Sun
+    const diff = day === 0 ? -6 : 1 - day
+    d.setDate(d.getDate() + diff)
+    return d.toISOString().split("T")[0]
+  })
+  // Kanban: platform filter
+  const [kanbanPlatform, setKanbanPlatform] = useState<string | null>(null)
+  // Kanban drag state — track which post is being dragged and what column it's over
+  const [kanbanDragging, setKanbanDragging] = useState<{ postId: string; entryId: string } | null>(null)
+  const [kanbanDragOver, setKanbanDragOver] = useState<string | null>(null)
   const [creatingPost,    setCreatingPost]    = useState<string | null>(null)  // entryId being created
   const [uploadingFor,    setUploadingFor]    = useState<string | null>(null)  // entryId being uploaded
   const [deletingEntry,   setDeletingEntry]   = useState<string | null>(null)  // entryId being deleted
@@ -146,6 +160,50 @@ export function CalendarView({ initialEntries, initialYear, initialMonth }: Prop
     } finally {
       setLoading(false)
     }
+  }
+
+  /** Navigate week view: dir = -1 (back) or +1 (forward) by 7 days */
+  async function navigateWeek(dir: -1 | 1) {
+    const base = new Date(weekStart + "T12:00:00")
+    base.setDate(base.getDate() + dir * 7)
+    const newWeekStart = base.toISOString().split("T")[0]
+    setWeekStart(newWeekStart)
+    // If the new week falls in a different month, reload that month's entries
+    const newMonth = base.getMonth() + 1
+    const newYear  = base.getFullYear()
+    if (newMonth !== month || newYear !== year) {
+      setYear(newYear)
+      setMonth(newMonth)
+      setLoading(true)
+      try {
+        const res = await fetch(`/api/calendar?year=${newYear}&month=${newMonth}`)
+        const json = await res.json()
+        setEntries(json.entries ?? [])
+      } finally {
+        setLoading(false)
+      }
+    }
+  }
+
+  /** Kanban: update post status by dragging between columns */
+  async function handleKanbanDrop(newStatus: string) {
+    if (!kanbanDragging) return
+    const { postId, entryId } = kanbanDragging
+    setKanbanDragOver(null)
+    setKanbanDragging(null)
+    // Optimistic update
+    setEntries(prev => prev.map(e =>
+      e.id === entryId
+        ? { ...e, posts: e.posts?.map(p => p.id === postId ? { ...p, status: newStatus } : p) ?? null }
+        : e
+    ))
+    try {
+      await fetch(`/api/posts/${postId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      })
+    } catch { /* silently ignore — user can reload */ }
   }
 
   /** Click a calendar entry — navigate to its post or create one first */
@@ -355,32 +413,31 @@ export function CalendarView({ initialEntries, initialYear, initialMonth }: Prop
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Month / List toggle */}
+          {/* View toggle: Month / Week / List / Kanban */}
           <div className="flex rounded-md border overflow-hidden">
-            <button
-              onClick={() => setView("month")}
-              className={cn(
-                "flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium transition-colors",
-                view === "month"
-                  ? "bg-[hsl(var(--foreground))] text-[hsl(var(--background))]"
-                  : "hover:bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))]"
-              )}
-            >
-              <LayoutGrid className="h-3.5 w-3.5" />
-              Month
-            </button>
-            <button
-              onClick={() => setView("list")}
-              className={cn(
-                "flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border-l transition-colors",
-                view === "list"
-                  ? "bg-[hsl(var(--foreground))] text-[hsl(var(--background))]"
-                  : "hover:bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))]"
-              )}
-            >
-              <List className="h-3.5 w-3.5" />
-              List
-            </button>
+            {(
+              [
+                { id: "month",  Icon: LayoutGrid,  label: "Month"  },
+                { id: "week",   Icon: CalendarDays, label: "Week"   },
+                { id: "list",   Icon: List,         label: "List"   },
+                { id: "kanban", Icon: Columns3,     label: "Kanban" },
+              ] as const
+            ).map(({ id, Icon, label }, i) => (
+              <button
+                key={id}
+                onClick={() => setView(id)}
+                className={cn(
+                  "flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium transition-colors",
+                  i > 0 && "border-l",
+                  view === id
+                    ? "bg-[hsl(var(--foreground))] text-[hsl(var(--background))]"
+                    : "hover:bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))]"
+                )}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                {label}
+              </button>
+            ))}
           </div>
 
           <Button
@@ -797,6 +854,291 @@ export function CalendarView({ initialEntries, initialYear, initialMonth }: Prop
           )}
         </div>
       )}
+
+      {/* ── WEEK VIEW ──────────────────────────────────────────────────────── */}
+      {view === "week" && (() => {
+        // Build the 7 days of this week
+        const weekDays: Date[] = []
+        for (let i = 0; i < 7; i++) {
+          const d = new Date(weekStart + "T12:00:00")
+          d.setDate(d.getDate() + i)
+          weekDays.push(d)
+        }
+        const HOURS = Array.from({ length: 17 }, (_, i) => i + 6) // 6am–10pm
+        const todayStr = new Date().toISOString().split("T")[0]
+
+        // Build lookup: date string → entries
+        const byDate: Record<string, CalendarEntry[]> = {}
+        for (const entry of entries) {
+          const ds = entry.scheduled_date
+          if (ds && weekDays.some(d => d.toISOString().split("T")[0] === ds)) {
+            if (!byDate[ds]) byDate[ds] = []
+            byDate[ds].push(entry)
+          }
+        }
+
+        return (
+          <div className={cn("space-y-2", loading && "opacity-50 pointer-events-none")}>
+            {/* Week nav */}
+            <div className="flex items-center justify-between">
+              <button
+                onClick={() => navigateWeek(-1)}
+                className="p-1.5 rounded-md hover:bg-[hsl(var(--muted))] transition-colors"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <span className="text-sm font-medium">
+                {weekDays[0].toLocaleDateString("en-GB", { day: "numeric", month: "short" })} –{" "}
+                {weekDays[6].toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+              </span>
+              <button
+                onClick={() => navigateWeek(1)}
+                className="p-1.5 rounded-md hover:bg-[hsl(var(--muted))] transition-colors"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Grid */}
+            <div className="overflow-auto rounded-xl border">
+              <div className="min-w-[700px]">
+                {/* Day header row */}
+                <div className="grid" style={{ gridTemplateColumns: "48px repeat(7, 1fr)" }}>
+                  <div className="border-b border-r" />
+                  {weekDays.map((d) => {
+                    const ds       = d.toISOString().split("T")[0]
+                    const isToday  = ds === todayStr
+                    const dayLabel = d.toLocaleDateString("en-GB", { weekday: "short" })
+                    const dayNum   = d.getDate()
+                    return (
+                      <div
+                        key={ds}
+                        className={cn(
+                          "border-b border-r px-2 py-2 text-center",
+                          isToday && "bg-indigo-50 dark:bg-indigo-950/30"
+                        )}
+                      >
+                        <p className="text-xs text-[hsl(var(--muted-foreground))]">{dayLabel}</p>
+                        <span className={cn(
+                          "text-sm font-semibold w-7 h-7 inline-flex items-center justify-center rounded-full",
+                          isToday ? "bg-indigo-500 text-white" : ""
+                        )}>
+                          {dayNum}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {/* Hour rows */}
+                {HOURS.map((hour) => (
+                  <div key={hour} className="grid" style={{ gridTemplateColumns: "48px repeat(7, 1fr)" }}>
+                    {/* Hour label */}
+                    <div className="border-b border-r px-1 py-1 text-[10px] text-[hsl(var(--muted-foreground))] text-right pr-2 leading-none pt-1.5">
+                      {hour === 12 ? "12pm" : hour < 12 ? `${hour}am` : `${hour - 12}pm`}
+                    </div>
+                    {/* Day cells */}
+                    {weekDays.map((d) => {
+                      const ds = d.toISOString().split("T")[0]
+                      // Entries for this day that have a post with scheduled_for matching this hour
+                      // OR entries without a scheduled post that default to 9am
+                      const dayEntries = (byDate[ds] ?? []).filter(entry => {
+                        const postHour = entry.posts?.[0]?.id
+                          ? null // posts don't have scheduled_for in the calendar query — use scheduled_date only
+                          : null
+                        // Since we only have date (not time) from content_calendar, show entries in the 9am slot
+                        return hour === 9 || postHour === hour
+                      })
+                      const isOver = dragging && dragOver === `${ds}-${hour}`
+
+                      return (
+                        <div
+                          key={ds}
+                          className={cn(
+                            "border-b border-r min-h-[40px] p-0.5",
+                            isOver && "bg-indigo-50 dark:bg-indigo-950/30",
+                          )}
+                          onDragOver={(e) => { e.preventDefault(); if (dragging) setDragOver(`${ds}-${hour}`) }}
+                          onDrop={() => { if (dragging) handleDrop(ds) }}
+                          onDragLeave={() => setDragOver(null)}
+                        >
+                          {dayEntries.map(entry => (
+                            <button
+                              key={entry.id}
+                              type="button"
+                              onClick={() => handleEntryClick(entry)}
+                              draggable
+                              onDragStart={(e) => { e.stopPropagation(); handleDragStart(entry.id) }}
+                              onDragEnd={handleDragEnd}
+                              className="w-full text-left rounded px-1.5 py-1 text-xs bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 text-indigo-800 dark:text-indigo-200 hover:bg-indigo-100 transition-colors truncate"
+                            >
+                              {(entry.platforms?.[0] ? PLATFORM_EMOJI[entry.platforms[0]] : "📅") + " "}
+                              {entry.topic ?? "Post"}
+                            </button>
+                          ))}
+                        </div>
+                      )
+                    })}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <p className="text-xs text-[hsl(var(--muted-foreground))]">
+              Entries are shown at 9am. Drag to reschedule date. Click to open post.
+            </p>
+          </div>
+        )
+      })()}
+
+      {/* ── KANBAN VIEW ────────────────────────────────────────────────────── */}
+      {view === "kanban" && (() => {
+        const KANBAN_COLUMNS = [
+          { id: "planned",   label: "Planned",   color: "border-zinc-200" },
+          { id: "drafting",  label: "Drafting",  color: "border-blue-200" },
+          { id: "ready",     label: "Ready",     color: "border-green-200" },
+          { id: "scheduled", label: "Scheduled", color: "border-indigo-200" },
+          { id: "posted",    label: "Posted",    color: "border-zinc-300" },
+        ] as const
+
+        // Collect all entries with their posts, filtered by platform
+        const allEntries = entries.filter(e => {
+          if (!kanbanPlatform) return true
+          return (e.platforms ?? []).includes(kanbanPlatform) ||
+            (e.posts ?? []).some(p => p.platform === kanbanPlatform)
+        })
+
+        // Group by entry status (or post status if post exists)
+        const byStatus: Record<string, CalendarEntry[]> = {
+          planned: [], drafting: [], ready: [], scheduled: [], posted: [],
+        }
+        for (const entry of allEntries) {
+          const postStatus = entry.posts?.[0]?.status ?? entry.status ?? "planned"
+          const col = postStatus === "media_pending" ? "drafting"
+            : postStatus === "archived" ? "posted"
+            : (postStatus in byStatus) ? postStatus
+            : "planned"
+          byStatus[col].push(entry)
+        }
+
+        // Available platforms for filter chips
+        const allPlatforms = [...new Set(entries.flatMap(e => e.platforms ?? []))]
+
+        return (
+          <div className={cn("space-y-3", loading && "opacity-50 pointer-events-none")}>
+            {/* Platform filter */}
+            {allPlatforms.length > 0 && (
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-xs text-[hsl(var(--muted-foreground))]">Filter:</span>
+                <button
+                  onClick={() => setKanbanPlatform(null)}
+                  className={cn(
+                    "px-2 py-0.5 rounded-full text-xs border transition-colors",
+                    !kanbanPlatform
+                      ? "bg-[hsl(var(--foreground))] text-[hsl(var(--background))] border-transparent"
+                      : "border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--foreground))]"
+                  )}
+                >
+                  All
+                </button>
+                {allPlatforms.map(p => (
+                  <button
+                    key={p}
+                    onClick={() => setKanbanPlatform(kanbanPlatform === p ? null : p)}
+                    className={cn(
+                      "px-2 py-0.5 rounded-full text-xs border transition-colors",
+                      kanbanPlatform === p
+                        ? "bg-[hsl(var(--foreground))] text-[hsl(var(--background))] border-transparent"
+                        : "border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--foreground))]"
+                    )}
+                  >
+                    {PLATFORM_EMOJI[p] ?? "📱"} {p}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Columns */}
+            <div className="flex gap-3 overflow-x-auto pb-4">
+              {KANBAN_COLUMNS.map(col => (
+                <div
+                  key={col.id}
+                  className={cn(
+                    "flex-none w-56 rounded-xl border-2 bg-[hsl(var(--muted))]/20 transition-colors",
+                    col.color,
+                    kanbanDragOver === col.id && "bg-indigo-50 dark:bg-indigo-950/30 border-indigo-300"
+                  )}
+                  onDragOver={(e) => { e.preventDefault(); setKanbanDragOver(col.id) }}
+                  onDrop={() => handleKanbanDrop(col.id)}
+                  onDragLeave={() => setKanbanDragOver(null)}
+                >
+                  {/* Column header */}
+                  <div className="px-3 py-2.5 border-b border-[hsl(var(--border))] flex items-center justify-between">
+                    <span className="text-xs font-semibold">{col.label}</span>
+                    <span className="text-xs text-[hsl(var(--muted-foreground))] tabular-nums">
+                      {byStatus[col.id]?.length ?? 0}
+                    </span>
+                  </div>
+
+                  {/* Cards */}
+                  <div className="p-2 space-y-2 min-h-[120px]">
+                    {(byStatus[col.id] ?? []).length === 0 ? (
+                      <p className="text-[10px] text-[hsl(var(--muted-foreground))] text-center py-4">
+                        Drop here
+                      </p>
+                    ) : (
+                      (byStatus[col.id] ?? []).map(entry => {
+                        const post = entry.posts?.[0]
+                        const postId = post?.id
+                        return (
+                          <div
+                            key={entry.id}
+                            draggable={!!postId}
+                            onDragStart={() => {
+                              if (postId) setKanbanDragging({ postId, entryId: entry.id })
+                            }}
+                            onDragEnd={() => { setKanbanDragging(null); setKanbanDragOver(null) }}
+                            className={cn(
+                              "rounded-lg border bg-[hsl(var(--background))] p-2.5 text-xs cursor-pointer hover:border-indigo-300 transition-colors",
+                              kanbanDragging?.entryId === entry.id && "opacity-50 ring-2 ring-indigo-300"
+                            )}
+                            onClick={() => handleEntryClick(entry)}
+                          >
+                            <div className="flex items-start gap-1.5 mb-1.5">
+                              <span className="text-sm shrink-0">
+                                {(entry.platforms?.[0] ? PLATFORM_EMOJI[entry.platforms[0]] : "📅")}
+                              </span>
+                              <p className="font-medium leading-snug line-clamp-2 min-w-0">
+                                {entry.topic ?? "Untitled post"}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {entry.scheduled_date && (
+                                <span className="text-[10px] text-[hsl(var(--muted-foreground))]">
+                                  {new Date(entry.scheduled_date + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                                </span>
+                              )}
+                              {entry.content_pillar && (
+                                <span className={cn("text-[10px] px-1 py-0.5 rounded", PILLAR_COLOR[entry.content_pillar] ?? "bg-zinc-100 text-zinc-600")}>
+                                  {entry.content_pillar.replace(/_/g, " ")}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-[hsl(var(--muted-foreground))]">
+              Drag cards between columns to update post status. Click to open editor.
+            </p>
+          </div>
+        )
+      })()}
+
     </div>
   )
 }

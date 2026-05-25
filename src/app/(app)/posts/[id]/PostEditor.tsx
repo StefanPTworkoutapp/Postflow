@@ -71,16 +71,18 @@ interface SlideContentItem {
 }
 
 interface Post {
-  id:                  string
-  platform:            string
-  caption:             string
-  hashtags:            string[]
-  cta:                 string | null
-  status:              string
-  media_ids:           string[]
-  template_slug:       string | null
-  slide_content:       SlideContentItem[] | null
-  carousel_image_urls: string[] | null
+  id:                     string
+  platform:               string
+  caption:                string
+  hashtags:               string[]
+  cta:                    string | null
+  status:                 string
+  media_ids:              string[]
+  template_slug:          string | null
+  slide_content:          SlideContentItem[] | null
+  carousel_image_urls:    string[] | null
+  /** Set when the post has been shared to a client portal and reviewed */
+  client_approval_status: "pending" | "approved" | "flagged" | null
   content_calendar:    {
     id?: string
     scheduled_date?: string
@@ -91,13 +93,33 @@ interface Post {
   } | null
 }
 
-interface Props {
-  post:      Post
-  brandName: string
-  industry:  string
+interface OptimalTimeInfo {
+  label:      string   // e.g. "Tuesday at 09:00"
+  date:       string   // YYYY-MM-DD for the date input
+  confidence: "data" | "fallback"
 }
 
-export function PostEditor({ post, brandName, industry }: Props) {
+export interface TemplateHealthMap {
+  [slug: string]: {
+    health_score: number
+    trend:        string | null
+    posts_count:  number
+  }
+}
+
+interface Props {
+  post:            Post
+  brandName:       string
+  industry:        string
+  /** BCP 47 code for brand's default language, e.g. "en", "nl", "de", "fr" */
+  contentLanguage?: string
+  /** Pre-computed optimal schedule time for the post's platform */
+  optimalTime?:    OptimalTimeInfo
+  /** Template health scores for this brand + platform (from template_health table) */
+  templateHealth?: TemplateHealthMap
+}
+
+export function PostEditor({ post, brandName, industry, contentLanguage = "en", optimalTime, templateHealth }: Props) {
   const router = useRouter()
 
   const [caption,       setCaption]       = useState(post.caption ?? "")
@@ -143,6 +165,25 @@ export function PostEditor({ post, brandName, industry }: Props) {
   )
   const [converting, setConverting] = useState(false)
 
+  // ── V2C: Language selector ─────────────────────────────────────────────────
+  const [targetLanguage, setTargetLanguage] = useState<string>(contentLanguage)
+
+  // ── V2C: Stock image search ────────────────────────────────────────────────
+  interface StockPhoto {
+    id:                string
+    regular:           string
+    thumb:             string
+    download_location: string
+    alt_description:   string | null
+    author: { name: string; username: string; link: string }
+  }
+  const [stockQuery,        setStockQuery]        = useState("")
+  const [stockResults,      setStockResults]      = useState<StockPhoto[]>([])
+  const [stockLoading,      setStockLoading]      = useState(false)
+  const [stockError,        setStockError]        = useState<string | null>(null)
+  const [stockTab,          setStockTab]          = useState<"media" | "stock">("media")
+  const [selectedStockPhoto, setSelectedStockPhoto] = useState<StockPhoto | null>(null)
+
   // Auto-generate caption when post was just created from calendar (no caption yet)
   useEffect(() => {
     if (post.caption || !post.content_calendar?.topic) return
@@ -152,9 +193,10 @@ export function PostEditor({ post, brandName, industry }: Props) {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        template_id: "edu-tips",
-        platform:    post.platform,
+        template_id:     "edu-tips",
+        platform:        post.platform,
         topic,
+        target_language: contentLanguage,
       }),
     })
       .then(r => r.json())
@@ -263,6 +305,7 @@ export function PostEditor({ post, brandName, industry }: Props) {
           platform:          post.platform,
           topic:             topic || post.content_calendar?.topic || "general content",
           previous_feedback: feedback || undefined,
+          target_language:   targetLanguage,
         }),
       })
       const json = await res.json()
@@ -274,6 +317,40 @@ export function PostEditor({ post, brandName, industry }: Props) {
     } finally {
       setRegen(false)
     }
+  }
+
+  async function handleStockSearch(q: string) {
+    if (!q.trim()) return
+    setStockLoading(true)
+    setStockError(null)
+    try {
+      const res  = await fetch(`/api/media/stock-search?q=${encodeURIComponent(q)}&orientation=squarish`)
+      const data = await res.json() as { photos?: StockPhoto[]; error?: string }
+      if (!res.ok || data.error) {
+        setStockError(data.error ?? "Search failed")
+        return
+      }
+      setStockResults(data.photos ?? [])
+    } catch {
+      setStockError("Search failed — check your connection")
+    } finally {
+      setStockLoading(false)
+    }
+  }
+
+  async function handleSelectStockPhoto(photo: StockPhoto) {
+    // Ping Unsplash download endpoint (required by Unsplash TOS)
+    void fetch(`/api/media/stock-download?url=${encodeURIComponent(photo.download_location)}`, { method: "POST" })
+    setSelectedStockPhoto(photo)
+    // Store the regular-quality URL as the post's generated_image_url
+    try {
+      await fetch(`/api/posts/${post.id}`, {
+        method:  "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ generated_image_url: photo.regular }),
+      })
+      setImageUrl(photo.regular)
+    } catch { /* non-fatal — photo still selected visually */ }
   }
 
   async function handleRender() {
@@ -463,8 +540,25 @@ export function PostEditor({ post, brandName, industry }: Props) {
 
       <div className="flex items-center gap-3">
         <span className="text-3xl">{PLATFORM_EMOJI[post.platform] ?? "📄"}</span>
-        <div>
-          <h1 className="text-xl font-semibold capitalize">{post.platform} post</h1>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h1 className="text-xl font-semibold capitalize">{post.platform} post</h1>
+            {post.client_approval_status === "approved" && (
+              <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-full px-2 py-0.5">
+                👍 Client approved
+              </span>
+            )}
+            {post.client_approval_status === "flagged" && (
+              <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-full px-2 py-0.5">
+                ⚑ Client flagged — review needed
+              </span>
+            )}
+            {post.client_approval_status === "pending" && (
+              <span className="inline-flex items-center gap-1 text-xs font-medium text-zinc-500 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-full px-2 py-0.5">
+                ⏳ Awaiting client review
+              </span>
+            )}
+          </div>
           <p className="text-sm text-[hsl(var(--muted-foreground))]">
             {topic || "No topic set"}
           </p>
@@ -528,6 +622,27 @@ export function PostEditor({ post, brandName, industry }: Props) {
             value={scheduledDate}
             onChange={(e) => setScheduledDate(e.target.value)}
           />
+          {/* Optimal time chip */}
+          {optimalTime && (
+            <button
+              type="button"
+              onClick={() => setScheduledDate(optimalTime.date)}
+              title={
+                optimalTime.confidence === "fallback"
+                  ? "Based on industry benchmark (not enough data yet)"
+                  : "Based on your real performance data"
+              }
+              className="flex items-center gap-1.5 text-[11px] text-[hsl(var(--muted-foreground))] hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+            >
+              <span className="text-amber-500">⚡</span>
+              <span>
+                Best time for {post.platform}: {optimalTime.label}
+                {optimalTime.confidence === "fallback" && (
+                  <span className="ml-1 opacity-60">(benchmark)</span>
+                )}
+              </span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -620,30 +735,61 @@ export function PostEditor({ post, brandName, industry }: Props) {
 
         {/* Template grid */}
         {showTemplatePicker && (
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 mt-1">
-            {ALL_TEMPLATES.map((t) => {
-              const isSelected = selectedTemplate === t.slug
-              return (
-                <button
-                  key={t.slug}
-                  type="button"
-                  onClick={() => handleTemplateChange(t.slug)}
-                  className={cn(
-                    "text-left rounded-xl border p-3 space-y-1.5 transition-all",
-                    isSelected
-                      ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-950/30 ring-1 ring-indigo-400"
-                      : "border-[hsl(var(--border))] hover:border-indigo-300 hover:bg-indigo-50/30 dark:hover:bg-indigo-950/10"
-                  )}
-                >
-                  <span className={cn("text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded", TYPE_BADGE[t.type])}>
-                    {TYPE_LABEL[t.type]}
-                  </span>
-                  <p className="text-xs font-semibold leading-tight">{t.name}</p>
-                  <p className="text-[10px] text-[hsl(var(--muted-foreground))] leading-tight">{t.description}</p>
-                  {isSelected && <p className="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400">✓ Selected</p>}
-                </button>
-              )
-            })}
+          <div className="space-y-2 mt-1">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {ALL_TEMPLATES.map((t) => {
+                const isSelected = selectedTemplate === t.slug
+                const health     = templateHealth?.[t.slug]
+                // Health badge: only show when we have >= 3 posts of data
+                const showHealth = health && health.posts_count >= 3
+                const healthColor = !showHealth ? "" :
+                  health.health_score >= 70 ? "text-green-600 dark:text-green-400" :
+                  health.health_score >= 50 ? "text-amber-600 dark:text-amber-400" :
+                                              "text-red-600 dark:text-red-400"
+                const healthIcon = !showHealth ? "" :
+                  health.trend === "rising"   ? "↑" :
+                  health.trend === "declining" ? "↓" : "→"
+
+                return (
+                  <button
+                    key={t.slug}
+                    type="button"
+                    onClick={() => handleTemplateChange(t.slug)}
+                    className={cn(
+                      "text-left rounded-xl border p-3 space-y-1.5 transition-all",
+                      isSelected
+                        ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-950/30 ring-1 ring-indigo-400"
+                        : health && health.trend === "declining"
+                          ? "border-[hsl(var(--border))] hover:border-amber-300 opacity-75"
+                          : "border-[hsl(var(--border))] hover:border-indigo-300 hover:bg-indigo-50/30 dark:hover:bg-indigo-950/10"
+                    )}
+                  >
+                    <div className="flex items-start justify-between gap-1">
+                      <span className={cn("text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded", TYPE_BADGE[t.type])}>
+                        {TYPE_LABEL[t.type]}
+                      </span>
+                      {showHealth && (
+                        <span className={cn("text-[9px] font-semibold", healthColor)} title={`${health.posts_count} posts · score ${health.health_score}`}>
+                          {health.health_score} {healthIcon}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs font-semibold leading-tight">{t.name}</p>
+                    <p className="text-[10px] text-[hsl(var(--muted-foreground))] leading-tight">{t.description}</p>
+                    {isSelected && <p className="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400">✓ Selected</p>}
+                    {showHealth && health.trend === "declining" && (
+                      <p className="text-[10px] text-amber-600 dark:text-amber-400">Declining for your brand</p>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+            {/* Health legend — only when data exists */}
+            {templateHealth && Object.keys(templateHealth).length > 0 && (
+              <p className="text-[10px] text-[hsl(var(--muted-foreground))]">
+                Numbers = health score (0–100) based on your post performance. ↑ rising · ↓ declining · → stable
+              </p>
+            )}
           </div>
         )}
       </div>
@@ -680,12 +826,32 @@ export function PostEditor({ post, brandName, industry }: Props) {
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
               <Label>Caption</Label>
-              {autoGenerating && (
-                <span className="flex items-center gap-1.5 text-xs text-indigo-500">
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                  Writing caption…
-                </span>
-              )}
+              <div className="flex items-center gap-2">
+                {/* Language selector pills */}
+                <div className="flex items-center gap-0.5 rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--muted))]/40 p-0.5">
+                  {(["nl", "en", "de", "fr"] as const).map(lang => (
+                    <button
+                      key={lang}
+                      type="button"
+                      onClick={() => setTargetLanguage(lang)}
+                      className={cn(
+                        "px-2 py-0.5 text-[11px] font-medium rounded-full transition-colors uppercase",
+                        targetLanguage === lang
+                          ? "bg-[hsl(var(--foreground))] text-[hsl(var(--background))]"
+                          : "text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
+                      )}
+                    >
+                      {lang}
+                    </button>
+                  ))}
+                </div>
+                {autoGenerating && (
+                  <span className="flex items-center gap-1.5 text-xs text-indigo-500">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    Writing caption…
+                  </span>
+                )}
+              </div>
             </div>
             <textarea
               rows={12}
@@ -718,31 +884,151 @@ export function PostEditor({ post, brandName, industry }: Props) {
             />
           </div>
 
-          {/* Media */}
+          {/* Media — tabbed: "Your media" | "Stock images" */}
           <div className="space-y-2 pt-1 border-t">
-            <div className="flex items-center justify-between">
-              <Label>Attached media</Label>
+            <div className="flex items-center gap-3">
               <button
                 type="button"
-                onClick={() => setShowPicker(v => !v)}
-                className="flex items-center gap-1.5 text-xs text-indigo-500 hover:text-indigo-700"
+                onClick={() => setStockTab("media")}
+                className={cn(
+                  "flex items-center gap-1.5 text-xs font-medium pb-0.5 border-b-2 transition-colors",
+                  stockTab === "media"
+                    ? "border-indigo-500 text-indigo-600 dark:text-indigo-400"
+                    : "border-transparent text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
+                )}
               >
                 <Paperclip className="h-3.5 w-3.5" />
-                {showPicker ? "Hide picker" : mediaIds.length ? "Change" : "Attach media"}
+                Your media
+              </button>
+              <button
+                type="button"
+                onClick={() => setStockTab("stock")}
+                className={cn(
+                  "flex items-center gap-1.5 text-xs font-medium pb-0.5 border-b-2 transition-colors",
+                  stockTab === "stock"
+                    ? "border-indigo-500 text-indigo-600 dark:text-indigo-400"
+                    : "border-transparent text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
+                )}
+              >
+                <ImageIcon className="h-3.5 w-3.5" />
+                Stock images
               </button>
             </div>
 
-            <AttachedMedia
-              mediaIds={mediaIds}
-              onRemove={(id) => setMediaIds(prev => prev.filter(x => x !== id))}
-            />
+            {stockTab === "media" ? (
+              <>
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setShowPicker(v => !v)}
+                    className="flex items-center gap-1.5 text-xs text-indigo-500 hover:text-indigo-700"
+                  >
+                    <Paperclip className="h-3.5 w-3.5" />
+                    {showPicker ? "Hide picker" : mediaIds.length ? "Change" : "Attach media"}
+                  </button>
+                </div>
+                <AttachedMedia
+                  mediaIds={mediaIds}
+                  onRemove={(id) => setMediaIds(prev => prev.filter(x => x !== id))}
+                />
+                {showPicker && (
+                  <MediaPicker
+                    selected={mediaIds}
+                    onChange={setMediaIds}
+                    className="mt-2"
+                  />
+                )}
+              </>
+            ) : (
+              /* Stock image search */
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={stockQuery}
+                    onChange={e => setStockQuery(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter") void handleStockSearch(stockQuery) }}
+                    placeholder={`Search photos… (e.g. ${industry || "fitness"})`}
+                    className="flex-1 h-8 rounded-md border border-[hsl(var(--input))] bg-transparent px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[hsl(var(--ring))]"
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void handleStockSearch(stockQuery)}
+                    disabled={stockLoading || !stockQuery.trim()}
+                    className="h-8 text-xs px-3"
+                  >
+                    {stockLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Search"}
+                  </Button>
+                </div>
 
-            {showPicker && (
-              <MediaPicker
-                selected={mediaIds}
-                onChange={setMediaIds}
-                className="mt-2"
-              />
+                {stockError && (
+                  <p className="text-xs text-[hsl(var(--destructive))]">{stockError}</p>
+                )}
+
+                {stockResults.length > 0 && (
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {stockResults.map(photo => (
+                      <button
+                        key={photo.id}
+                        type="button"
+                        onClick={() => void handleSelectStockPhoto(photo)}
+                        className={cn(
+                          "relative rounded-lg overflow-hidden border-2 transition-all hover:border-indigo-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500",
+                          selectedStockPhoto?.id === photo.id
+                            ? "border-indigo-500"
+                            : "border-transparent"
+                        )}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={photo.thumb}
+                          alt={photo.alt_description ?? "Stock photo"}
+                          className="w-full h-20 object-cover"
+                        />
+                        {selectedStockPhoto?.id === photo.id && (
+                          <span className="absolute top-1 right-1 bg-indigo-600 rounded-full p-0.5">
+                            <svg className="h-2.5 w-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Selected photo attribution (required by Unsplash TOS) */}
+                {selectedStockPhoto && (
+                  <p className="text-[10px] text-[hsl(var(--muted-foreground))]">
+                    Photo by{" "}
+                    <a
+                      href={`${selectedStockPhoto.author.link}?utm_source=postflow&utm_medium=referral`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="underline hover:text-[hsl(var(--foreground))]"
+                    >
+                      {selectedStockPhoto.author.name}
+                    </a>
+                    {" "}on{" "}
+                    <a
+                      href="https://unsplash.com/?utm_source=postflow&utm_medium=referral"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="underline hover:text-[hsl(var(--foreground))]"
+                    >
+                      Unsplash
+                    </a>
+                    {" "}✓ Selected
+                  </p>
+                )}
+
+                {stockResults.length === 0 && !stockLoading && !stockError && (
+                  <p className="text-xs text-[hsl(var(--muted-foreground))] text-center py-4">
+                    Search for free stock photos to use as your post image.
+                  </p>
+                )}
+              </div>
             )}
           </div>
 

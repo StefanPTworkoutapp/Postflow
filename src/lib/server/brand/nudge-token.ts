@@ -41,6 +41,9 @@ interface BrandTokens {
  * @param signalType      - source of the signal
  * @param sourceId        - optional post_id, job_id, or URL for audit trail
  * @param detail          - optional extra context stored in signal_detail JSONB
+ * @param allowCreate     - if true and the token doesn't exist yet, create it with
+ *                          newValue and abs(confidenceDelta) as starting confidence.
+ *                          Use for new token types that didn't exist at calibration time.
  */
 export async function nudgeToken(
   brandId:         string,
@@ -49,7 +52,8 @@ export async function nudgeToken(
   confidenceDelta: number,
   signalType:      SignalType,
   sourceId?:       string,
-  detail?:         Record<string, unknown>
+  detail?:         Record<string, unknown>,
+  allowCreate?:    boolean,
 ): Promise<void> {
   const supabase = createServiceClient()
 
@@ -69,7 +73,37 @@ export async function nudgeToken(
   const token  = tokens[tokenKey]
 
   if (!token) {
-    console.warn(`nudgeToken: unknown token key "${tokenKey}" for brand ${brandId} — skipping`)
+    if (allowCreate) {
+      // Auto-create the token. Start at a low confidence equal to |confidenceDelta|
+      // so the caller's signal is the first data point, not a hard override.
+      const startConfidence = Math.min(0.40, Math.abs(confidenceDelta))
+      const newToken: TokenEntry = {
+        value:      newValue,
+        confidence: startConfidence,
+      }
+      const updatedTokens: BrandTokens = { ...tokens, [tokenKey]: newToken }
+      const { error: createError } = await supabase
+        .from("brands")
+        .update({ intelligence_tokens: updatedTokens as unknown as Json })
+        .eq("id", brandId)
+      if (createError) {
+        console.error(`nudgeToken: failed to create token "${tokenKey}" for brand ${brandId}:`, createError.message)
+        return
+      }
+      await supabase.from("brand_token_events").insert({
+        brand_id:         brandId,
+        token_key:        tokenKey,
+        old_value:        "",
+        new_value:        String(newValue),
+        old_confidence:   0,
+        new_confidence:   startConfidence,
+        signal_type:      signalType,
+        signal_source_id: sourceId ?? null,
+        signal_detail:    ({ ...(detail ?? {}), auto_created: true }) as unknown as Json,
+      })
+    } else {
+      console.warn(`nudgeToken: unknown token key "${tokenKey}" for brand ${brandId} — skipping`)
+    }
     return
   }
 

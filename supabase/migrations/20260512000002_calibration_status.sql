@@ -15,6 +15,15 @@
 -- is one of the allowed values. No data loss.
 -- ============================================================
 
-ALTER TABLE postflow.brands
-  ADD CONSTRAINT IF NOT EXISTS brands_calibration_status_check
-    CHECK (calibration_status IN ('pending', 'complete'));
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'brands_calibration_status_check'
+      AND conrelid = 'postflow.brands'::regclass
+  ) THEN
+    ALTER TABLE postflow.brands
+      ADD CONSTRAINT brands_calibration_status_check
+        CHECK (calibration_status IN ('pending', 'complete'));
+  END IF;
+END $$;

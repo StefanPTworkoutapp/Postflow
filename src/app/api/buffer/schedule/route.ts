@@ -80,12 +80,20 @@ export async function POST(request: Request) {
       mediaUrls,
     })
 
-    // Save buffer_post_id and mark as scheduled
+    // V2A: Capture predicted_performance — brand token snapshot at schedule time.
+    // Used later for accuracy tracking: compare these predictions to actual analytics.
+    const predictedPerformance = {
+      token_snapshot: brand.intelligence_tokens ?? {},
+      captured_at:    new Date().toISOString(),
+    }
+
+    // Save buffer_post_id, predicted_performance, and mark as scheduled
     await supabase
       .from("posts")
       .update({
-        buffer_post_id: bufferUpdate.id,
-        status:         "scheduled",
+        buffer_post_id:        bufferUpdate.id,
+        status:                "scheduled",
+        predicted_performance: predictedPerformance,
       })
       .eq("id", post_id)
 

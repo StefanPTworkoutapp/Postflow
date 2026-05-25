@@ -121,8 +121,33 @@ export default async function DashboardPage() {
     },
   ]
 
+  // ── Calibration due banner ──────────────────────────────────────────────
+  const calibrationDue = brand?.calibration_status === "due"
+
   return (
     <div className="space-y-6">
+      {/* Recalibration banner — shown when brand data is stale or health is low */}
+      {calibrationDue && (
+        <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20 px-5 py-4">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
+                Time to update your brand calibration
+              </p>
+              <p className="text-xs text-amber-700/80 dark:text-amber-400/80 mt-0.5 leading-relaxed">
+                PostFlow has detected that your brand profile may be outdated — either because
+                it&apos;s been a while since calibration, or performance has dropped on multiple
+                platforms. Re-run calibration to keep AI output aligned with your current brand and audience.
+              </p>
+            </div>
+            <Button asChild size="sm" variant="outline" className="shrink-0 border-amber-300 text-amber-800 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-300">
+              <Link href="/onboarding">Re-calibrate →</Link>
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>

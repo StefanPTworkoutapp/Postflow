@@ -64,8 +64,70 @@ export default async function AdminPage() {
     .from("brands")
     .select("id, name, niche, industry, created_at")
 
+  // ── AI usage logs (current + previous month) ──────────────────────────────
+  const now = new Date()
+  const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+  const prevMonthStart    = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString()
+
+  const { data: aiLogs } = await service
+    .from("ai_usage_logs")
+    .select("brand_id, model, feature, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_usd, created_at")
+    .gte("created_at", prevMonthStart)
+    .order("created_at", { ascending: false })
+    .limit(5000)
+
+  // Aggregate AI usage into per-brand, per-model, and per-feature summaries
+  interface RawLog {
+    brand_id:           string | null
+    model:              string
+    feature:            string
+    input_tokens:       number
+    output_tokens:      number
+    cache_read_tokens:  number
+    cache_write_tokens: number
+    cost_usd:           number
+    created_at:         string
+  }
+
+  const logs = (aiLogs ?? []) as RawLog[]
+  const currentLogs = logs.filter(l => l.created_at >= currentMonthStart)
+  const prevLogs    = logs.filter(l => l.created_at >= prevMonthStart && l.created_at < currentMonthStart)
+
+  function aggregateByField<T extends string>(
+    rows: RawLog[],
+    keyFn: (r: RawLog) => T,
+  ): Array<{ key: T; calls: number; tokens: number; cost: number }> {
+    const map = new Map<T, { calls: number; tokens: number; cost: number }>()
+    for (const r of rows) {
+      const k = keyFn(r)
+      const prev = map.get(k) ?? { calls: 0, tokens: 0, cost: 0 }
+      map.set(k, {
+        calls:  prev.calls + 1,
+        tokens: prev.tokens + r.input_tokens + r.output_tokens,
+        cost:   prev.cost + Number(r.cost_usd),
+      })
+    }
+    return [...map.entries()]
+      .map(([key, v]) => ({ key, ...v }))
+      .sort((a, b) => b.cost - a.cost)
+  }
+
+  const aiUsageBrands  = aggregateByField(currentLogs, r => r.brand_id ?? "(unattributed)")
+  const aiUsageModels  = aggregateByField(currentLogs, r => r.model)
+  const aiUsageFeatures = aggregateByField(currentLogs, r => r.feature)
+
+  const aiTotals = {
+    calls:    currentLogs.length,
+    tokens:   currentLogs.reduce((s, r) => s + r.input_tokens + r.output_tokens, 0),
+    cost:     currentLogs.reduce((s, r) => s + Number(r.cost_usd), 0),
+    prevCost: prevLogs.reduce((s, r) => s + Number(r.cost_usd), 0),
+    month:    now.toLocaleString("en-GB", { month: "long", year: "numeric" }),
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const cast = <T,>(v: any): T[] => (v as T[] | null) ?? []
+
+  const brandNameMap = new Map((brands ?? []).map(b => [b.id, b.name as string]))
 
   return (
     <AdminDashboard
@@ -78,6 +140,10 @@ export default async function AdminPage() {
       }))}
       analyticsProcessed={cast(analyticsProcessed)}
       brands={brands ?? []}
+      aiTotals={aiTotals}
+      aiUsageBrands={aiUsageBrands.map(r => ({ ...r, brandName: brandNameMap.get(r.key) ?? r.key }))}
+      aiUsageModels={aiUsageModels}
+      aiUsageFeatures={aiUsageFeatures}
     />
   )
 }

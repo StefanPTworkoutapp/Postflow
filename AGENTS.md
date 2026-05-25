@@ -350,10 +350,14 @@ migration drift before coding against either result.
 PostFlow shares a Supabase project with an existing live app. The `public`
 schema belongs to that app. Any write to `public` corrupts live data.
 
+⚠️  CRITICAL: This Supabase project is SHARED with another live app.
+The remote migration history table contains rows from BOTH apps.
+NEVER touch, revert, repair, or delete any migration ID that does not
+have a matching file under supabase/migrations/. Those are the other
+app's migrations. Modifying them breaks the other app.
+
 GENERAL RULES:
-- NEVER run schema changes (CREATE/ALTER/DROP TABLE, etc.) directly against any DB.
 - ALL schema changes must be written as migration files in `supabase/migrations/`.
-- The user applies migrations by pushing to GitHub — not by running commands.
 - Initialize the Supabase client with: `db: { schema: 'postflow' }`
 
 MIGRATION REVIEW CHECKPOINT:
@@ -370,15 +374,22 @@ Before proposing any migration:
 - Never modify production data. Test data goes in `supabase/seed.sql`.
 - RLS policies are part of the schema — treat them with the same care.
 
-BRANCHING WORKFLOW:
-  1. Write migration to `supabase/migrations/`
-  2. User reviews SQL and commits to a feature branch
-  3. Pushing to GitHub auto-creates a preview Supabase branch + Vercel preview
-  4. User tests on the Vercel preview URL
-  5. Merging to `main` applies the migration to production
+APPLYING MIGRATIONS:
+After review and approval, apply migrations by running:
+  supabase db push
 
-NEVER instruct the user to run `supabase db push`, `supabase db reset`, or
-direct SQL via the dashboard for schema changes in production.
+Then regenerate types:
+  supabase gen types typescript --linked --schema postflow 2>/dev/null > src/types/database.types.ts
+
+⚠️  SHARED PROJECT WARNING — NEVER run `supabase migration repair --status reverted`
+on IDs that have no corresponding file in supabase/migrations/. This project shares a
+Supabase instance with another live app. The remote migration history contains IDs from
+BOTH apps. Reverting unknown IDs destroys the other app's migration tracking. Only
+ever repair IDs that exist as local files in supabase/migrations/.
+
+For production releases, the GitHub → Vercel → Supabase branching workflow
+is still preferred (push to a feature branch, test on preview, merge to main).
+`supabase db push` is fine for local dev and staging.
 
 ================================================================
 9. DEPLOYMENT & PREVIEW STRATEGY

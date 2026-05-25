@@ -158,5 +158,32 @@ function deriveTokenSeeds(
     seeds.push({ key: "carousel_vs_reel_preference", value: "equal" })
   }
 
+  // ── Style volatility preference ───────────────────────────────────────────
+  // Derived from how open the brand was to varied post styles during calibration.
+  //
+  // "steady":       Only approved posts closely matching their existing brand voice
+  //                 → brand prioritises consistency over experimentation.
+  //                 Calendar: ~80% proven formats, ~20% new tests.
+  //
+  // "mixed":        Approved a mix — some brand-aligned, some more experimental.
+  //                 Calendar: ~65% proven formats, ~35% experiments.
+  //
+  // "experimental": Approved the trending/pattern-interrupt styles openly.
+  //                 Calendar: ~45% proven formats, ~55% experiments.
+  //
+  // This token shapes generateCaption() to stay more on-brand or be more daring.
+  // It also influences template_suggestions (steady brands get conservative swaps).
+  // Users can override this preference in Brand Settings.
+  if (approved.length <= 1 || (toneRejected + styleRejected) >= 2) {
+    // Most posts rejected or many style/tone rejections → brand is conservative
+    seeds.push({ key: "style_volatility_preference", value: "steady" })
+  } else if (trendingApproved && approved.length >= 2) {
+    // Approved the pattern-interrupt trending post → open to experimentation
+    seeds.push({ key: "style_volatility_preference", value: "experimental" })
+  } else {
+    // Default: balanced approach
+    seeds.push({ key: "style_volatility_preference", value: "mixed" })
+  }
+
   return seeds
 }

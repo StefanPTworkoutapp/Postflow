@@ -267,6 +267,65 @@ Document resolutions in the PATCH CONFLICT RESOLUTIONS section of the DECISIONS 
 
 ---
 
+## [2026-05-13] Collecting data ≠ learning from it — close every feedback loop explicitly
+
+**What happened:** Full audit revealed PostFlow was collecting analytics, tone feedback, and template performance data but NONE of it was feeding back into the token system except implicit analytics signals. Tone feedback generated suggestions but never called nudgeToken(). Template health was stored but never reached caption generation. CTR was tracked but ignored by processAnalytics. The system looked complete but was only half-wired.
+
+**Root cause:** Features were built one at a time. Each step (collect → store → display) felt done. The final loop back into the learning system was assumed to happen "later" and never did.
+
+**Rule going forward:** For every signal we collect, ask three questions before calling it done:
+1. **Does this update intelligence_tokens via nudgeToken()?** If not, it's data, not learning.
+2. **Does the caption generation prompt (getBrandContext → buildPromptBlock) include this signal?** If not, Claude can't use it.
+3. **Is there a UI path where the user can SEE the learning effect?** If not, they can't validate it.
+All three must be yes before a signal pipeline is complete. Write this as a checklist in the spec for every new analytics or feedback feature.
+
+---
+
+## [2026-05-13] Explicit feedback (user actions) should outweigh implicit signals (analytics)
+
+**What happened:** toneLearningLoop generated a Claude suggestion when feedback threshold was met, but never called nudgeToken(). This meant a user explicitly rejecting 5 posts as "too_formal" (very strong, deliberate signal) had zero effect on the token system, while one post performing 10% above analytics baseline (much weaker signal) would nudge tokens by 0.04.
+
+**Root cause:** The architecture treated analytics and feedback as equal in effect. They are not — explicit feedback is far more reliable than implicit performance metrics.
+
+**Rule going forward:** Signal weight hierarchy (by confidenceDelta):
+- `calibration` → 0.20 (one-time, user explicitly chose this)
+- `feedback` → 0.08–0.15 (explicit user rejection or approval of AI output)
+- `reject` → -0.08 (explicit user signal that something isn't working)
+- `inspiration` → 0.05–0.08 (semi-explicit, user chose an example)
+- `analytics` → 0.03–0.04 (implicit, continuous, noisy)
+- `manual` → variable (admin override)
+Never let implicit signals accumulate faster than explicit ones. A single "wrong_voice" feedback should outweigh ~3 analytics reinforcements.
+
+---
+
+## [2026-05-13] Template performance is invisible to the AI unless explicitly injected into context
+
+**What happened:** template_health table was being populated correctly by templatePulse job. But getBrandContext() never read it — so every caption generated had zero knowledge of which templates were performing. A user could pick a declining template and get the same caption quality as from a rising one.
+
+**Root cause:** Template health was built as a display feature (dashboard widget) not as a generation input. The connection to getBrandContext was missing.
+
+**Rule going forward:** Any data that should influence generated content MUST be explicitly added to getBrandContext().buildPromptBlock(). The test is: "If I add this data to the DB, does the next caption generation see it?" If not, wire it in. Template health, niche benchmarks, template suggestions, and style_volatility_preference all affect content strategy — all must be in the prompt block.
+
+---
+
+## [2026-05-18] Every new AI feature must be registered in src/lib/ai/models.ts
+
+**What happened:** 19 AI calls across the codebase each hardcoded their own model string. There was no central place to understand what was running, no way to swap a model without hunting files, and no tier-based cost control.
+
+**Root cause:** Each feature was built in isolation without a shared model registry.
+
+**Rule going forward:** When adding ANY new AI/Claude call to the codebase:
+1. **Add the model constant to `src/lib/ai/models.ts` first** — give it a descriptive key under `MODELS` (fixed) or `TIERED` (varies by brand tier).
+2. **Classify it:** user-facing real-time call (tiered) or background/one-time call (fixed)?
+   - Fixed: background Inngest jobs, one-time onboarding steps → add under `MODELS`.
+   - Tiered: called on every user action (captions, calendar) → add to both `TIERED.standard` and `TIERED.economy`.
+3. **Reference the constant in the implementation** — never hardcode a model string outside `models.ts`.
+4. **Add a comment** explaining what the call does and why that model was chosen.
+
+`src/lib/ai/models.ts` is the authoritative catalogue of every AI call in the app. Reading it should give a one-page summary of the app's full AI usage and cost structure. Keep it that way.
+
+---
+
 ## [2026-05-10] UI/UX consistency requires a living spec + a read-before-build habit
 
 **What happened:** Multiple features across a single session had divergent patterns: emoji-only platform display, non-navigable list items, missing dark mode variants, disconnected multi-step flows. Each was built without reading the established spec.

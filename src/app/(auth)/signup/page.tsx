@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -10,6 +11,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Separator } from "@/components/ui/separator"
 
 export default function SignupPage() {
+  const router = useRouter()
   const supabase = createClient()
 
   const [email, setEmail] = useState("")
@@ -25,7 +27,7 @@ export default function SignupPage() {
     setLoading(true)
     setError(null)
 
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -37,6 +39,23 @@ export default function SignupPage() {
     if (error) {
       setError(error.message)
       setLoading(false)
+      return
+    }
+
+    // Supabase anti-enumeration quirk: when the email already exists, signUp
+    // returns success with a user whose identities array is empty. No email
+    // is sent. Surface this explicitly instead of showing "check your email".
+    if (data.user && data.user.identities && data.user.identities.length === 0) {
+      setError("An account with this email already exists. Please sign in instead.")
+      setLoading(false)
+      return
+    }
+
+    // If a session is returned, email confirmation is disabled in the
+    // Supabase project. The user is already authenticated — send them in.
+    if (data.session) {
+      router.push("/dashboard")
+      router.refresh()
       return
     }
 

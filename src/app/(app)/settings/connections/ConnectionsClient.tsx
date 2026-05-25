@@ -29,7 +29,8 @@ interface Props {
 const BUFFER_CONNECTED_PLATFORMS = ["instagram", "linkedin", "facebook", "tiktok", "x", "threads"]
 
 // Platforms with direct OAuth built — others show "Coming soon"
-const DIRECT_CONNECT_SUPPORTED = new Set(["instagram"])
+// V2B: added tiktok, linkedin, facebook
+const DIRECT_CONNECT_SUPPORTED = new Set(["instagram", "tiktok", "linkedin", "facebook"])
 
 // ── Inner component (uses useSearchParams — needs Suspense wrapper) ──────────
 

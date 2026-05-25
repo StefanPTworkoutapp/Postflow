@@ -43,6 +43,12 @@ export interface CaptionInput {
   model?: string
   /** Brand ID for usage logging — pass brand.id from the calling route. */
   brand_id?: string | null
+  /**
+   * Optional language override (BCP 47 code, e.g. "nl", "en", "de", "fr").
+   * When set and different from tone_profile.content_language, the caption
+   * will be generated in this language instead of the brand's default.
+   */
+  target_language?: string
 }
 
 export interface GeneratedCaption {
@@ -106,6 +112,7 @@ export async function generateCaption(input: CaptionInput): Promise<GeneratedCap
     emoji_favorites,
     performance,
     trends,
+    target_language,
   } = input
 
   const EMOJI_RULES: Record<string, string> = {
@@ -177,9 +184,22 @@ THIS WEEK'S TRENDING TOPICS IN YOUR NICHE (weave relevance naturally if it fits)
 ${trends.slice(0, 5).map(t => `- ${t.topic}${t.headline ? ` ("${t.headline}")` : ""}`).join("\n")}`
     : ""
 
-  const contentLang = tone_profile?.content_language
-  const langInstruction = contentLang
-    ? `\nIMPORTANT: Write the entire post in ${contentLang}. Never switch languages.`
+  // Language instruction: target_language overrides brand's content_language.
+  // target_language uses BCP 47 codes ("nl", "en", "de", "fr"); we map them to
+  // human-readable labels for the prompt so Claude doesn't need to guess.
+  const LANG_LABELS: Record<string, string> = {
+    nl: "Dutch",
+    en: "English",
+    de: "German",
+    fr: "French",
+    es: "Spanish",
+    pt: "Portuguese",
+    it: "Italian",
+  }
+  const effectiveLang  = target_language ?? tone_profile?.content_language ?? null
+  const langLabel      = effectiveLang ? (LANG_LABELS[effectiveLang] ?? effectiveLang) : null
+  const langInstruction = langLabel
+    ? `\nIMPORTANT: Write the entire post in ${langLabel}. Never switch languages.`
     : ""
 
   const prompt = `You are a social media copywriter for ${brand_name}, a ${industry} brand.${langInstruction}

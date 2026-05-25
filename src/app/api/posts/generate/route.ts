@@ -16,7 +16,7 @@ export async function POST(request: Request) {
     if (!brand) return NextResponse.json({ error: "No brand found" }, { status: 400 })
 
     const body = await request.json()
-    const { template_id, platform, topic, previous_feedback } = body
+    const { template_id, platform, topic, previous_feedback, target_language } = body
 
     if (!template_id || !platform || !topic?.trim()) {
       return NextResponse.json({ error: "template_id, platform, and topic are required" }, { status: 400 })
@@ -48,6 +48,9 @@ export async function POST(request: Request) {
       trends:            ctx.trends,
       model:             models.caption,
       brand_id:          brand.id,
+      // Language override — when set and different from brand's content_language,
+      // the caption will be generated in the requested language
+      target_language:   typeof target_language === "string" ? target_language : undefined,
     })
 
     return NextResponse.json(result)

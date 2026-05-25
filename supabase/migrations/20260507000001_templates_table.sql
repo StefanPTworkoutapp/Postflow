@@ -4,6 +4,9 @@
 -- all brands. Brand-specific overrides have brand_id set.
 -- ============================================================
 
+-- Drop the old schema if it exists (base schema had a different column layout)
+DROP TABLE IF EXISTS postflow.templates CASCADE;
+
 CREATE TABLE postflow.templates (
   id          UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
   brand_id    UUID    REFERENCES postflow.brands(id) ON DELETE CASCADE,

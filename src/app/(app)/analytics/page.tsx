@@ -29,6 +29,7 @@ import {
   Hash,
   ImageIcon,
   Info,
+  Brain,
 } from "lucide-react"
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -44,14 +45,16 @@ interface PostAnalyticsRow {
 }
 
 interface PostWithAnalytics {
-  id:                  string
-  platform:            string
-  caption:             string | null
-  generated_image_url: string | null
-  posted_at:           string | null
-  scheduled_for:       string | null
-  post_analytics:      PostAnalyticsRow | PostAnalyticsRow[] | null
-  content_calendar:    { topic: string | null; content_pillar: string | null } | null
+  id:                   string
+  platform:             string
+  caption:              string | null
+  generated_image_url:  string | null
+  posted_at:            string | null
+  scheduled_for:        string | null
+  post_analytics:       PostAnalyticsRow | PostAnalyticsRow[] | null
+  content_calendar:     { topic: string | null; content_pillar: string | null } | null
+  predicted_performance?: { token_snapshot?: Record<string, unknown>; captured_at?: string } | null
+  actual_performance?:    { engagement_rate?: number | null; impressions?: number | null; fetched_at?: string } | null
 }
 
 interface PerformancePattern {
@@ -164,6 +167,7 @@ export default async function AnalyticsPage() {
       .from("posts")
       .select(`
         id, platform, caption, generated_image_url, posted_at, scheduled_for,
+        predicted_performance, actual_performance,
         post_analytics(impressions, reach, engagement_rate, likes, comments, shares, saves),
         content_calendar(topic, content_pillar)
       `)
@@ -594,6 +598,121 @@ export default async function AnalyticsPage() {
             </Card>
 
           </div>
+
+          {/* ── Prediction Accuracy Tracking ─────────────────────────────── */}
+          {(() => {
+            const thirtyDaysAgo = new Date()
+            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+
+            // Posts that completed the full prediction → analytics cycle
+            const trackedPosts = posts.filter(p =>
+              p.predicted_performance != null &&
+              p.actual_performance != null &&
+              p.posted_at &&
+              new Date(p.posted_at) >= thirtyDaysAgo
+            )
+
+            // Posts that have a prediction but no analytics yet (pending cycle)
+            const pendingPosts = posts.filter(p =>
+              p.predicted_performance != null &&
+              p.actual_performance == null
+            )
+
+            if (trackedPosts.length === 0 && pendingPosts.length === 0) return null
+
+            // Compute avg engagement for tracked posts
+            const engRatesTracked = trackedPosts
+              .map(p => p.actual_performance?.engagement_rate)
+              .filter((r): r is number => r != null)
+
+            const avgTrackedEng = engRatesTracked.length
+              ? engRatesTracked.reduce((a, b) => a + b, 0) / engRatesTracked.length
+              : null
+
+            return (
+              <Card>
+                <CardHeader className="pb-4">
+                  <CardTitle className="text-base font-semibold flex items-center gap-2">
+                    <Brain className="h-4 w-4 text-muted-foreground" />
+                    Prediction Tracking
+                  </CardTitle>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Posts where brand intelligence was captured at schedule time and verified after publishing
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-3 gap-4 mb-4">
+                    <div className="text-center">
+                      <p className="text-2xl font-bold tabular-nums">{trackedPosts.length}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">Full cycles (last 30d)</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-2xl font-bold tabular-nums">{pendingPosts.length}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">Awaiting analytics</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-2xl font-bold tabular-nums text-indigo-600 dark:text-indigo-400">
+                        {avgTrackedEng != null ? `${(avgTrackedEng * 100).toFixed(2)}%` : "—"}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">Avg actual engagement</p>
+                    </div>
+                  </div>
+
+                  {trackedPosts.length > 0 && (
+                    <div className="overflow-x-auto border rounded-lg">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="border-b text-muted-foreground">
+                            <th className="text-left py-2 pl-4 font-medium">Post</th>
+                            <th className="text-left py-2 font-medium">Platform</th>
+                            <th className="text-right py-2 font-medium">Actual Eng%</th>
+                            <th className="text-right py-2 font-medium">Impressions</th>
+                            <th className="text-right py-2 pr-4 font-medium">Tracked</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {trackedPosts.slice(0, 10).map(post => {
+                            const eng = post.actual_performance?.engagement_rate
+                            const imp = post.actual_performance?.impressions
+                            const topic = post.content_calendar?.topic ?? post.caption?.slice(0, 40)
+                            const fetchedAt = post.actual_performance?.fetched_at
+                            return (
+                              <tr key={post.id} className="border-b last:border-0">
+                                <td className="py-2 pl-4 pr-4 max-w-[200px]">
+                                  <span className="truncate block text-foreground/80">{topic ?? "—"}</span>
+                                </td>
+                                <td className="py-2">
+                                  <span className="capitalize text-muted-foreground">{post.platform}</span>
+                                </td>
+                                <td className="py-2 text-right font-mono text-indigo-600 dark:text-indigo-400 font-semibold">
+                                  {eng != null ? `${(eng * 100).toFixed(2)}%` : "—"}
+                                </td>
+                                <td className="py-2 text-right font-mono text-muted-foreground">
+                                  {imp != null ? fmtNumber(imp) : "—"}
+                                </td>
+                                <td className="py-2 pr-4 text-right text-muted-foreground">
+                                  {fetchedAt ? new Date(fetchedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "—"}
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  <p className="text-xs text-muted-foreground mt-3 flex items-center gap-1">
+                    <Info className="h-3 w-3 shrink-0" />
+                    Brand intelligence snapshot captured at schedule time. Analytics compared after publish.{" "}
+                    <Link href="/brand-intelligence" className="text-indigo-500 hover:underline">
+                      View token confidence →
+                    </Link>
+                  </p>
+                </CardContent>
+              </Card>
+            )
+          })()}
+
         </>
       )}
     </div>

@@ -11,6 +11,7 @@ import { nicheResearchSync }         from "@/inngest/jobs/nicheResearchSync"
 import { templatePulse }             from "@/inngest/jobs/templatePulse"
 import { nicheBenchmarkRefresh }     from "@/inngest/jobs/nicheBenchmarkRefresh"
 import { refreshTokens }             from "@/inngest/jobs/refreshTokens"
+import { recalibrationCheck }        from "@/inngest/jobs/recalibrationCheck"
 
 export const { GET, POST, PUT } = serve({
   client:    inngest,
@@ -26,5 +27,6 @@ export const { GET, POST, PUT } = serve({
     templatePulse,
     nicheBenchmarkRefresh,
     refreshTokens,
+    recalibrationCheck,
   ],
 })

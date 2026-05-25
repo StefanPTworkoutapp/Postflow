@@ -14,44 +14,17 @@
  *   "Softer hook"             → hook_style = story_open, +0.05
  */
 
-import { NextRequest, NextResponse } from "next/server"
-import { createClient }              from "@/lib/supabase/server"
-import { getBrand }                  from "@/lib/server/brand/getBrand"
-import { nudgeToken }                from "@/lib/server/brand/nudge-token"
-import { assembleBrandedRender }     from "@/lib/server/render/brand-assembler"
-import { submitRender }              from "@/lib/server/render/shotstack"
-import type { BrandKit, ClipInput }  from "@/lib/server/render/brand-assembler"
+import { NextRequest, NextResponse }     from "next/server"
+import { createClient }                  from "@/lib/supabase/server"
+import { getBrand }                      from "@/lib/server/brand/getBrand"
+import { nudgeToken }                    from "@/lib/server/brand/nudge-token"
+import { assembleBrandedRender }         from "@/lib/server/render/brand-assembler"
+import { submitRender }                  from "@/lib/server/render/shotstack"
+import type { BrandKit, ClipInput }      from "@/lib/server/render/brand-assembler"
+import { extractNudgeSignals }           from "@/lib/server/ai/nudge-analyzer"
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const nt = (client: ReturnType<typeof createClient> extends Promise<infer T> ? T : never) => client as any
-
-// Keyword → token signal mapping
-const NUDGE_SIGNALS: Array<{
-  keywords: string[]
-  tokenKey:  string
-  value:     string
-  delta:     number
-}> = [
-  { keywords: ["faster", "faster paced", "more upbeat", "speed up"],         tokenKey: "pacing",             value: "fast",          delta: 0.08 },
-  { keywords: ["slower", "slower paced", "calmer", "less rushed"],            tokenKey: "pacing",             value: "slow",          delta: 0.08 },
-  { keywords: ["energetic music", "high energy music", "pumping"],            tokenKey: "music_energy",       value: "high",          delta: 0.05 },
-  { keywords: ["soft music", "calm music", "quieter music"],                  tokenKey: "music_energy",       value: "low",           delta: 0.05 },
-  { keywords: ["less text", "less overlay", "cleaner", "minimal"],            tokenKey: "text_overlay_style", value: "minimal_corner",delta: 0.05 },
-  { keywords: ["more text", "bigger text", "bold text"],                      tokenKey: "text_overlay_style", value: "bold_center",   delta: 0.05 },
-  { keywords: ["softer hook", "gentler opening", "story hook"],               tokenKey: "hook_style",         value: "story_open",    delta: 0.05 },
-  { keywords: ["stronger hook", "bolder hook", "statement hook"],             tokenKey: "hook_style",         value: "bold_statement",delta: 0.05 },
-]
-
-function extractNudgeSignals(nudgeText: string): Array<{ tokenKey: string; value: string; delta: number }> {
-  const lower = nudgeText.toLowerCase()
-  const found: Array<{ tokenKey: string; value: string; delta: number }> = []
-  for (const sig of NUDGE_SIGNALS) {
-    if (sig.keywords.some(k => lower.includes(k))) {
-      found.push({ tokenKey: sig.tokenKey, value: sig.value, delta: sig.delta })
-    }
-  }
-  return found
-}
 
 export async function PATCH(
   req:     NextRequest,

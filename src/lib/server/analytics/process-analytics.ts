@@ -198,7 +198,12 @@ export async function processPostAnalytics(
   // ── 3. Detect format + derive signals ───────────────────────────────────
   const format = detectFormat(post.templateSlug)
 
-  let signals: Array<{ tokenKey: string; newValue: string | number | string[]; delta: number }> = []
+  let signals: Array<{
+    tokenKey:    string
+    newValue:    string | number | string[]
+    delta:       number
+    allowCreate?: boolean
+  }> = []
 
   if (format === "carousel") {
     signals = deriveCarouselSignals(post.metrics, baseline, currentTokens)
@@ -208,6 +213,34 @@ export async function processPostAnalytics(
   }
   // Other formats (story, linkedin_post, tiktok_video) have empty token sets for now
   // — still write the analytics_processed row so we can see they were processed
+
+  // ── CTR signal — platform-agnostic (LinkedIn, TikTok, any platform with clicks) ──
+  // A high click-through rate means the caption's CTA motivated action.
+  // Threshold: 5% CTR (LinkedIn avg is ~1–3%; 5%+ is strong; 8%+ is excellent).
+  // Reinforce caption_tone (the copy drove the click) and best_post_goal (goal alignment worked).
+  // Also seed/reinforce a "best_cta_style" token from the current token value if it exists.
+  const CTR_THRESHOLD_GOOD      = 0.05   // 5% CTR = good
+  const CTR_THRESHOLD_EXCELLENT = 0.08   // 8% CTR = excellent
+  if (
+    post.metrics.click_through_rate != null &&
+    post.metrics.click_through_rate >= CTR_THRESHOLD_GOOD
+  ) {
+    const ctrDelta = post.metrics.click_through_rate >= CTR_THRESHOLD_EXCELLENT
+      ? DELTA_PRIMARY
+      : DELTA_SECONDARY
+
+    for (const key of ["caption_tone", "hashtag_strategy"] as const) {
+      const current = currentTokens[key]?.value
+      if (current != null) {
+        signals.push({ tokenKey: key, newValue: current, delta: ctrDelta })
+      }
+    }
+    // Also reinforce best_post_goal — high CTR means goal alignment was correct
+    const goalCurrent = currentTokens["best_post_goal"]?.value
+    if (goalCurrent != null) {
+      signals.push({ tokenKey: "best_post_goal", newValue: goalCurrent, delta: ctrDelta })
+    }
+  }
 
   // ── 4. Apply signals via nudgeToken ────────────────────────────────────
   let signalsApplied = 0
@@ -227,11 +260,13 @@ export async function processPostAnalytics(
             engagement_rate:    computeEngagementRate(post.metrics),
             completion_rate:    post.metrics.completion_rate,
             swipe_through_rate: post.metrics.swipe_through_rate,
+            click_through_rate: post.metrics.click_through_rate,
             saves:              post.metrics.saves,
             impressions:        post.metrics.impressions,
           },
           baseline_engagement: baseline.avg_engagement_rate,
         },
+        signal.allowCreate,
       )
       signalsApplied++
     } catch (err) {

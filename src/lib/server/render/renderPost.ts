@@ -307,8 +307,12 @@ export async function renderMultiplePostCards(
 async function getChromiumPath(): Promise<string> {
   if (process.env.NODE_ENV === "production" || process.env.CHROMIUM_REMOTE_URL) {
     const chromium  = (await import("@sparticuz/chromium-min")).default
+    // Starting with v131, Sparticuz splits assets by architecture:
+    //   chromium-vX.X.X-pack.x64.tar  (Vercel, Lambda — x86_64)
+    //   chromium-vX.X.X-pack.arm64.tar (Graviton / Apple silicon)
+    // The old un-suffixed filename no longer exists and returns 404.
     const remoteUrl = process.env.CHROMIUM_REMOTE_URL
-      ?? "https://github.com/Sparticuz/chromium/releases/download/v147.0.0/chromium-v147.0.0-pack.tar"
+      ?? "https://github.com/Sparticuz/chromium/releases/download/v147.0.0/chromium-v147.0.0-pack.x64.tar"
     return chromium.executablePath(remoteUrl)
   }
 

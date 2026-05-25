@@ -349,6 +349,70 @@ pulls trend data also triggers the email.
 
 ---
 
+## [2026-05-13] Analytics feedback loop architecture — signal hierarchy and wiring rules
+
+**Decision:** Every signal pipeline in PostFlow must be explicitly wired end-to-end: collect → nudgeToken() → getBrandContext() → Claude prompt → visible output. Partial wiring (collect-and-store without learning) is a bug, not a feature.
+
+**Signal weight hierarchy (confidenceDelta values):**
+| Signal type | Delta | Rationale |
+|---|---|---|
+| calibration | +0.20 | One-time, user explicitly chose |
+| feedback (positive) | +0.08–0.15 | Explicit approval of AI output |
+| reject (feedback) | -0.08 | Explicit user rejection |
+| inspiration | +0.05–0.08 | Semi-explicit example selection |
+| analytics (primary metric) | +0.04 | Strong implicit signal |
+| analytics (secondary metric) | +0.03 | Weak implicit signal |
+
+**Closed loops as of 2026-05-13:**
+- ✅ Analytics → processPostAnalytics → nudgeToken (hook_style, pacing, music_energy, caption_tone, hashtag_strategy, carousel tokens)
+- ✅ Analytics CTR → nudgeToken (caption_tone, hashtag_strategy, best_post_goal) — new
+- ✅ Tone feedback (5+ of same type) → nudgeToken (caption_tone, best_post_goal) — new
+- ✅ Template health + suggestions → getBrandContext promptBlock — new
+- ✅ Style volatility preference → getBrandContext promptBlock — new
+- ✅ Style volatility seeded at calibration time — new
+
+**Still open loops (planned in V2):**
+- ⬜ Predicted vs actual performance → token confidence recalibration
+- ⬜ Niche benchmark initialization for new brands
+- ⬜ Template feedback (per-post rate/reject a template) → template_health
+- ⬜ Template feedback → nudgeToken on template_preference token
+- ⬜ Post-level "CTA worked" signal → cta_effectiveness token
+- ⬜ Scheduling time adherence → timing_compliance token
+
+**Alternatives considered:** Queue all signals and batch-apply weekly (rejected — delays learning and reduces transparency). Apply all signals immediately regardless of type (rejected — calibration signals would be overridden by noisy analytics too quickly).
+
+**Impact:** Every new signal feature must answer three questions before merge:
+1. Does it call nudgeToken()?
+2. Does getBrandContext().buildPromptBlock() include the resulting token?
+3. Is the effect visible to the user in Brand Intelligence?
+
+---
+
+## [2026-05-13] Brand style volatility preference — steady / mixed / experimental
+
+**Decision:** A `style_volatility_preference` token with values "steady" | "mixed" | "experimental" controls how much PostFlow experiments vs. reinforces brand identity across content.
+
+**Behaviour per setting:**
+- **steady** (80% proven, 20% experiments): Calibrated for corporate/professional brands, new accounts, or brands with a strong established identity. Template selection biases toward high health_score templates. Caption generation stays tightly on-brand.
+- **mixed** (65% proven, 35% experiments): Default. Most brands benefit from this — enough consistency to build recognition, enough variation to find new high-performers.
+- **experimental** (45% proven, 55% experiments): For brands actively testing what works or newer accounts wanting to find their voice faster.
+
+**How it's set:**
+1. Auto-derived at calibration: if user rejected most posts → "steady"; if approved trending/pattern-interrupt post → "experimental"; otherwise → "mixed"
+2. User can override via Brand Intelligence page or Brand Settings (planned UI)
+3. Can be nudged by analytics over time: if experimental posts consistently underperform → system suggests moving toward "mixed"
+
+**How it's used:**
+- `getBrandContext().buildPromptBlock()` injects a CONTENT STYLE BALANCE block describing the ratio and philosophy to Claude
+- Template picker in PostEditor shows health badges — declining templates visually subdued
+- Calendar generation (future): uses the ratio to plan hype/experimental posts at the configured % 
+
+**Alternatives:** Binary "safe/experimental" toggle (rejected — too coarse); pure analytics-driven (rejected — some brands are deliberately conservative and that's a valid choice).
+
+**Impact:** `style_volatility_preference` is now a first-class seeded token. Every new brand gets it at calibration. Shown in Brand Intelligence dashboard under "Style balance". Can be nudged like any other token.
+
+---
+
 ## [2026-05-09] V2.0 Smart Upload → Post Intelligence: zero-decision UX
 
 **Decision:** The V2 Smart Upload feature must follow the same zero-friction UX contract as the rest of PostFlow. User drops a file — everything else is automatic. PostEditor opens fully pre-filled. The user never sees aspect ratios, technical analysis outputs, or "choose your post type" decisions.
@@ -368,3 +432,49 @@ pulls trend data also triggers the email.
 **Full spec:** `memory/features_mvp.md` under "V2.0 Feature: Smart Upload → Post Intelligence".
 
 **Impact:** When building this feature, never add a "choose post type" step, never show raw analysis scores in the UI (internal only), never require a user decision before PostEditor opens.
+
+## [2026-05-13] Token updates write through nudgeToken() for manual overrides too
+
+**Decision:** The new `PATCH /api/brands/[id]/token` endpoint calls `nudgeToken()` with `signal_type: "manual"` and `confidence: 0.95` rather than directly patching `intelligence_tokens`. Even user-facing manual overrides go through the same audit trail.
+
+**Alternatives:** Direct PATCH to `brands.intelligence_tokens` JSONB (simpler, no audit row).
+
+**Reason:** Consistency. Every token change — analytics, feedback, calibration, and now manual — is auditable via `brand_token_events`. This also means Brand Intelligence can show "manual override" events in the feed, and a manual choice counts as a very high-confidence signal that won't be eroded by a few bad analytics points.
+
+**Impact:** All client-facing token overrides must call this endpoint. Never write `intelligence_tokens` directly from the UI layer.
+
+---
+
+## [2026-05-13] Client portal uses token-based auth (no account creation)
+
+**Decision:** Client portal invites are token-based hex strings (64 chars). Clients view the read-only calendar and submit approvals via `POST /api/portal/approve` — no account required, no login.
+
+**Alternatives:** Create guest accounts (complex), require auth (friction), email magic link per action (annoying for clients).
+
+**Reason:** Clients are external stakeholders who shouldn't need to create an account to leave feedback. The 64-byte token is unguessable; optional expiry limits exposure. Approval is lightweight (approve/flag), not a full workflow.
+
+**Impact:** Portal links are shareable but secure-by-obscurity. If a link is compromised, the brand owner can rotate it by sending a new invite. Approvals must always validate the token before mutating post data.
+
+---
+
+## [2026-05-13] Admin diagnostics API + Copy for Claude pattern
+
+**Decision:** Added `GET /api/admin/diagnostics` — a structured JSON endpoint that aggregates analytics pipeline health across all brands into a single response. The AdminDashboard shows a "Copy diagnostic report for Claude" button that calls this endpoint, formats the result as a readable text block, and writes it to the clipboard.
+
+**Alternatives:** Just rely on the admin UI (visual only, can't paste into Claude); provide a PDF export; build an email report.
+
+**Reason:** Stefan asked for a way to hand health data directly to Claude for analysis in a conversation. The endpoint is the single source of truth — the admin UI and Claude share the same data source, so the analysis is always consistent with what the dashboard shows. The formatted text block is deliberately concise (not raw JSON) so it fits in a conversation without overwhelming context.
+
+**Impact:** When new analytics signals or tables are added, also update `/api/admin/diagnostics/route.ts` to surface them. The formatter lives in `AdminDashboard.tsx::formatDiagnosticsForClaude()` and should mirror any changes to the endpoint's response shape.
+
+---
+
+## [2026-05-13] Calendar week view shows entries at 9am slot (not true hourly positions)
+
+**Decision:** The week view places all content_calendar entries at the 9am row, not at their actual scheduled_for time from the posts table.
+
+**Alternatives:** Join posts.scheduled_for in the calendar GET API to get exact times.
+
+**Reason:** The calendar GET endpoint currently only returns content_calendar entries with a posts join for `{ id, caption, status, platform }` — it doesn't return `posts.scheduled_for`. Adding this to the GET response is a small refactor but was out of scope for this sprint. The 9am placeholder is honest (it labels itself as such in the helper text) and can be improved later.
+
+**Impact:** When improving the week view, update `GET /api/calendar` to include `posts.scheduled_for` in the join, then use that time to position each entry in the correct hour slot.

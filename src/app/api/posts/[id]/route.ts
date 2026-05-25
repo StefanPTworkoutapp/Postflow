@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { getBrand } from "@/lib/server/brand/getBrand"
 
 // ── PATCH /api/posts/[id] ────────────────────────────────────────────────────
-// Body: { caption?, hashtags?, cta?, status?, scheduled_date?, topic? }
+// Body: { caption?, hashtags?, cta?, status?, scheduled_date?, topic?, media_ids?, generated_image_url? }
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -18,24 +18,26 @@ export async function PATCH(
     if (!brand) return NextResponse.json({ error: "No brand found" }, { status: 400 })
 
     const body = await request.json() as {
-      caption?:        string
-      hashtags?:       string[]
-      cta?:            string
-      status?:         string
-      scheduled_date?: string
-      topic?:          string
-      media_ids?:      string[]
+      caption?:              string
+      hashtags?:             string[]
+      cta?:                  string
+      status?:               string
+      scheduled_date?:       string
+      topic?:                string
+      media_ids?:            string[]
+      generated_image_url?:  string | null
     }
 
     // Build typed posts update
     const { data, error } = await supabase
       .from("posts")
       .update({
-        ...(body.caption   !== undefined && { caption:    body.caption }),
-        ...(body.hashtags  !== undefined && { hashtags:   body.hashtags }),
-        ...(body.cta       !== undefined && { cta:        body.cta }),
-        ...(body.status    !== undefined && { status:     body.status }),
-        ...(body.media_ids !== undefined && { media_ids:  body.media_ids }),
+        ...(body.caption              !== undefined && { caption:             body.caption }),
+        ...(body.hashtags             !== undefined && { hashtags:            body.hashtags }),
+        ...(body.cta                  !== undefined && { cta:                 body.cta }),
+        ...(body.status               !== undefined && { status:              body.status }),
+        ...(body.media_ids            !== undefined && { media_ids:           body.media_ids }),
+        ...(body.generated_image_url  !== undefined && { generated_image_url: body.generated_image_url }),
       })
       .eq("id", id)
       .eq("brand_id", brand.id)

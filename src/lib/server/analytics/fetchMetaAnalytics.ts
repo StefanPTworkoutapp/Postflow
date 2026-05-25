@@ -7,9 +7,10 @@
  *
  * Flow:
  *   1. Fetch published media from Instagram Graph API (last 90 days)
- *   2. Match each media item to a PostFlow post via buffer_post_id or caption match
- *   3. Fetch insights for each media item
+ *   2. Match each media item to a PostFlow post via caption prefix
+ *   3. Fetch insights for each media item (standard + Reels metrics)
  *   4. Upsert into postflow.post_analytics
+ *   5. Update posts.actual_performance with the latest metrics
  *
  * Docs: https://developers.facebook.com/docs/instagram-api/reference/ig-media/insights
  */
@@ -26,9 +27,13 @@ export interface MetaInsights {
   shares:           number
   saved:            number
   engagement:       number
+  /** Reels only — total video plays */
+  plays?:           number
+  /** Reels only — users who watched ≥ 97% of the video */
+  video_views?:     number
 }
 
-/** Fetch insights for a single IG media item */
+/** Fetch insights for a standard (non-Reel) IG media item */
 async function fetchMediaInsights(
   mediaId:     string,
   accessToken: string,
@@ -65,14 +70,57 @@ async function fetchMediaInsights(
   }
 }
 
-/** Fetch all published IG media IDs for an Instagram Business Account */
+/** Fetch insights for a Reel — uses different metric set */
+async function fetchReelInsights(
+  mediaId:     string,
+  accessToken: string,
+): Promise<MetaInsights | null> {
+  // Reels use a different insights set: plays, reach, likes, comments, shares, saved
+  // video_views = users who watched to completion (≥97%)
+  const metrics = "plays,reach,likes,comments,shares,saved,video_views,impressions"
+  const url = `${GRAPH_BASE}/${mediaId}/insights?metric=${metrics}&access_token=${accessToken}`
+
+  const res = await fetch(url)
+  if (!res.ok) {
+    console.warn(`[meta-analytics] reel insights fetch failed for ${mediaId}: ${res.status}`)
+    // Fall back to standard insights on error
+    return fetchMediaInsights(mediaId, accessToken)
+  }
+
+  const json = await res.json() as {
+    data: Array<{ name: string; values: Array<{ value: number }> }>
+    error?: { message: string }
+  }
+
+  // If Reel insights fail (e.g., media is not a Reel), fall back to standard
+  if (json.error) {
+    console.warn(`[meta-analytics] reel insights API error for ${mediaId}:`, json.error.message)
+    return fetchMediaInsights(mediaId, accessToken)
+  }
+
+  const get = (name: string) => json.data.find(d => d.name === name)?.values?.[0]?.value ?? 0
+
+  return {
+    impressions:  get("impressions"),
+    reach:        get("reach"),
+    likes:        get("likes"),
+    comments:     get("comments"),
+    shares:       get("shares"),
+    saved:        get("saved"),
+    engagement:   get("likes") + get("comments") + get("shares") + get("saved"),
+    plays:        get("plays"),
+    video_views:  get("video_views"),
+  }
+}
+
+/** Fetch all published IG media for the account (last 90 days), including media_type */
 async function fetchRecentMedia(
   accountId:   string,
   accessToken: string,
   since:       Date,
-): Promise<Array<{ id: string; caption?: string; timestamp: string }>> {
+): Promise<Array<{ id: string; caption?: string; timestamp: string; media_type?: string }>> {
   const sinceTs = Math.floor(since.getTime() / 1000)
-  const url = `${GRAPH_BASE}/${accountId}/media?fields=id,caption,timestamp&since=${sinceTs}&limit=50&access_token=${accessToken}`
+  const url = `${GRAPH_BASE}/${accountId}/media?fields=id,caption,timestamp,media_type&since=${sinceTs}&limit=50&access_token=${accessToken}`
 
   const res = await fetch(url)
   if (!res.ok) {
@@ -81,7 +129,7 @@ async function fetchRecentMedia(
   }
 
   const json = await res.json() as {
-    data: Array<{ id: string; caption?: string; timestamp: string }>
+    data: Array<{ id: string; caption?: string; timestamp: string; media_type?: string }>
     error?: { message: string }
   }
 
@@ -96,6 +144,7 @@ async function fetchRecentMedia(
 /**
  * Main entry point.
  * Fetches analytics for all Instagram posts for a brand and upserts them.
+ * Also updates posts.actual_performance with the latest metrics.
  * Uses the service-role Supabase client (runs inside Inngest, no user session).
  */
 export async function fetchAndStoreMetaAnalytics(brandId: string): Promise<{
@@ -118,7 +167,16 @@ export async function fetchAndStoreMetaAnalytics(brandId: string): Promise<{
     return { processed: 0, errors: 0 }
   }
 
-  // 2. Fetch all published PostFlow posts for Instagram in last 90 days
+  // 2. Fetch the brand's current intelligence_tokens snapshot (for brand_tokens_snapshot column)
+  const { data: brand } = await supabase
+    .from("brands")
+    .select("intelligence_tokens")
+    .eq("id", brandId)
+    .maybeSingle()
+
+  const tokenSnapshot = brand?.intelligence_tokens ?? {}
+
+  // 3. Fetch all published PostFlow posts for Instagram in last 90 days
   const since90 = new Date()
   since90.setDate(since90.getDate() - 90)
 
@@ -132,7 +190,7 @@ export async function fetchAndStoreMetaAnalytics(brandId: string): Promise<{
 
   if (!posts?.length) return { processed: 0, errors: 0 }
 
-  // 3. Fetch recent IG media from Meta
+  // 4. Fetch recent IG media from Meta (with media_type for Reel detection)
   const mediaItems = await fetchRecentMedia(
     social.platform_account_id,
     social.platform_access_token,
@@ -142,7 +200,7 @@ export async function fetchAndStoreMetaAnalytics(brandId: string): Promise<{
   let processed = 0
   let errors    = 0
 
-  // 4. Match media items to posts by caption prefix (first 50 chars)
+  // 5. Match media items to posts by caption prefix (first 50 chars)
   for (const media of mediaItems) {
     const captionPrefix = (media.caption ?? "").slice(0, 50).trim()
     const matchedPost   = posts.find(p =>
@@ -150,31 +208,68 @@ export async function fetchAndStoreMetaAnalytics(brandId: string): Promise<{
     )
     if (!matchedPost) continue
 
-    const insights = await fetchMediaInsights(media.id, social.platform_access_token)
+    // Use Reel insights endpoint for VIDEO/REEL types, standard otherwise
+    const isReel    = media.media_type === "VIDEO" || media.media_type === "REELS"
+    const insights  = isReel
+      ? await fetchReelInsights(media.id, social.platform_access_token)
+      : await fetchMediaInsights(media.id, social.platform_access_token)
+
     if (!insights) { errors++; continue }
 
-    const reachVal        = insights.reach       || 1
-    const engagementRate  = (insights.engagement / reachVal)
-    const performanceScore = Math.min(100, Math.round(engagementRate * 1000))  // rough normalisation
+    const reachVal        = insights.reach || 1
+    const engagementRate  = insights.engagement / reachVal
+    const performanceScore = Math.min(100, Math.round(engagementRate * 1000))
+
+    // Derive completion_rate for Reels: plays / reach
+    // plays = total number of times the video started playing
+    const completionRate = (isReel && insights.plays != null && insights.reach > 0)
+      ? insights.plays / insights.reach
+      : null
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const analyticsRow: Record<string, any> = {
+      post_id:               matchedPost.id,
+      impressions:           insights.impressions,
+      reach:                 insights.reach,
+      likes:                 insights.likes,
+      comments:              insights.comments,
+      shares:                insights.shares,
+      saves:                 insights.saved,
+      clicks:                0,  // not available via basic insights
+      engagement_rate:       engagementRate,
+      fetched_at:            new Date().toISOString(),
+      performance_score:     performanceScore,
+      brand_tokens_snapshot: tokenSnapshot,
+    }
+
+    if (completionRate !== null) analyticsRow.completion_rate = completionRate
 
     const { error } = await supabase
       .from("post_analytics")
-      .upsert({
-        post_id:          matchedPost.id,
-        impressions:      insights.impressions,
-        reach:            insights.reach,
-        likes:            insights.likes,
-        comments:         insights.comments,
-        shares:           insights.shares,
-        saves:            insights.saved,
-        clicks:           0,  // not available via basic insights
-        engagement_rate:  engagementRate,
-        fetched_at:       new Date().toISOString(),
-        performance_score: performanceScore,
-      }, { onConflict: "post_id" })
+      .upsert(analyticsRow, { onConflict: "post_id" })
 
-    if (error) { console.error("[meta-analytics] upsert error:", error.message); errors++ }
-    else processed++
+    if (error) {
+      console.error("[meta-analytics] upsert error:", error.message)
+      errors++
+      continue
+    }
+
+    // 6. Update posts.actual_performance with the latest metrics
+    const actualPerformance = {
+      engagement_rate:   engagementRate,
+      impressions:       insights.impressions,
+      reach:             insights.reach,
+      saves:             insights.saved,
+      completion_rate:   completionRate,
+      fetched_at:        new Date().toISOString(),
+    }
+
+    await supabase
+      .from("posts")
+      .update({ actual_performance: actualPerformance })
+      .eq("id", matchedPost.id)
+
+    processed++
   }
 
   return { processed, errors }

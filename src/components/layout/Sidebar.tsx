@@ -18,6 +18,7 @@ import {
   TrendingUp,
   Sparkles,
   ShieldCheck,
+  Brain,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
@@ -31,6 +32,7 @@ const navItems = [
   { label: "Create Video",   href: "/create",               icon: Wand2           },
   { label: "Trend Builder",  href: "/trend",                icon: TrendingUp      },
   { label: "Analytics",      href: "/analytics",            icon: BarChart2       },
+  { label: "Brand Intel",    href: "/brand-intelligence",   icon: Brain           },
   { label: "Brand",          href: "/brand",                icon: Palette         },
   { label: "Templates",      href: "/templates",            icon: LayoutTemplate  },
   { label: "Inspiration",    href: "/inspiration",          icon: Sparkles        },

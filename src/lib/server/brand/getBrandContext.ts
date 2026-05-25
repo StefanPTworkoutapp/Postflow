@@ -62,16 +62,31 @@ function buildToneSummary(tp: ToneProfile): string {
   return parts.join(" · ")
 }
 
+interface TemplateHealthEntry {
+  template_slug:   string
+  health_score:    number
+  trend:           string | null
+  posts_count:     number
+}
+
+interface TemplateSuggestionEntry {
+  current_slug:   string
+  suggested_slug: string
+  reason:         string | null
+}
+
 function buildPromptBlock(opts: {
-  brand:           Record<string, unknown>
-  tokens:          Record<string, { value: unknown; confidence: number }>
-  patterns:        Array<Record<string, unknown>>
-  trends:          TrendContext[]
-  toneSummary:     string | null
-  platform?:       string
-  contentLanguage: string | null
+  brand:                Record<string, unknown>
+  tokens:               Record<string, { value: unknown; confidence: number }>
+  patterns:             Array<Record<string, unknown>>
+  trends:               TrendContext[]
+  toneSummary:          string | null
+  platform?:            string
+  contentLanguage:      string | null
+  templateHealth?:      TemplateHealthEntry[]
+  templateSuggestions?: TemplateSuggestionEntry[]
 }): string {
-  const { brand, tokens, patterns, trends, toneSummary, platform, contentLanguage } = opts
+  const { brand, tokens, patterns, trends, toneSummary, platform, contentLanguage, templateHealth, templateSuggestions } = opts
   const b = brand as {
     name: string; industry?: string; niche?: string; primary_goal?: string
     goals?: string[]; do_not_mention?: string[]
@@ -153,6 +168,47 @@ function buildPromptBlock(opts: {
     carouselTokenLines.length ? `\nBRAND INTELLIGENCE — CAROUSEL:\n${carouselTokenLines.join("\n")}\n  (Where confidence < 60%, fall back to niche benchmark defaults.)` : "",
   ].filter(Boolean).join("\n")
 
+  // ── Style volatility preference block ───────────────────────────────────────
+  // Tells Claude how much to experiment vs. stay on-brand.
+  const styleVolToken = tokens["style_volatility_preference"]
+  const styleVol      = (styleVolToken?.value as string | null) ?? "mixed"
+  const STYLE_VOL_GUIDE: Record<string, string> = {
+    steady:       "This brand prioritises consistency. Stay tightly on-brand: use proven formats, established tone, minimal surprises. Any given content calendar should be ~80% proven formats, ~20% carefully tested variations.",
+    mixed:        "This brand balances identity with experimentation. ~65% proven formats that reinforce brand identity; ~35% purposeful experiments to discover new high-performers.",
+    experimental: "This brand actively experiments. ~45% proven formats to anchor identity; ~55% varied formats, tones, and styles to find what resonates. Be bold but coherent.",
+  }
+  const styleGuide = STYLE_VOL_GUIDE[styleVol] ?? STYLE_VOL_GUIDE.mixed
+  const styleVolBlock = `\nCONTENT STYLE BALANCE: ${styleVol.toUpperCase()}\n  ${styleGuide}`
+
+  // ── Template performance block ───────────────────────────────────────────────
+  // Informs Claude which content formats are working so it can align copywriting
+  // to the right template's strengths and avoid laboured copy for declining ones.
+  let templateBlock = ""
+  if (templateHealth && templateHealth.length > 0) {
+    const goodTemplates = templateHealth
+      .filter(t => t.health_score >= 55 && t.posts_count >= 3)
+      .sort((a, b) => b.health_score - a.health_score)
+      .slice(0, 3)
+
+    const decliningTemplates = templateHealth
+      .filter(t => t.trend === "declining" && t.posts_count >= 3)
+
+    const lines: string[] = []
+    if (goodTemplates.length) {
+      lines.push(`  High-performing formats: ${goodTemplates.map(t => `${t.template_slug} (score ${t.health_score}${t.trend === "rising" ? ", rising ↑" : ""})`).join(", ")}`)
+    }
+    if (decliningTemplates.length) {
+      lines.push(`  Declining formats: ${decliningTemplates.map(t => `${t.template_slug} (score ${t.health_score})`).join(", ")} — write especially compelling copy if forced to use these.`)
+    }
+    if (templateSuggestions && templateSuggestions.length > 0) {
+      const s = templateSuggestions[0]
+      lines.push(`  Recommendation: replace ${s.current_slug} with ${s.suggested_slug} (${s.reason ?? "better niche fit"})`)
+    }
+    if (lines.length) {
+      templateBlock = `\nTEMPLATE PERFORMANCE:\n${lines.join("\n")}`
+    }
+  }
+
   return [
     `BRAND: ${b.name}`,
     b.industry   ? `Industry: ${b.industry}` : "",
@@ -162,8 +218,10 @@ function buildPromptBlock(opts: {
     toneSummary ? `Tone: ${toneSummary}` : "",
     contentLanguage ? `Content language: ${contentLanguage} — ALL generated text must be in ${contentLanguage}.` : "",
     b.do_not_mention?.length ? `Never mention: ${b.do_not_mention.join(", ")}` : "",
+    styleVolBlock,
     performanceBlock,
     trendBlock,
+    templateBlock,
     tokenBlock,
   ].filter(Boolean).join("\n")
 }
@@ -212,7 +270,24 @@ export async function getBrandContext(
     return d.toISOString().split("T")[0]
   })()
 
-  const [patternsResult, trendsResult] = await Promise.allSettled([
+  // Build platform filter clause for template_health
+  const templateHealthQuery = supabase
+    .from("template_health")
+    .select("template_slug,health_score,trend,posts_count")
+    .eq("brand_id", brandId)
+    .gte("posts_count", 3)
+    .order("health_score", { ascending: false })
+    .limit(8)
+
+  const templateSuggestionsQuery = supabase
+    .from("template_suggestions")
+    .select("current_slug,suggested_slug,reason")
+    .eq("brand_id", brandId)
+    .eq("status", "pending")
+    .order("created_at", { ascending: false })
+    .limit(1)
+
+  const [patternsResult, trendsResult, templateHealthResult, templateSuggestionsResult] = await Promise.allSettled([
     supabase
       .from("performance_patterns")
       .select("platform,avg_engagement_rate,best_days_of_week,best_hours_of_day,best_content_pillars,best_post_types,top_hashtags,sample_size")
@@ -225,6 +300,8 @@ export async function getBrandContext(
       .eq("week_of", weekStart)
       .order("relevance_score", { ascending: false })
       .limit(10),
+    templateHealthQuery,
+    templateSuggestionsQuery,
   ])
 
   const allPatterns = patternsResult.status === "fulfilled"
@@ -234,6 +311,14 @@ export async function getBrandContext(
   const trends = (trendsResult.status === "fulfilled"
     ? (trendsResult.value.data ?? [])
     : []) as TrendContext[]
+
+  const templateHealth = (templateHealthResult.status === "fulfilled"
+    ? (templateHealthResult.value.data ?? [])
+    : []) as TemplateHealthEntry[]
+
+  const templateSuggestions = (templateSuggestionsResult.status === "fulfilled"
+    ? (templateSuggestionsResult.value.data ?? [])
+    : []) as TemplateSuggestionEntry[]
 
   // 3. Build platform-specific performance context (for generateCaption)
   const platformPattern = platform
@@ -266,13 +351,15 @@ export async function getBrandContext(
 
   // 6. Build prompt block
   const promptBlock = buildPromptBlock({
-    brand:           b as Record<string, unknown>,
+    brand:                b as Record<string, unknown>,
     tokens,
-    patterns:        allPatterns,
+    patterns:             allPatterns,
     trends,
     toneSummary,
     platform,
-    contentLanguage: toneProfile?.content_language ?? null,
+    contentLanguage:      toneProfile?.content_language ?? null,
+    templateHealth:       templateHealth.length ? templateHealth : undefined,
+    templateSuggestions:  templateSuggestions.length ? templateSuggestions : undefined,
   })
 
   return {

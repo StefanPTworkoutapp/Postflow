@@ -1,7 +1,7 @@
 "use client"
 
-import { useMemo } from "react"
-import { CheckCircle2, AlertTriangle, XCircle, Clock, Activity, Database, Zap, TrendingUp } from "lucide-react"
+import { useMemo, useState, useCallback } from "react"
+import { CheckCircle2, AlertTriangle, XCircle, Clock, Activity, Database, Zap, TrendingUp, ClipboardCopy, Loader2, DollarSign } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -53,6 +53,22 @@ interface Brand {
   created_at: string
 }
 
+interface AiUsageRow {
+  key:       string
+  calls:     number
+  tokens:    number
+  cost:      number
+  brandName?: string
+}
+
+interface AiTotals {
+  calls:    number
+  tokens:   number
+  cost:     number
+  prevCost: number
+  month:    string
+}
+
 interface Props {
   syncRuns:           SyncRun[]
   researchRuns:       ResearchRun[]
@@ -60,6 +76,10 @@ interface Props {
   nicheTrends:        NicheTrend[]
   analyticsProcessed: AnalyticsProcessed[]
   brands:             Brand[]
+  aiTotals:           AiTotals
+  aiUsageBrands:      AiUsageRow[]
+  aiUsageModels:      AiUsageRow[]
+  aiUsageFeatures:    AiUsageRow[]
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -92,6 +112,97 @@ function StatusChip({ status }: { status: string }) {
   )
 }
 
+// ── Diagnostics formatter ─────────────────────────────────────────────────────
+
+/**
+ * Formats the /api/admin/diagnostics JSON into a concise text block
+ * suitable for pasting into a Claude conversation for analysis.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function formatDiagnosticsForClaude(data: Record<string, any>): string {
+  const lines: string[] = [
+    `## PostFlow Diagnostics Report`,
+    `Generated: ${data.generated_at ?? new Date().toISOString()}`,
+    ``,
+    `### Issues`,
+    ...(data.issues as string[] ?? ["(none)"]),
+    ``,
+    `### Brands (${(data.brands as unknown[])?.length ?? 0})`,
+  ]
+
+  for (const b of (data.brands as Array<Record<string, unknown>>) ?? []) {
+    const lowConf = (b.low_confidence_tokens as string[])?.length
+      ? ` | low-conf tokens: ${(b.low_confidence_tokens as string[]).join(", ")}`
+      : ""
+    lines.push(
+      `  - ${b.name} | niche: ${b.niche ?? "—"} | calibration: ${b.calibration_status} (${b.calibration_age_days ?? "—"}d ago)` +
+      ` | tokens: ${b.token_count} (avg conf: ${b.avg_token_confidence ?? "—"})${lowConf}`
+    )
+  }
+
+  lines.push(``, `### Platform Connections`)
+  for (const pc of (data.platform_connections as Array<Record<string, unknown>>) ?? []) {
+    lines.push(`  - ${pc.brand_name}: ${(pc.platforms as string[])?.join(", ") || "none"}`)
+  }
+
+  const sync = data.analytics_sync as Record<string, Record<string, unknown>> ?? {}
+  lines.push(``, `### Analytics Sync (latest per platform)`)
+  if (Object.keys(sync).length === 0) {
+    lines.push("  (no sync runs yet)")
+  } else {
+    for (const [platform, info] of Object.entries(sync)) {
+      lines.push(
+        `  - ${platform}: ${info.status} | ✓${info.success_count} ✗${info.error_count} | last: ${info.started_at}`
+      )
+    }
+  }
+
+  const ap = data.analytics_processed as Record<string, unknown> ?? {}
+  lines.push(``, `### Analytics → Token Pipeline (7d)`)
+  lines.push(`  Total processed: ${ap.total ?? 0}`)
+  lines.push(`  With signals: ${ap.with_signals ?? 0}`)
+  lines.push(`  Zero signals: ${ap.zero_signals ?? 0}`)
+  const bp = ap.by_platform as Record<string, number> ?? {}
+  if (Object.keys(bp).length > 0) {
+    lines.push(`  By platform: ${Object.entries(bp).map(([k, v]) => `${k}:${v}`).join(", ")}`)
+  }
+
+  const te = data.token_events_7d as Record<string, unknown> ?? {}
+  lines.push(``, `### Token Events (7d)`)
+  lines.push(`  Total events: ${te.total ?? 0} | Active brands: ${te.active_brands ?? 0}`)
+  const bst = te.by_signal_type as Record<string, number> ?? {}
+  if (Object.keys(bst).length > 0) {
+    lines.push(`  By signal type: ${Object.entries(bst).map(([k, v]) => `${k}:${v}`).join(", ")}`)
+  }
+  const topKeys = te.top_token_keys as Array<{ key: string; count: number }> ?? []
+  if (topKeys.length > 0) {
+    lines.push(`  Top token keys: ${topKeys.map(t => `${t.key}(${t.count})`).join(", ")}`)
+  }
+
+  const pc2 = data.posts_coverage as Record<string, number> ?? {}
+  lines.push(``, `### Posts Coverage`)
+  lines.push(`  Total: ${pc2.total ?? 0} | With actual perf: ${pc2.with_actual_perf ?? 0} | With predicted: ${pc2.with_predicted_perf ?? 0}`)
+  lines.push(`  Client approvals — approved: ${pc2.client_approved ?? 0}, flagged: ${pc2.client_flagged ?? 0}, pending: ${pc2.client_pending ?? 0}`)
+
+  const pi = data.portal_invites as Record<string, number> ?? {}
+  lines.push(``, `### Portal Invites`)
+  lines.push(`  Total: ${pi.total ?? 0} | Active: ${pi.active ?? 0} | Viewed: ${pi.viewed ?? 0}`)
+
+  const stuck = data.stuck_brands as string[] ?? []
+  if (stuck.length > 0) {
+    lines.push(``, `### Stuck Brands (no token events in 14d)`)
+    lines.push(`  ${stuck.join(", ")}`)
+  }
+
+  const recalib = data.recalibration_due as string[] ?? []
+  if (recalib.length > 0) {
+    lines.push(``, `### Recalibration Due`)
+    lines.push(`  ${recalib.join(", ")}`)
+  }
+
+  return lines.join("\n")
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function AdminDashboard({
@@ -101,11 +212,36 @@ export function AdminDashboard({
   nicheTrends,
   analyticsProcessed,
   brands,
+  aiTotals,
+  aiUsageBrands,
+  aiUsageModels,
+  aiUsageFeatures,
 }: Props) {
   const brandMap = useMemo(
     () => new Map(brands.map(b => [b.id, b])),
     [brands]
   )
+
+  // ── Copy for Claude ───────────────────────────────────────────────────────────
+  const [copyState, setCopyState] = useState<"idle" | "loading" | "copied" | "error">("idle")
+
+  const copyForClaude = useCallback(async () => {
+    setCopyState("loading")
+    try {
+      const res  = await fetch("/api/admin/diagnostics")
+      const data = await res.json() as Record<string, unknown>
+      if (!res.ok) throw new Error((data as { error?: string }).error ?? "Failed")
+
+      const text = formatDiagnosticsForClaude(data)
+      await navigator.clipboard.writeText(text)
+      setCopyState("copied")
+      setTimeout(() => setCopyState("idle"), 3000)
+    } catch (e) {
+      console.error("[AdminDashboard] diagnostics copy error:", e)
+      setCopyState("error")
+      setTimeout(() => setCopyState("idle"), 3000)
+    }
+  }, [])
 
   // Analytics sync stats: latest run per platform
   const latestSync = useMemo(() => {
@@ -160,14 +296,39 @@ export function AdminDashboard({
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
-          <Activity className="h-6 w-6 text-indigo-500" />
-          PostFlow System Health
-        </h1>
-        <p className="text-sm text-[hsl(var(--muted-foreground))] mt-1">
-          Internal dashboard — Stefan only.
-        </p>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
+            <Activity className="h-6 w-6 text-indigo-500" />
+            PostFlow System Health
+          </h1>
+          <p className="text-sm text-[hsl(var(--muted-foreground))] mt-1">
+            Internal dashboard — Stefan only.
+          </p>
+        </div>
+
+        {/* Copy for Claude */}
+        <button
+          onClick={copyForClaude}
+          disabled={copyState === "loading"}
+          className={cn(
+            "inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-colors",
+            copyState === "copied"
+              ? "border-green-500 text-green-600 bg-green-50 dark:bg-green-950/20 dark:text-green-400"
+              : copyState === "error"
+              ? "border-red-400 text-red-600 bg-red-50 dark:bg-red-950/20"
+              : "border-[hsl(var(--border))] hover:bg-[hsl(var(--muted))] text-[hsl(var(--foreground))]"
+          )}
+        >
+          {copyState === "loading" ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : copyState === "copied" ? (
+            <CheckCircle2 className="h-4 w-4" />
+          ) : (
+            <ClipboardCopy className="h-4 w-4" />
+          )}
+          {copyState === "loading" ? "Fetching…" : copyState === "copied" ? "Copied!" : copyState === "error" ? "Failed" : "Copy diagnostic report for Claude"}
+        </button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -383,6 +544,105 @@ export function AdminDashboard({
             </div>
           ))}
         </div>
+      </section>
+
+      {/* ── AI Usage & Cost ──────────────────────────────────────────────────── */}
+      <section className="rounded-xl border p-5 space-y-6">
+        <div className="flex items-center gap-2">
+          <DollarSign className="h-4 w-4 text-violet-500" />
+          <h2 className="font-semibold text-sm">AI Usage — {aiTotals.month}</h2>
+        </div>
+
+        {/* Month totals */}
+        <div className="grid grid-cols-3 gap-3 text-center">
+          <div className="rounded-lg bg-[hsl(var(--muted))]/50 px-3 py-2">
+            <p className="text-lg font-semibold">{aiTotals.calls.toLocaleString()}</p>
+            <p className="text-xs text-[hsl(var(--muted-foreground))]">AI calls</p>
+          </div>
+          <div className="rounded-lg bg-[hsl(var(--muted))]/50 px-3 py-2">
+            <p className="text-lg font-semibold">{(aiTotals.tokens / 1000).toFixed(1)}k</p>
+            <p className="text-xs text-[hsl(var(--muted-foreground))]">Tokens</p>
+          </div>
+          <div className="rounded-lg bg-[hsl(var(--muted))]/50 px-3 py-2">
+            <p className="text-lg font-semibold">${aiTotals.cost.toFixed(4)}</p>
+            <p className={cn(
+              "text-xs",
+              aiTotals.prevCost > 0 && aiTotals.cost > aiTotals.prevCost * 1.2
+                ? "text-amber-500"
+                : "text-[hsl(var(--muted-foreground))]"
+            )}>
+              {aiTotals.prevCost > 0
+                ? `prev month $${aiTotals.prevCost.toFixed(4)}`
+                : "Cost (USD)"}
+            </p>
+          </div>
+        </div>
+
+        {aiTotals.calls === 0 && (
+          <p className="text-xs text-[hsl(var(--muted-foreground))] text-center py-2">
+            No AI calls logged yet this month — logs will appear once the migration runs.
+          </p>
+        )}
+
+        {aiTotals.calls > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Per-brand */}
+            <div className="space-y-2">
+              <h3 className="text-xs font-medium text-[hsl(var(--muted-foreground))] uppercase tracking-wide">By Brand</h3>
+              {aiUsageBrands.length === 0
+                ? <p className="text-xs text-[hsl(var(--muted-foreground))]">—</p>
+                : aiUsageBrands.slice(0, 10).map(r => (
+                  <div key={r.key} className="flex items-center justify-between text-xs gap-2">
+                    <span className="truncate font-medium max-w-36">
+                      {r.brandName ?? r.key.slice(0, 8)}
+                    </span>
+                    <div className="flex items-center gap-2 shrink-0 text-[hsl(var(--muted-foreground))]">
+                      <span>{r.calls} calls</span>
+                      <span className="text-violet-600 dark:text-violet-400 font-medium tabular-nums">
+                        ${r.cost.toFixed(4)}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+            </div>
+
+            {/* Per-model */}
+            <div className="space-y-2">
+              <h3 className="text-xs font-medium text-[hsl(var(--muted-foreground))] uppercase tracking-wide">By Model</h3>
+              {aiUsageModels.length === 0
+                ? <p className="text-xs text-[hsl(var(--muted-foreground))]">—</p>
+                : aiUsageModels.map(r => (
+                  <div key={r.key} className="flex items-center justify-between text-xs gap-2">
+                    <span className="truncate font-mono text-[hsl(var(--muted-foreground))] max-w-40">{r.key.replace("claude-", "")}</span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-[hsl(var(--muted-foreground))]">{r.calls}×</span>
+                      <span className="text-violet-600 dark:text-violet-400 font-medium tabular-nums">
+                        ${r.cost.toFixed(4)}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+            </div>
+
+            {/* Per-feature */}
+            <div className="space-y-2">
+              <h3 className="text-xs font-medium text-[hsl(var(--muted-foreground))] uppercase tracking-wide">By Feature</h3>
+              {aiUsageFeatures.length === 0
+                ? <p className="text-xs text-[hsl(var(--muted-foreground))]">—</p>
+                : aiUsageFeatures.map(r => (
+                  <div key={r.key} className="flex items-center justify-between text-xs gap-2">
+                    <span className="truncate text-[hsl(var(--muted-foreground))] max-w-36">{r.key}</span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-[hsl(var(--muted-foreground))]">{r.calls}×</span>
+                      <span className="text-violet-600 dark:text-violet-400 font-medium tabular-nums">
+                        ${r.cost.toFixed(4)}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </div>
+        )}
       </section>
 
     </div>
