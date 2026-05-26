@@ -59,18 +59,33 @@ export async function POST(request: Request) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-    const brand = await getBrand()
+    // Parse body first — it may contain brand_id (passed by the wizard)
+    // and optional refine instructions.
+    const body = await request.json().catch(() => ({})) as {
+      brand_id?: string | null
+      refine?:   { postId: "A" | "B" | "C"; adjustment: string }
+    }
+
+    // Resolve brand: prefer explicit brand_id (wizard always passes it) so
+    // we never lose the brand even if getBrand()'s account_id lookup varies
+    // between request contexts.
+    let brand = null
+    if (body.brand_id) {
+      const { data } = await supabase
+        .from("brands")
+        .select("*")
+        .eq("id", body.brand_id)
+        .eq("account_id", user.id)   // ownership check
+        .single()
+      brand = data
+    }
+    if (!brand) brand = await getBrand()
     if (!brand) return NextResponse.json({ error: "Brand not found" }, { status: 404 })
 
     const ctx = await getBrandContext(brand.id)
     if (!ctx) return NextResponse.json({ error: "Brand context unavailable" }, { status: 500 })
 
-    // Parse optional feedback for a single post refinement
-    const body = await request.json().catch(() => ({})) as {
-      refine?: { postId: "A" | "B" | "C"; adjustment: string }
-    }
-
-    // If refining a single post, only regenerate that one
+    // Refine a single post, or generate all 3
     if (body.refine) {
       const def = POST_TYPES.find(p => p.id === body.refine!.postId)
       if (!def) return NextResponse.json({ error: "Unknown post id" }, { status: 400 })

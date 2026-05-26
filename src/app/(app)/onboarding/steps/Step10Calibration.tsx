@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { CheckCircle2, Loader2, RefreshCw, AlertCircle } from "lucide-react"
+import { CheckCircle2, Loader2, RefreshCw, AlertCircle, RotateCcw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import type { OnboardingDraft } from "@/lib/shared/onboarding/types"
@@ -69,7 +69,9 @@ export function Step10Calibration({ brandId, back, onComplete }: Props) {
       const res  = await fetch("/api/onboarding/calibrate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
+        // Pass brandId so the route doesn't have to rediscover it — avoids
+        // "Brand not found" if getBrand() loses context between requests.
+        body: JSON.stringify({ brand_id: brandId }),
       })
       const json = await res.json() as { posts?: CalibrationPost[]; error?: string }
 
@@ -120,7 +122,7 @@ export function Step10Calibration({ brandId, back, onComplete }: Props) {
       const res  = await fetch("/api/onboarding/calibrate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refine: { postId, adjustment } }),
+        body: JSON.stringify({ brand_id: brandId, refine: { postId, adjustment } }),
       })
       const json = await res.json() as { posts?: CalibrationPost[]; error?: string }
 
@@ -204,14 +206,29 @@ export function Step10Calibration({ brandId, back, onComplete }: Props) {
 
       {/* Error state */}
       {error && !loading && (
-        <div className="rounded-lg border border-[hsl(var(--destructive))]/30 bg-[hsl(var(--destructive))]/5 p-4">
+        <div className="rounded-lg border border-[hsl(var(--destructive))]/30 bg-[hsl(var(--destructive))]/5 p-4 space-y-3">
           <div className="flex items-start gap-2">
             <AlertCircle className="h-4 w-4 text-[hsl(var(--destructive))] mt-0.5 shrink-0" />
             <p className="text-sm text-[hsl(var(--destructive))]">{error}</p>
           </div>
-          <Button variant="outline" size="sm" className="mt-3 w-full" onClick={loadCalibrationPosts}>
+          <Button variant="outline" size="sm" className="w-full" onClick={loadCalibrationPosts}>
             Try again
           </Button>
+          {/* If brand truly can't be found (stale session / bad state), let the user restart cleanly */}
+          {error.toLowerCase().includes("brand") && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full gap-1.5 text-[hsl(var(--muted-foreground))]"
+              onClick={() => {
+                try { localStorage.removeItem("postflow_onboarding_v1") } catch { /* ignore */ }
+                window.location.href = "/onboarding"
+              }}
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              Restart onboarding
+            </Button>
+          )}
         </div>
       )}
 
