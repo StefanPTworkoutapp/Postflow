@@ -6,6 +6,8 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { HelpCircle } from "lucide-react"
 import { step1Schema, INDUSTRIES } from "@/lib/shared/onboarding/types"
 import type { OnboardingDraft } from "@/lib/shared/onboarding/types"
 import { StepShell, StepActions } from "./StepShell"
@@ -68,10 +70,25 @@ export function Step1Business({ draft, mergeDraft, saveToApi, next }: Props) {
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="niche">
-            Niche <span className="text-[hsl(var(--muted-foreground))]">(optional)</span>
-          </Label>
-          <Input id="niche" placeholder="e.g. PT Studio – Premium, Amsterdam" {...register("niche")} />
+          <div className="flex items-center gap-1.5">
+            <Label htmlFor="niche">
+              Niche <span className="text-[hsl(var(--muted-foreground))]">(optional)</span>
+            </Label>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <HelpCircle className="h-3.5 w-3.5 text-[hsl(var(--muted-foreground))] cursor-help shrink-0" />
+              </TooltipTrigger>
+              <TooltipContent side="right" className="max-w-[220px] text-xs leading-relaxed">
+                Be specific about <strong>who</strong> you serve and <strong>what</strong> makes you different.
+                This sharpens the AI's content and trend research.
+                <br /><br />
+                <span className="text-[hsl(var(--muted-foreground))]">
+                  e.g. "Online PT for busy mums" · "SaaS for personal trainers" · "Luxury yoga studio, Amsterdam"
+                </span>
+              </TooltipContent>
+            </Tooltip>
+          </div>
+          <Input id="niche" placeholder="e.g. Online PT for busy mums, Amsterdam" {...register("niche")} />
         </div>
 
         <StepActions nextLabel="Continue" loading={saving} onNext={handleSubmit(onSubmit)} />

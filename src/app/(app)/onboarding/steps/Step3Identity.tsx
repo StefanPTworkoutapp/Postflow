@@ -10,6 +10,17 @@ import { step3Schema, FONTS } from "@/lib/shared/onboarding/types"
 import type { OnboardingDraft } from "@/lib/shared/onboarding/types"
 import { StepShell, StepActions } from "./StepShell"
 
+/** Normalise a pasted string to a valid 6-digit hex. Returns null if invalid. */
+function parseHex(raw: string): string | null {
+  const s = raw.trim().replace(/^#/, "")
+  if (/^[0-9a-fA-F]{6}$/.test(s)) return `#${s.toUpperCase()}`
+  if (/^[0-9a-fA-F]{3}$/.test(s)) {
+    const [a, b, c] = s.split("")
+    return `#${a}${a}${b}${b}${c}${c}`.toUpperCase()
+  }
+  return null
+}
+
 type FormValues = z.infer<typeof step3Schema>
 
 interface Props {
@@ -23,7 +34,7 @@ interface Props {
 export function Step3Identity({ draft, mergeDraft, saveToApi, next, back }: Props) {
   const [saving, setSaving] = useState(false)
 
-  const { register, handleSubmit, watch, formState: { errors } } = useForm<FormValues>({
+  const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(step3Schema),
     defaultValues: {
       primary_color: draft.primary_color ?? "#1A203A",
@@ -77,12 +88,27 @@ export function Step3Identity({ draft, mergeDraft, saveToApi, next, back }: Prop
                   className="h-9 w-10 cursor-pointer rounded border border-[hsl(var(--input))] p-0.5"
                   {...register(field)}
                 />
-                {/* Display-only text field — not registered to avoid ref override */}
+                {/* Editable hex field — paste or type a hex code to update the colour picker */}
                 <Input
                   className="font-mono text-xs"
                   value={value}
-                  readOnly
-                  tabIndex={-1}
+                  placeholder="#000000"
+                  onChange={(e) => {
+                    const hex = parseHex(e.target.value)
+                    if (hex) setValue(field, hex, { shouldValidate: true })
+                    else setValue(field, e.target.value, { shouldValidate: false })
+                  }}
+                  onBlur={(e) => {
+                    // Snap back to last valid value on blur if input is invalid
+                    const hex = parseHex(e.target.value)
+                    if (!hex) setValue(field, value, { shouldValidate: false })
+                  }}
+                  onPaste={(e) => {
+                    e.preventDefault()
+                    const pasted = e.clipboardData.getData("text")
+                    const hex = parseHex(pasted)
+                    if (hex) setValue(field, hex, { shouldValidate: true })
+                  }}
                 />
               </div>
               {errors[field] && (
