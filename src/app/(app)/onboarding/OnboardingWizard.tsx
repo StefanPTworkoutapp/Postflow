@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Zap } from "lucide-react"
+import { Loader2, Zap } from "lucide-react"
 import type { Database } from "@/types/database.types"
 import type { OnboardingDraft } from "@/lib/shared/onboarding/types"
 import { TOTAL_STEPS } from "@/lib/shared/onboarding/types"
@@ -32,13 +32,13 @@ interface SavedState {
   brandId: string | null
 }
 
+// NOTE: only call from client-side code (useEffect / event handlers)
 function loadSavedState(existingBrandId: string | null): SavedState | null {
-  if (typeof window === "undefined") return null
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return null
     const saved = JSON.parse(raw) as SavedState
-    // Only reuse saved state if it belongs to the same brand (or no brand yet)
+    // Discard saved state if it belongs to a different brand
     if (existingBrandId && saved.brandId && saved.brandId !== existingBrandId) return null
     return saved
   } catch {
@@ -49,75 +49,69 @@ function loadSavedState(existingBrandId: string | null): SavedState | null {
 function persistState(state: SavedState) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
-  } catch {
-    // Storage full or unavailable — silently ignore
-  }
+  } catch { /* storage full / unavailable */ }
 }
 
-function clearSavedState() {
-  try {
-    localStorage.removeItem(STORAGE_KEY)
-  } catch { /* ignore */ }
+export function clearSavedState() {
+  try { localStorage.removeItem(STORAGE_KEY) } catch { /* ignore */ }
 }
 
-// ── Fields injected from document import that live in later steps ─────────────
-// These are saved to the DB immediately after the brand is created (Step 1)
-// so they are never lost if the user closes the browser before reaching those steps.
+// ── Fields pre-filled by document import — live in later steps ────────────────
+// Flushed to the DB the moment the brand is first created so they're never lost.
 const LATER_STEP_FIELDS = [
   "tagline", "website_url", "target_audience_description",
   "geographic_location", "voice_examples", "goals",
 ] as const
 
+// ── Build base draft from server data ────────────────────────────────────────
+function serverDraft(existingBrand: Brand | null): OnboardingDraft {
+  return {
+    name:              existingBrand?.name              ?? undefined,
+    industry:          existingBrand?.industry          ?? undefined,
+    primary_color:     existingBrand?.primary_color     ?? "#1A203A",
+    secondary_color:   existingBrand?.secondary_color   ?? "#A8B8A8",
+    accent_color:      existingBrand?.accent_color      ?? "#D4E8C8",
+    font_heading:      existingBrand?.font_heading       ?? "Montserrat",
+    font_body:         existingBrand?.font_body          ?? "Inter",
+    posting_frequency: (existingBrand?.posting_frequency as "weekly" | "monthly") ?? "monthly",
+    ai_tier:           ((existingBrand as unknown as { ai_tier?: string })?.ai_tier as "standard" | "economy") ?? "standard",
+  }
+}
+
 export function OnboardingWizard({ existingBrand }: Props) {
-  const router  = useRouter()
+  const router = useRouter()
 
-  // ── Initialise from localStorage (client-only) or server data ────────────
-  const saved = typeof window !== "undefined"
-    ? loadSavedState(existingBrand?.id ?? null)
-    : null
+  // ── State — initialised from server data only (SSR-safe) ─────────────────
+  // localStorage is restored client-side in the hydration useEffect below.
+  const [hydrated,  setHydrated]  = useState(false)
+  const [step,      setStep]      = useState<number>(existingBrand ? 2 : 1)
+  const [brandId,   setBrandId]   = useState<string | null>(existingBrand?.id ?? null)
+  const [draft,     setDraft]     = useState<OnboardingDraft>(() => serverDraft(existingBrand))
 
-  const [step, setStep] = useState<number>(() => {
-    if (saved?.step)       return saved.step
-    if (existingBrand)     return 2
-    return 1
-  })
-
-  const [brandId, setBrandId] = useState<string | null>(
-    saved?.brandId ?? existingBrand?.id ?? null
-  )
-
-  const [draft, setDraft] = useState<OnboardingDraft>(() => {
-    // Base: server-side data for fields that are already persisted
-    const base: OnboardingDraft = {
-      name:              existingBrand?.name              ?? undefined,
-      industry:          existingBrand?.industry          ?? undefined,
-      primary_color:     existingBrand?.primary_color     ?? "#1A203A",
-      secondary_color:   existingBrand?.secondary_color   ?? "#A8B8A8",
-      accent_color:      existingBrand?.accent_color      ?? "#D4E8C8",
-      font_heading:      existingBrand?.font_heading       ?? "Montserrat",
-      font_body:         existingBrand?.font_body          ?? "Inter",
-      posting_frequency: (existingBrand?.posting_frequency as "weekly" | "monthly") ?? "monthly",
-      ai_tier:           ((existingBrand as unknown as { ai_tier?: string })?.ai_tier as "standard" | "economy") ?? "standard",
-    }
-    // Overlay: localStorage draft (may contain unsaved imported-doc fields)
-    if (saved?.draft) return { ...base, ...saved.draft }
-    return base
-  })
-
-  // Track whether brandId just transitioned from null → set (brand was created)
-  const prevBrandId = useRef<string | null>(brandId)
-
-  // ── Persist to localStorage whenever key state changes ───────────────────
+  // ── Hydration: restore from localStorage on first client mount ───────────
+  // This MUST be in useEffect — useState initialisers run during SSR where
+  // window/localStorage are unavailable, so any saved step would be lost.
   useEffect(() => {
-    persistState({ draft, step, brandId })
-  }, [draft, step, brandId])
+    const saved = loadSavedState(existingBrand?.id ?? null)
+    if (saved) {
+      if (saved.step   && saved.step > 1)  setStep(saved.step)
+      if (saved.brandId)                   setBrandId(saved.brandId)
+      if (saved.draft)  setDraft(d => ({ ...d, ...saved.draft }))
+    }
+    setHydrated(true)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  // existingBrand is stable (server prop) — safe to omit
 
-  // ── Flush imported-doc fields to DB the moment a brandId is created ───────
-  // This ensures fields from Step 1 document import (tagline, website_url, etc.)
-  // are persisted server-side even if the user closes the browser before Step 3+.
+  // ── Persist to localStorage on every meaningful change ───────────────────
+  useEffect(() => {
+    if (!hydrated) return  // don't overwrite good saved state before we've loaded it
+    persistState({ draft, step, brandId })
+  }, [draft, step, brandId, hydrated])
+
+  // ── Flush imported-doc fields to the DB when the brand is first created ──
+  const prevBrandId = useRef<string | null>(brandId)
   useEffect(() => {
     if (brandId && !prevBrandId.current) {
-      // Brand was just created — flush any extra fields that were pre-filled
       const extra: Record<string, unknown> = {}
       for (const field of LATER_STEP_FIELDS) {
         const val = draft[field as keyof OnboardingDraft]
@@ -133,7 +127,6 @@ export function OnboardingWizard({ existingBrand }: Props) {
     }
     prevBrandId.current = brandId
   }, [brandId]) // eslint-disable-line react-hooks/exhaustive-deps
-  // ^ draft intentionally omitted: we only want this effect on the transition moment
 
   function next() { setStep((s) => Math.min(s + 1, TOTAL_STEPS)) }
   function back() { setStep((s) => Math.max(s - 1, 1)) }
@@ -153,9 +146,18 @@ export function OnboardingWizard({ existingBrand }: Props) {
     return json
   }
 
-  const progress = Math.round((step / TOTAL_STEPS) * 100)
+  // ── Loading gate: don't render steps until localStorage has been checked ──
+  // This prevents a flash of step 1 before the saved step is restored.
+  if (!hydrated) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-indigo-400" />
+      </div>
+    )
+  }
 
-  const stepProps = { draft, mergeDraft, brandId, saveToApi, next, back }
+  const progress   = Math.round((step / TOTAL_STEPS) * 100)
+  const stepProps  = { draft, mergeDraft, brandId, saveToApi, next, back }
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -181,25 +183,15 @@ export function OnboardingWizard({ existingBrand }: Props) {
       {/* Step content */}
       <div className="flex-1 flex items-start justify-center px-4 py-10">
         <div className="w-full max-w-lg">
-          {step === 1 && <Step1Business {...stepProps} />}
-          {step === 2 && <Step2Goals {...stepProps} />}
-          {step === 3 && <Step3Identity {...stepProps} />}
-          {step === 4 && <Step4Audience {...stepProps} />}
-          {step === 5 && <Step5Voice {...stepProps} />}
-          {step === 6 && (
-            <Step6Analysis
-              {...stepProps}
-              onDone={() => next()}
-            />
-          )}
-          {step === 7 && (
-            <Step7SamplePost
-              {...stepProps}
-              onApproved={() => next()}
-            />
-          )}
-          {step === 8 && <Step8Socials {...stepProps} />}
-          {step === 9 && (
+          {step === 1  && <Step1Business {...stepProps} />}
+          {step === 2  && <Step2Goals {...stepProps} />}
+          {step === 3  && <Step3Identity {...stepProps} />}
+          {step === 4  && <Step4Audience {...stepProps} />}
+          {step === 5  && <Step5Voice {...stepProps} />}
+          {step === 6  && <Step6Analysis {...stepProps} onDone={() => next()} />}
+          {step === 7  && <Step7SamplePost {...stepProps} onApproved={() => next()} />}
+          {step === 8  && <Step8Socials {...stepProps} />}
+          {step === 9  && (
             <Step9Frequency
               {...stepProps}
               onComplete={async (freq, tier) => {
