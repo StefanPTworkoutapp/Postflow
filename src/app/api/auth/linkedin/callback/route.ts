@@ -41,6 +41,16 @@ export async function GET(req: NextRequest) {
   const code = searchParams.get("code")
   if (!code) return errorRedirect("missing_code")
 
+  // Decode return_to from state parameter (set during initiation)
+  const stateParam = searchParams.get("state")
+  let returnTo = "/settings/connections"
+  if (stateParam) {
+    try {
+      const decoded = JSON.parse(Buffer.from(stateParam, "base64url").toString()) as { rt?: string }
+      if (typeof decoded.rt === "string" && decoded.rt.startsWith("/")) returnTo = decoded.rt
+    } catch { /* use default */ }
+  }
+
   // ── Auth + brand ───────────────────────────────────────────────────────────
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -147,7 +157,9 @@ export async function GET(req: NextRequest) {
 
     console.log(`[linkedin-callback] Connected ${displayName} (sub: ${sub}) for brand ${brand.id}`)
 
-    return NextResponse.redirect(`${REDIRECT_BASE}/settings/connections?connected=linkedin`)
+    return NextResponse.redirect(
+      `${REDIRECT_BASE}${returnTo}${returnTo.includes("?") ? "&" : "?"}connected=linkedin`
+    )
 
   } catch (err) {
     console.error("[linkedin-callback] Unexpected error:", err)

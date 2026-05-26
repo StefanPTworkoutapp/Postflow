@@ -28,7 +28,7 @@ async function deriveCodeChallenge(verifier: string): Promise<string> {
   return hash.toString("base64url")
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   const clientKey  = process.env.TIKTOK_CLIENT_KEY
   const redirectUri = `${REDIRECT_BASE}/api/auth/tiktok/callback`
 
@@ -48,6 +48,16 @@ export async function GET() {
     httpOnly: true,
     secure:   process.env.NODE_ENV === "production",
     maxAge:   300, // 5 minutes
+    path:     "/",
+    sameSite: "lax",
+  })
+
+  // Store return_to so the callback knows where to send the user back
+  const returnTo = new URL(req.url).searchParams.get("return_to") ?? "/settings/connections"
+  cookieStore.set("tiktok_return_to", returnTo, {
+    httpOnly: true,
+    secure:   process.env.NODE_ENV === "production",
+    maxAge:   300,
     path:     "/",
     sameSite: "lax",
   })

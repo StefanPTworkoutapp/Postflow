@@ -18,8 +18,8 @@ import { NextResponse } from "next/server"
 
 const REDIRECT_BASE = process.env.NEXT_PUBLIC_APP_URL ?? "https://postflow-amber.vercel.app"
 
-export async function GET() {
-  const clientId   = process.env.LINKEDIN_CLIENT_ID
+export async function GET(req: Request) {
+  const clientId    = process.env.LINKEDIN_CLIENT_ID
   const redirectUri = `${REDIRECT_BASE}/api/auth/linkedin/callback`
 
   if (!clientId) {
@@ -29,19 +29,17 @@ export async function GET() {
     )
   }
 
-  const scopes = [
-    "openid",
-    "profile",
-    "email",
-    "w_member_social",
-    "r_organization_social",
-  ].join(" ")
+  const returnTo = new URL(req.url).searchParams.get("return_to") ?? "/settings/connections"
+  const state    = Buffer.from(JSON.stringify({ rt: returnTo })).toString("base64url")
+
+  const scopes = ["openid", "profile", "email", "w_member_social", "r_organization_social"].join(" ")
 
   const oauthUrl = new URL("https://www.linkedin.com/oauth/v2/authorization")
   oauthUrl.searchParams.set("client_id",     clientId)
   oauthUrl.searchParams.set("redirect_uri",  redirectUri)
   oauthUrl.searchParams.set("scope",         scopes)
   oauthUrl.searchParams.set("response_type", "code")
+  oauthUrl.searchParams.set("state",         state)
 
   return NextResponse.redirect(oauthUrl.toString())
 }

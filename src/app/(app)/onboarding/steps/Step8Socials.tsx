@@ -1,23 +1,69 @@
 "use client"
 
+import { useEffect, useState } from "react"
+import { CheckCircle2, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 import type { OnboardingDraft } from "@/lib/shared/onboarding/types"
 import { StepShell } from "./StepShell"
 
 const PLATFORMS = [
-  { id: "instagram", label: "Instagram", note: "Manual posting — we'll send reminders" },
-  { id: "linkedin", label: "LinkedIn", note: "Auto-post via Buffer" },
-  { id: "facebook", label: "Facebook", note: "Auto-post via Buffer" },
-  { id: "tiktok", label: "TikTok", note: "Manual posting — we'll send reminders" },
+  {
+    id:      "instagram",
+    label:   "Instagram",
+    note:    "Manual posting — we'll send reminders",
+    authUrl: "/api/auth/instagram",
+  },
+  {
+    id:      "linkedin",
+    label:   "LinkedIn",
+    note:    "Auto-post via Buffer",
+    authUrl: "/api/auth/linkedin",
+  },
+  {
+    id:      "facebook",
+    label:   "Facebook",
+    note:    "Auto-post via Buffer",
+    authUrl: "/api/auth/facebook",
+  },
+  {
+    id:      "tiktok",
+    label:   "TikTok",
+    note:    "Manual posting — we'll send reminders",
+    authUrl: "/api/auth/tiktok",
+  },
 ]
 
 interface Props {
-  draft: OnboardingDraft
-  next: () => void
-  back: () => void
+  draft:  OnboardingDraft
+  next:   () => void
+  back:   () => void
 }
 
 export function Step8Socials({ next, back }: Props) {
+  const [connected,  setConnected]  = useState<Set<string>>(new Set())
+  const [loading,    setLoading]    = useState(true)
+
+  useEffect(() => {
+    fetch("/api/connections/list")
+      .then(r => r.json() as Promise<{ platforms: string[] }>)
+      .then(({ platforms }) => setConnected(new Set(platforms)))
+      .catch(() => { /* show connect buttons regardless */ })
+      .finally(() => setLoading(false))
+  }, [])
+
+  // Re-check connections when the tab regains focus (user returned from OAuth)
+  useEffect(() => {
+    function onFocus() {
+      fetch("/api/connections/list")
+        .then(r => r.json() as Promise<{ platforms: string[] }>)
+        .then(({ platforms }) => setConnected(new Set(platforms)))
+        .catch(() => {})
+    }
+    window.addEventListener("focus", onFocus)
+    return () => window.removeEventListener("focus", onFocus)
+  }, [])
+
   return (
     <StepShell
       title="Connect your social accounts"
@@ -25,28 +71,45 @@ export function Step8Socials({ next, back }: Props) {
       onBack={back}
     >
       <div className="space-y-3">
-        {PLATFORMS.map(({ id, label, note }) => (
-          <div
-            key={id}
-            className="flex items-center justify-between rounded-lg border p-4"
-          >
-            <div>
-              <p className="text-sm font-medium">{label}</p>
-              <p className="text-xs text-[hsl(var(--muted-foreground))]">{note}</p>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled
-              title="Coming soon — set up in Settings after onboarding"
+        {PLATFORMS.map(({ id, label, note, authUrl }) => {
+          const isConnected = connected.has(id)
+          return (
+            <div
+              key={id}
+              className={cn(
+                "flex items-center justify-between rounded-lg border p-4 transition-colors",
+                isConnected && "border-green-500/40 bg-green-50/50 dark:bg-green-950/20"
+              )}
             >
-              Connect
-            </Button>
-          </div>
-        ))}
+              <div>
+                <p className="text-sm font-medium">{label}</p>
+                <p className="text-xs text-[hsl(var(--muted-foreground))]">{note}</p>
+              </div>
+
+              {loading ? (
+                <Loader2 className="h-4 w-4 animate-spin text-[hsl(var(--muted-foreground))]" />
+              ) : isConnected ? (
+                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-green-600 dark:text-green-400">
+                  <CheckCircle2 className="h-4 w-4" />
+                  Connected
+                </span>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    window.location.href = `${authUrl}?return_to=/onboarding`
+                  }}
+                >
+                  Connect
+                </Button>
+              )}
+            </div>
+          )
+        })}
 
         <p className="text-xs text-[hsl(var(--muted-foreground))] text-center">
-          OAuth connections are configured in Settings → Integrations.
+          You can also manage connections in Settings → Connections.
         </p>
       </div>
 

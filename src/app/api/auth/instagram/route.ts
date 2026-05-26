@@ -17,8 +17,8 @@ import { NextResponse } from "next/server"
 
 const REDIRECT_BASE = process.env.NEXT_PUBLIC_APP_URL ?? "https://postflow-amber.vercel.app"
 
-export async function GET() {
-  const appId      = process.env.INSTAGRAM_APP_ID
+export async function GET(req: Request) {
+  const appId       = process.env.INSTAGRAM_APP_ID
   const redirectUri = `${REDIRECT_BASE}/api/auth/instagram/callback`
 
   if (!appId) {
@@ -27,6 +27,10 @@ export async function GET() {
       `${REDIRECT_BASE}/settings/connections?error=instagram_not_configured`
     )
   }
+
+  // Encode optional return_to in OAuth state so callback can redirect back
+  const returnTo = new URL(req.url).searchParams.get("return_to") ?? "/settings/connections"
+  const state    = Buffer.from(JSON.stringify({ rt: returnTo })).toString("base64url")
 
   const scopes = [
     "instagram_basic",
@@ -42,6 +46,7 @@ export async function GET() {
   oauthUrl.searchParams.set("redirect_uri",  redirectUri)
   oauthUrl.searchParams.set("scope",         scopes)
   oauthUrl.searchParams.set("response_type", "code")
+  oauthUrl.searchParams.set("state",         state)
 
   return NextResponse.redirect(oauthUrl.toString())
 }

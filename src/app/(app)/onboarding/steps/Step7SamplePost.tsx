@@ -75,8 +75,10 @@ export function Step7SamplePost({ draft, brandId, back, onApproved }: Props) {
   }
 
   function handleRegenerate() {
-    const fb = feedback === "Other" ? customFeedback : feedback ?? undefined
-    generate(fb ?? undefined)
+    const parts: string[] = []
+    if (feedback) parts.push(feedback)
+    if (customFeedback.trim()) parts.push(customFeedback.trim())
+    generate(parts.join(". ") || undefined)
   }
 
   return (

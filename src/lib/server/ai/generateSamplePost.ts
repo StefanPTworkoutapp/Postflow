@@ -25,7 +25,7 @@ export async function generateSamplePost(
   brandId?: string | null,
 ): Promise<{ caption: string; hashtags: string[] }> {
   const feedbackLine = previousFeedback
-    ? `\nPREVIOUS FEEDBACK TO ADDRESS: ${previousFeedback}\n`
+    ? `\nCRITICAL INSTRUCTION — PREVIOUS VERSION WAS REJECTED. You MUST strictly follow this feedback in the new version:\n${previousFeedback}\nDo NOT repeat the patterns the user complained about. This is a hard requirement, not a suggestion.\n`
     : ""
 
   const goalsDesc = goals?.length

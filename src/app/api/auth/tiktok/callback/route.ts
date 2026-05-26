@@ -71,6 +71,10 @@ export async function GET(req: NextRequest) {
   // Clear the cookie immediately
   cookieStore.delete("tiktok_code_verifier")
 
+  // Read return destination set by initiation route
+  const returnTo = cookieStore.get("tiktok_return_to")?.value ?? "/settings/connections"
+  cookieStore.delete("tiktok_return_to")
+
   try {
     // ── Step 1: Exchange code for access token ─────────────────────────────
     const tokenRes = await fetch(`${TT_API}/oauth/token/`, {
@@ -152,7 +156,9 @@ export async function GET(req: NextRequest) {
 
     console.log(`[tiktok-callback] Connected @${displayName} (open_id: ${open_id}) for brand ${brand.id}`)
 
-    return NextResponse.redirect(`${REDIRECT_BASE}/settings/connections?connected=tiktok`)
+    return NextResponse.redirect(
+      `${REDIRECT_BASE}${returnTo}${returnTo.includes("?") ? "&" : "?"}connected=tiktok`
+    )
 
   } catch (err) {
     console.error("[tiktok-callback] Unexpected error:", err)
