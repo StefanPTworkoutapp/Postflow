@@ -24,6 +24,7 @@ interface Props {
 
 export function Step1Business({ draft, mergeDraft, saveToApi, next }: Props) {
   const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   // ── Document import state ────────────────────────────────────────────────
   const [docFile,       setDocFile]       = useState<File | null>(null)
@@ -101,10 +102,20 @@ export function Step1Business({ draft, mergeDraft, saveToApi, next }: Props) {
   // ── Submit ────────────────────────────────────────────────────────────────
   async function onSubmit(values: FormValues) {
     setSaving(true)
+    setSaveError(null)
     mergeDraft(values)
-    await saveToApi({ name: values.name, industry: values.industry, niche: values.niche || null })
-    setSaving(false)
-    next()
+    try {
+      const result = await saveToApi({ name: values.name, industry: values.industry, niche: values.niche || null })
+      if ((result as { error?: string }).error) {
+        setSaveError((result as { error?: string }).error ?? "Failed to save. Please try again.")
+        return
+      }
+      next()
+    } catch {
+      setSaveError("Network error — please try again.")
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -217,6 +228,11 @@ export function Step1Business({ draft, mergeDraft, saveToApi, next }: Props) {
           <Input id="niche" placeholder="e.g. Online PT for busy mums, Amsterdam" {...register("niche")} />
         </div>
 
+        {saveError && (
+          <p className="text-xs text-[hsl(var(--destructive))] rounded-md border border-[hsl(var(--destructive))]/30 bg-[hsl(var(--destructive))]/5 px-3 py-2">
+            {saveError}
+          </p>
+        )}
         <StepActions nextLabel="Continue" loading={saving} onNext={handleSubmit(onSubmit)} />
       </form>
     </StepShell>

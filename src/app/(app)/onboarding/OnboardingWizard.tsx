@@ -94,9 +94,21 @@ export function OnboardingWizard({ existingBrand }: Props) {
   useEffect(() => {
     const saved = loadSavedState(existingBrand?.id ?? null)
     if (saved) {
-      if (saved.step   && saved.step > 1)  setStep(saved.step)
-      if (saved.brandId)                   setBrandId(saved.brandId)
-      if (saved.draft)  setDraft(d => ({ ...d, ...saved.draft }))
+      if (saved.draft) setDraft(d => ({ ...d, ...saved.draft }))
+
+      if (existingBrand) {
+        // Server confirms brand exists — restore step and use server-confirmed brandId
+        if (saved.step && saved.step > 1) setStep(saved.step)
+        setBrandId(existingBrand.id)
+      } else if (saved.brandId) {
+        // Server says no brand exists but localStorage claims one.
+        // The brand was never actually created (failed save, deleted, stale session).
+        // Keep the draft data so the user doesn't have to retype, but force step 1
+        // and clear the stale brandId so brand creation runs fresh.
+        clearSavedState()
+        persistState({ draft: { ...serverDraft(existingBrand), ...saved.draft }, step: 1, brandId: null })
+        // step and brandId already default to 1 / null — no setStep/setBrandId needed
+      }
     }
     setHydrated(true)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -195,8 +207,8 @@ export function OnboardingWizard({ existingBrand }: Props) {
             <Step9Frequency
               {...stepProps}
               onComplete={async (freq, tier) => {
-                await saveToApi({ posting_frequency: freq, ai_tier: tier })
-                next()
+                const result = await saveToApi({ posting_frequency: freq, ai_tier: tier })
+                if (!(result as { error?: string }).error) next()
               }}
             />
           )}

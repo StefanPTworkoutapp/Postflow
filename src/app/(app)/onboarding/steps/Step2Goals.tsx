@@ -23,9 +23,18 @@ export function Step2Goals({ draft, mergeDraft, saveToApi, next, back }: Props) 
     setSaving(true)
     setError(null)
     mergeDraft({ goals: selected })
-    await saveToApi({ goals: selected, primary_goal: selected[0] })
-    setSaving(false)
-    next()
+    try {
+      const result = await saveToApi({ goals: selected, primary_goal: selected[0] })
+      if ((result as { error?: string }).error) {
+        setError((result as { error?: string }).error ?? "Failed to save. Please try again.")
+        return
+      }
+      next()
+    } catch {
+      setError("Network error — please try again.")
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (

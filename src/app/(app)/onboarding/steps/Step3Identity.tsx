@@ -33,6 +33,7 @@ interface Props {
 
 export function Step3Identity({ draft, mergeDraft, saveToApi, next, back }: Props) {
   const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(step3Schema),
@@ -51,18 +52,28 @@ export function Step3Identity({ draft, mergeDraft, saveToApi, next, back }: Prop
 
   async function onSubmit(values: FormValues) {
     setSaving(true)
+    setSaveError(null)
     mergeDraft(values)
-    await saveToApi({
-      primary_color: values.primary_color,
-      secondary_color: values.secondary_color,
-      accent_color: values.accent_color,
-      font_heading: values.font_heading,
-      font_body: values.font_body,
-      tagline: values.tagline || null,
-      website_url: values.website_url || null,
-    })
-    setSaving(false)
-    next()
+    try {
+      const result = await saveToApi({
+        primary_color: values.primary_color,
+        secondary_color: values.secondary_color,
+        accent_color: values.accent_color,
+        font_heading: values.font_heading,
+        font_body: values.font_body,
+        tagline: values.tagline || null,
+        website_url: values.website_url || null,
+      })
+      if ((result as { error?: string }).error) {
+        setSaveError((result as { error?: string }).error ?? "Failed to save. Please try again.")
+        return
+      }
+      next()
+    } catch {
+      setSaveError("Network error — please try again.")
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -155,6 +166,11 @@ export function Step3Identity({ draft, mergeDraft, saveToApi, next, back }: Prop
           {errors.website_url && <p className="text-xs text-[hsl(var(--destructive))]">{errors.website_url.message}</p>}
         </div>
 
+        {saveError && (
+          <p className="text-xs text-[hsl(var(--destructive))] rounded-md border border-[hsl(var(--destructive))]/30 bg-[hsl(var(--destructive))]/5 px-3 py-2">
+            {saveError}
+          </p>
+        )}
         <StepActions onBack={back} loading={saving} onNext={handleSubmit(onSubmit)} />
       </form>
     </StepShell>

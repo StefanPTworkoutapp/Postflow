@@ -157,14 +157,23 @@ export function Step5Voice({ draft, mergeDraft, saveToApi, next, back }: Props) 
     setSaving(true)
     setError(null)
     mergeDraft({ voice_examples: examples, website_url: websiteUrl })
-    await saveToApi({
-      tone_examples:   [examples],
-      website_url:     websiteUrl || null,
-      emoji_policy:    emojiPolicy,
-      emoji_favorites: emojiPolicy === "sparingly" && emojiFavorites.trim() ? emojiFavorites.trim() : null,
-    })
-    setSaving(false)
-    next()
+    try {
+      const result = await saveToApi({
+        tone_examples:   [examples],
+        website_url:     websiteUrl || null,
+        emoji_policy:    emojiPolicy,
+        emoji_favorites: emojiPolicy === "sparingly" && emojiFavorites.trim() ? emojiFavorites.trim() : null,
+      })
+      if ((result as { error?: string }).error) {
+        setError((result as { error?: string }).error ?? "Failed to save. Please try again.")
+        return
+      }
+      next()
+    } catch {
+      setError("Network error — please try again.")
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
