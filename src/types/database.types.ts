@@ -236,6 +236,7 @@ export type Database = {
           font_body: string
           font_heading: string
           geographic_location: string | null
+          goals: string[] | null
           id: string
           industry: string | null
           intelligence_tokens: Json
@@ -273,6 +274,7 @@ export type Database = {
           font_body?: string
           font_heading?: string
           geographic_location?: string | null
+          goals?: string[] | null
           id?: string
           industry?: string | null
           intelligence_tokens?: Json
@@ -310,6 +312,7 @@ export type Database = {
           font_body?: string
           font_heading?: string
           geographic_location?: string | null
+          goals?: string[] | null
           id?: string
           industry?: string | null
           intelligence_tokens?: Json

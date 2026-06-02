@@ -42,7 +42,8 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/api/inngest") ||          // Inngest webhook — must be public
     pathname.startsWith("/api/webhooks/") ||        // Stripe/Mollie/Buffer webhooks
     pathname.startsWith("/api/billing/") ||         // Billing redirects (Stripe/Mollie)
-    pathname.startsWith("/api/calendar/add")        // Magic link from trend email
+    pathname.startsWith("/api/calendar/add") ||     // Magic link from trend email
+    pathname.startsWith("/join")                    // Public marketing landing page
 
   if (!user && !isPublicRoute) {
     const url = request.nextUrl.clone()
