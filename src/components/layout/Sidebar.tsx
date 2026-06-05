@@ -5,39 +5,55 @@ import { usePathname } from "next/navigation"
 import {
   LayoutDashboard,
   CalendarDays,
-  Upload,
-  FileText,
-  Clapperboard,
-  BarChart2,
+  Wand2,
   Palette,
+  BarChart2,
   Settings,
   Zap,
   Link2,
-  LayoutTemplate,
-  Wand2,
-  TrendingUp,
-  Sparkles,
   ShieldCheck,
-  Brain,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
-const navItems = [
-  { label: "Dashboard",      href: "/dashboard",            icon: LayoutDashboard },
-  { label: "Calendar",       href: "/calendar",             icon: CalendarDays    },
-  { label: "Upload",         href: "/upload",               icon: Upload          },
-  { label: "Posts",          href: "/posts",                icon: FileText        },
-  { label: "Stories & Reels",href: "/stories",              icon: Clapperboard   },
-  { label: "Create Video",   href: "/create",               icon: Wand2           },
-  { label: "Trend Builder",  href: "/trend",                icon: TrendingUp      },
-  { label: "Analytics",      href: "/analytics",            icon: BarChart2       },
-  { label: "Brand Intel",    href: "/brand-intelligence",   icon: Brain           },
-  { label: "Brand",          href: "/brand",                icon: Palette         },
-  { label: "Templates",      href: "/templates",            icon: LayoutTemplate  },
-  { label: "Inspiration",    href: "/inspiration",          icon: Sparkles        },
-  { label: "Connections",    href: "/settings/connections", icon: Link2           },
-  { label: "Settings",       href: "/settings",             icon: Settings        },
+// ── Nav structure ─────────────────────────────────────────────────────────────
+
+interface NavItem {
+  label: string
+  href:  string
+  icon:  React.ElementType
+  /** If true, only match exact path (not prefix) */
+  exact?: boolean
+}
+
+interface NavSection {
+  heading: string
+  items:   NavItem[]
+}
+
+const NAV_SECTIONS: NavSection[] = [
+  {
+    heading: "Create",
+    items: [
+      { label: "Home",     href: "/dashboard", icon: LayoutDashboard, exact: true },
+      { label: "Schedule", href: "/schedule",  icon: CalendarDays },
+      { label: "Create",   href: "/create",    icon: Wand2 },
+    ],
+  },
+  {
+    heading: "Intelligence",
+    items: [
+      { label: "Brand",    href: "/brand",     icon: Palette },
+      { label: "Insights", href: "/insights",  icon: BarChart2 },
+    ],
+  },
+  {
+    heading: "Account",
+    items: [
+      { label: "Connect",  href: "/settings/connections", icon: Link2 },
+      { label: "Settings", href: "/settings",             icon: Settings, exact: true },
+    ],
+  },
 ]
 
 /** Only visible for the admin account */
@@ -47,9 +63,16 @@ interface SidebarProps {
   userEmail?: string
 }
 
-function NavLink({ label, href, icon: Icon }: { label: string; href: string; icon: React.ElementType }) {
+function NavLink({ label, href, icon: Icon, exact }: NavItem) {
   const pathname = usePathname()
-  const active = pathname === href || (href !== "/settings" && pathname.startsWith(href + "/"))
+  const active = exact
+    ? pathname === href
+    : pathname === href || pathname.startsWith(href + "/") || pathname.startsWith(href + "?")
+
+  // Special case: /settings/connections should NOT activate /settings
+  // This is handled by exact: true on /settings
+  // And /settings/connections activates on startsWith("/settings/connections")
+
   return (
     <Tooltip delayDuration={300}>
       <TooltipTrigger asChild>
@@ -85,18 +108,30 @@ export function Sidebar({ userEmail }: SidebarProps) {
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
-        {navItems.map(item => <NavLink key={item.href} {...item} />)}
+      <nav className="flex-1 overflow-y-auto py-3 px-2">
+        {NAV_SECTIONS.map((section) => (
+          <div key={section.heading}>
+            {/* Section header */}
+            <p className="text-[10px] font-semibold tracking-widest text-[hsl(var(--sidebar-foreground))]/30 px-3 pt-4 pb-1 uppercase">
+              {section.heading}
+            </p>
+            <div className="space-y-0.5">
+              {section.items.map((item) => (
+                <NavLink key={item.href} {...item} />
+              ))}
+            </div>
+          </div>
+        ))}
 
         {/* Admin-only section */}
         {isAdmin && (
           <>
-            <div className="pt-3 pb-1 px-3">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-[hsl(var(--sidebar-foreground))]/30">
-                Admin
-              </p>
+            <p className="text-[10px] font-semibold tracking-widest text-[hsl(var(--sidebar-foreground))]/30 px-3 pt-4 pb-1 uppercase">
+              Admin
+            </p>
+            <div className="space-y-0.5">
+              <NavLink label="System Health" href="/admin" icon={ShieldCheck} />
             </div>
-            <NavLink label="System Health" href="/admin" icon={ShieldCheck} />
           </>
         )}
       </nav>

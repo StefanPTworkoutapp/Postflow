@@ -61,7 +61,7 @@ export function MediaPicker({ selected, onChange, max, className }: Props) {
     <div className="text-center py-8 space-y-2">
       <ImageIcon className="h-8 w-8 mx-auto text-[hsl(var(--muted-foreground))]/30" />
       <p className="text-sm text-[hsl(var(--muted-foreground))]">No media yet.</p>
-      <a href="/upload" className="text-sm text-indigo-500 hover:underline">Upload files →</a>
+      <a href="/schedule?tab=upload" className="text-sm text-indigo-500 hover:underline">Upload files →</a>
     </div>
   )
 

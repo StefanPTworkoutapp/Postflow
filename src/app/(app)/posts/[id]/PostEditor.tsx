@@ -496,7 +496,7 @@ export function PostEditor({ post, brandName, industry, contentLanguage = "en", 
         setError(json.error ?? "Delete failed")
         return
       }
-      router.push("/posts")
+      router.push("/schedule?tab=posts")
       router.refresh()
     } finally {
       setDeleting(false)
@@ -509,7 +509,7 @@ export function PostEditor({ post, brandName, industry, contentLanguage = "en", 
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Link
-            href="/posts"
+            href="/schedule?tab=posts"
             className="flex items-center gap-1.5 text-sm text-[hsl(var(--muted-foreground))] hover:text-foreground transition-colors"
           >
             <ArrowLeft className="h-4 w-4" />

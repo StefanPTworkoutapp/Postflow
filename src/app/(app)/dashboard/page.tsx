@@ -185,7 +185,7 @@ export default async function DashboardPage() {
           value={String(postedCount ?? 0)}
           icon={<TrendingUp className="h-4 w-4 text-blue-500" />}
           description="Published across platforms"
-          href="/calendar"
+          href="/schedule?tab=calendar"
         />
       </div>
 
@@ -200,7 +200,7 @@ export default async function DashboardPage() {
                 Action items
               </CardTitle>
               {(actionItems?.length ?? 0) > 0 && (
-                <Link href="/calendar" className="text-xs text-indigo-500 hover:underline">
+                <Link href="/schedule?tab=calendar" className="text-xs text-indigo-500 hover:underline">
                   View all
                 </Link>
               )}
@@ -217,7 +217,7 @@ export default async function DashboardPage() {
                 {actionItems!.map(entry => {
                   const cfg    = STATUS_CONFIG[entry.status] ?? STATUS_CONFIG.planned
                   const postId = (entry.posts as Array<{ id: string }> | null)?.[0]?.id
-                  const href   = postId ? `/posts/${postId}` : `/calendar?open=${entry.id}`
+                  const href   = postId ? `/posts/${postId}` : `/schedule?tab=calendar&open=${entry.id}`
                   return (
                     <li key={entry.id}>
                       <Link
@@ -255,7 +255,7 @@ export default async function DashboardPage() {
                 <CalendarDays className="h-4 w-4 text-indigo-500" />
                 Upcoming this week
               </CardTitle>
-              <Link href="/calendar" className="text-xs text-indigo-500 hover:underline">
+              <Link href="/schedule?tab=calendar" className="text-xs text-indigo-500 hover:underline">
                 Open calendar
               </Link>
             </div>
@@ -275,7 +275,7 @@ export default async function DashboardPage() {
                 {upcomingPosts!.map(entry => {
                   const cfg    = STATUS_CONFIG[entry.status] ?? STATUS_CONFIG.planned
                   const postId = (entry.posts as Array<{ id: string }> | null)?.[0]?.id
-                  const href   = postId ? `/posts/${postId}` : `/calendar?open=${entry.id}`
+                  const href   = postId ? `/posts/${postId}` : `/schedule?tab=calendar&open=${entry.id}`
                   return (
                     <li key={entry.id}>
                       <Link
