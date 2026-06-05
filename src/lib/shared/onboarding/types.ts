@@ -96,11 +96,11 @@ export const INDUSTRIES = [
 ]
 
 export const GOALS = [
-  { value: "lead_generation", label: "Get more clients" },
-  { value: "brand_awareness", label: "Build my brand" },
-  { value: "engagement", label: "Educate my audience" },
-  { value: "showcase", label: "Showcase my work" },
-  { value: "sales", label: "Drive sales" },
+  { value: "lead_generation", label: "Get more clients",    icon: "🎯", description: "Turn followers into paying customers" },
+  { value: "brand_awareness", label: "Build my brand",      icon: "🏆", description: "Grow your presence and recognition" },
+  { value: "engagement",      label: "Educate my audience", icon: "📚", description: "Share knowledge and build authority" },
+  { value: "showcase",        label: "Showcase my work",    icon: "🖼️", description: "Highlight your projects and results" },
+  { value: "sales",           label: "Drive sales",         icon: "💰", description: "Promote products and offers directly" },
 ]
 
 export const TONE_ADJECTIVES = [

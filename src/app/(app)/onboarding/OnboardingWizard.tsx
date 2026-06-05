@@ -87,6 +87,7 @@ export function OnboardingWizard({ existingBrand }: Props) {
   const [step,      setStep]      = useState<number>(existingBrand ? 2 : 1)
   const [brandId,   setBrandId]   = useState<string | null>(existingBrand?.id ?? null)
   const [draft,     setDraft]     = useState<OnboardingDraft>(() => serverDraft(existingBrand))
+  const [skipping,  setSkipping]  = useState(false)
 
   // ── Hydration: restore from localStorage on first client mount ───────────
   // This MUST be in useEffect — useState initialisers run during SSR where
@@ -158,36 +159,72 @@ export function OnboardingWizard({ existingBrand }: Props) {
     return json
   }
 
+  // ── Skip handler ─────────────────────────────────────────────────────────
+  async function handleSkip() {
+    setSkipping(true)
+    try {
+      // Save current draft progress and mark as skipped
+      await fetch("/api/onboarding/save", {
+        method:  "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({
+          brand_id:           brandId,
+          onboarding_skipped: true,
+          ...draft,
+        }),
+      })
+    } catch {
+      // Best-effort — still redirect even if save fails
+    }
+    // Store skip flag so /create can show the banner
+    try { sessionStorage.setItem("postflow_onboarding_skipped", "1") } catch { /* ignore */ }
+    clearSavedState()
+    router.push("/create")
+  }
+
   // ── Loading gate: don't render steps until localStorage has been checked ──
   // This prevents a flash of step 1 before the saved step is restored.
   if (!hydrated) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-indigo-400" />
+        <Loader2 className="h-6 w-6 animate-spin text-[var(--pf-teal)]" />
       </div>
     )
   }
 
   const progress   = Math.round((step / TOTAL_STEPS) * 100)
   const stepProps  = { draft, mergeDraft, brandId, saveToApi, next, back }
+  // Skip visible on steps 3–9 (not 1, 2, or 10)
+  const showSkip   = step >= 3 && step <= 9
 
   return (
     <div className="flex flex-col min-h-screen">
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 border-b">
         <div className="flex items-center gap-2">
-          <Zap className="h-5 w-5 text-indigo-500" />
+          <Zap className="h-5 w-5 text-[var(--pf-teal)]" />
           <span className="font-semibold text-sm">PostFlow</span>
         </div>
-        <div className="text-sm text-[hsl(var(--muted-foreground))]">
-          Step {step} of {TOTAL_STEPS}
+        <div className="flex items-center gap-4">
+          {showSkip && (
+            <button
+              onClick={handleSkip}
+              disabled={skipping}
+              className="text-sm text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors disabled:opacity-50"
+            >
+              {skipping ? "Saving…" : "Skip setup — create first post →"}
+            </button>
+          )}
+          <div className="text-sm text-[hsl(var(--muted-foreground))]">
+            Step {step} of {TOTAL_STEPS}
+          </div>
         </div>
       </div>
 
       {/* Progress bar */}
-      <div className="h-1 bg-[hsl(var(--muted))]">
+      <div className="w-full bg-[hsl(var(--muted))] h-1">
         <div
-          className="h-full bg-indigo-500 transition-all duration-300"
+          className="h-1 bg-[var(--pf-teal)] rounded-full transition-all duration-300"
           style={{ width: `${progress}%` }}
         />
       </div>

@@ -265,7 +265,7 @@ export async function BrandIntelligenceContent({ brandId, brandIntelligenceToken
                 Complete brand calibration to seed your first tokens.
               </p>
             </div>
-            <Link href="/onboarding" className="text-sm text-indigo-500 hover:underline">
+            <Link href="/brand/calibration" className="text-sm text-indigo-500 hover:underline">
               Complete calibration →
             </Link>
           </CardContent>

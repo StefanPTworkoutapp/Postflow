@@ -1,7 +1,10 @@
+import type { Metadata } from "next"
 import { createClient } from "@/lib/supabase/server"
 import { getBrand } from "@/lib/server/brand/getBrand"
 import { getBufferChannels, bufferServiceToPlatform } from "@/lib/server/buffer/client"
 import { ConnectionsClient } from "./ConnectionsClient"
+
+export const metadata: Metadata = { title: "PostFlow · Connect" }
 
 /**
  * /settings/connections

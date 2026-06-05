@@ -1,3 +1,4 @@
+import type { Metadata } from "next"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/server"
 import { getBrand } from "@/lib/server/brand/getBrand"
@@ -5,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { WeeklyIdeas } from "@/components/dashboard/WeeklyIdeas"
 import {
   CalendarDays,
   CheckCircle2,
@@ -16,6 +18,8 @@ import {
   ImageIcon,
   Video,
 } from "lucide-react"
+
+export const metadata: Metadata = { title: "PostFlow · Home" }
 
 const PLATFORM_EMOJI: Record<string, string> = {
   instagram: "📸",
@@ -188,6 +192,9 @@ export default async function DashboardPage() {
           href="/schedule?tab=calendar"
         />
       </div>
+
+      {/* Weekly ideas widget — client component, uses localStorage cache */}
+      {brand && <WeeklyIdeas brandId={brand.id} />}
 
       {/* Action items + Upcoming posts */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">

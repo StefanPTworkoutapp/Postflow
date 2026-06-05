@@ -166,9 +166,15 @@ export function SettingsClient({ user, account, socialAccounts: initial, brandId
             </div>
             <div>
               <p className="text-sm font-medium">{user.email}</p>
-              <Badge className={cn("text-xs border-0 mt-0.5", tierCfg.className)}>
-                {tierCfg.label} plan
-              </Badge>
+              <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                <Badge className={cn("text-xs border-0", tierCfg.className)}>
+                  {tierCfg.label} plan
+                </Badge>
+                {/* Trial render counter — hardcoded at 3 until usage tracking is wired */}
+                <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400">
+                  Trial · 3 renders remaining
+                </span>
+              </div>
             </div>
           </div>
 

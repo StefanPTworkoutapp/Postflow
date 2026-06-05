@@ -1,7 +1,10 @@
+import type { Metadata } from "next"
 import { createClient } from "@/lib/supabase/server"
 import { getBrand } from "@/lib/server/brand/getBrand"
 import { getBufferChannels, bufferServiceToPlatform } from "@/lib/server/buffer/client"
 import { SettingsClient } from "./SettingsClient"
+
+export const metadata: Metadata = { title: "PostFlow · Settings" }
 
 export default async function SettingsPage() {
   const supabase = await createClient()

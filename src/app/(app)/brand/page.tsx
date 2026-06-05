@@ -6,11 +6,13 @@
  */
 
 import type { Metadata }              from "next"
+import { Suspense }                   from "react"
 import { redirect }                   from "next/navigation"
 import { getBrand }                   from "@/lib/server/brand/getBrand"
 import { BrandEditor }                from "./BrandEditor"
 import { BrandTabBar }                from "./BrandTabBar"
 import { BrandIntelligenceContent }   from "../brand-intelligence/BrandIntelligenceContent"
+import { PageSkeleton }               from "@/components/ui/PageSkeleton"
 
 export const metadata: Metadata = { title: "PostFlow · Brand" }
 
@@ -43,10 +45,12 @@ export default async function BrandPage({
       {/* Tab content */}
       {activeTab === "brand" && <BrandEditor brand={brand} />}
       {activeTab === "intelligence" && (
-        <BrandIntelligenceContent
-          brandId={brand.id}
-          brandIntelligenceTokens={brand.intelligence_tokens}
-        />
+        <Suspense fallback={<PageSkeleton rows={6} />}>
+          <BrandIntelligenceContent
+            brandId={brand.id}
+            brandIntelligenceTokens={brand.intelligence_tokens}
+          />
+        </Suspense>
       )}
     </div>
   )

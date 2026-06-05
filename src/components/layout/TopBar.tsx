@@ -62,6 +62,11 @@ export function TopBar({ userEmail, userName }: TopBarProps) {
             <Bell className="h-4 w-4" />
           </Button>
 
+          {/* Trial badge — shown next to avatar while on trial */}
+          <span className="hidden sm:inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400">
+            Trial
+          </span>
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className="rounded-full" aria-label="Profile menu">

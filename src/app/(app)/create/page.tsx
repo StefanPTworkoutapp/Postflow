@@ -12,6 +12,7 @@ import { createClient }     from "@/lib/supabase/server"
 import { createServiceClient } from "@/lib/supabase/service"
 import { CreateClient }     from "./CreateClient"
 import { CreateTabBar }     from "./CreateTabBar"
+import { OnboardingSkippedBanner } from "./OnboardingSkippedBanner"
 import { StoriesClient }    from "../stories/StoriesClient"
 import { TemplatesClient }  from "../templates/TemplatesClient"
 
@@ -63,6 +64,9 @@ export default async function CreatePage({
 
   return (
     <div className="space-y-6">
+      {/* Onboarding-skipped banner (client-side, reads sessionStorage) */}
+      <OnboardingSkippedBanner />
+
       {/* Header */}
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Create</h1>

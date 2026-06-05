@@ -6,12 +6,15 @@
  */
 
 import type { Metadata }   from "next"
+import { Suspense }        from "react"
 import { redirect }        from "next/navigation"
 import Link                from "next/link"
 import { createClient }    from "@/lib/supabase/server"
 import { getBrand }        from "@/lib/server/brand/getBrand"
 import { InsightsTabBar }  from "./InsightsTabBar"
+import { SyncButton }      from "./SyncButton"
 import { TrendClient }     from "../trend/TrendClient"
+import { PageSkeleton }    from "@/components/ui/PageSkeleton"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge }    from "@/components/ui/badge"
@@ -301,8 +304,9 @@ export default async function InsightsPage({
 
           {brand && (
             <>
-              <div>
+              <div className="flex items-center justify-between">
                 <p className="text-sm text-muted-foreground">Last 90 days · {posts.length} published posts</p>
+                <SyncButton />
               </div>
 
               {!hasData && (
@@ -639,7 +643,11 @@ export default async function InsightsPage({
       )}
 
       {/* ── Trends tab ──────────────────────────────────────────────────────── */}
-      {activeTab === "trends" && <TrendClient />}
+      {activeTab === "trends" && (
+        <Suspense fallback={<PageSkeleton rows={5} />}>
+          <TrendClient />
+        </Suspense>
+      )}
     </div>
   )
 }
