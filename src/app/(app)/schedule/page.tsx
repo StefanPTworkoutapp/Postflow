@@ -9,7 +9,7 @@ import type { Metadata } from "next"
 import { Suspense }       from "react"
 import Link               from "next/link"
 import { createClient }   from "@/lib/supabase/server"
-import { getBrand }       from "@/lib/server/brand/getBrand"
+import { getActiveBrand }       from "@/lib/server/brand/getActiveBrand"
 import { CalendarView }   from "../calendar/CalendarView"
 import { ScheduleTabBar } from "./ScheduleTabBar"
 
@@ -52,7 +52,7 @@ export default async function SchedulePage({
   const activeTab = (params.tab as Tab | undefined) ?? "calendar"
 
   const supabase = await createClient()
-  const brand    = await getBrand()
+  const brand    = await getActiveBrand()
 
   // ── Calendar data ──────────────────────────────────────────────────────────
   const now   = new Date()

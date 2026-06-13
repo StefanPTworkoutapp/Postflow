@@ -5,6 +5,7 @@ import { useSearchParams, useRouter }             from "next/navigation"
 import {
   Loader2, Unlink, ExternalLink, CheckCircle2,
   AlertCircle, RefreshCw, Link2, ChevronDown, ChevronUp,
+  Eye, EyeOff,
 } from "lucide-react"
 import { Button }        from "@/components/ui/button"
 import { PlatformBadge, PLATFORM_META } from "@/components/shared/PlatformBadge"
@@ -71,21 +72,15 @@ const ALL_PLATFORMS = ["instagram", "linkedin", "facebook", "tiktok", "x", "thre
 const HELP_CONTENT: Record<string, React.ReactNode> = {
   buffer: (
     <ol className="list-decimal list-inside space-y-1.5">
-      <li>Click &ldquo;Connect Buffer&rdquo; above</li>
-      <li>You&rsquo;ll be taken to Buffer&rsquo;s website — log in or create a free account</li>
-      <li>Click <strong>Approve</strong> to give PostFlow access</li>
-      <li>You&rsquo;ll return here automatically</li>
-      <li>
-        <a href="#video-buffer" className="text-[var(--pf-color-brand-primary)] hover:underline inline-flex items-center gap-1">
-          Watch walkthrough →
-        </a>
-      </li>
+      <li>Visit <a href="https://buffer.com/app/account/api" target="_blank" rel="noreferrer" className="text-[var(--pf-teal)] hover:underline">buffer.com/app/account/api ↗</a></li>
+      <li>Copy your <strong>Access Token</strong></li>
+      <li>Paste it in the field below and click Connect Buffer</li>
     </ol>
   ),
   instagram: (
     <>
       <p className="mb-2 text-[hsl(var(--muted-foreground))]">
-        Instagram connects through Facebook Business. You&rsquo;ll need: a Facebook account
+        <strong>Before clicking Connect:</strong> make sure you&rsquo;re already logged in to Facebook as your business account in this browser. Instagram connects through Facebook Business. You&rsquo;ll need: a Facebook account
         + Instagram set to <strong>Professional</strong> (Creator or Business).
       </p>
       <ol className="list-decimal list-inside space-y-1.5">
@@ -616,13 +611,64 @@ function ConnectionsInner({ initialAccounts, brandId }: Props) {
     }
   }
 
+  // Open OAuth in a small popup so the user never leaves this page.
+  // The callback HTML sends a postMessage on success/error and closes itself.
   function handleConnect(platform: string) {
     if (platform === "buffer") {
-      window.location.href = "/settings"
+      // Buffer uses PAT — scroll to buffer section / handled inline
+      document.getElementById("buffer-token-section")?.scrollIntoView({ behavior: "smooth" })
       return
     }
+    if (!DIRECT_CONNECT_SUPPORTED.has(platform)) return
+
+    const width  = 560
+    const height = 660
+    const left   = Math.max(0, (window.screen.width  - width)  / 2)
+    const top    = Math.max(0, (window.screen.height - height) / 2)
+    const popup  = window.open(
+      `/api/auth/${platform}`,
+      `pf-oauth-${platform}`,
+      `width=${width},height=${height},left=${left},top=${top},scrollbars=yes,resizable=yes`
+    )
+
+    if (!popup) {
+      // Popup blocked — fall back to full navigation
+      setConnecting(platform)
+      window.location.href = `/api/auth/${platform}`
+      return
+    }
+
     setConnecting(platform)
-    window.location.href = `/api/auth/${platform}`
+
+    function onMessage(event: MessageEvent) {
+      if (event.origin !== window.location.origin) return
+      const data = event.data as { type?: string; platform?: string; handle?: string; error?: string }
+      if (data?.type === "pf_oauth_success" && data.platform === platform) {
+        window.removeEventListener("message", onMessage)
+        clearInterval(closedCheck)
+        popup?.close()
+        setConnecting(null)
+        setSuccess(`${PLATFORM_META[platform]?.label ?? platform} connected${data.handle ? ` as ${data.handle}` : ""}!`)
+        void handleRefresh()
+      } else if (data?.type === "pf_oauth_error" && data.platform === platform) {
+        window.removeEventListener("message", onMessage)
+        clearInterval(closedCheck)
+        popup?.close()
+        setConnecting(null)
+        setError(`Failed to connect ${PLATFORM_META[platform]?.label ?? platform}: ${data.error ?? "unknown error"}`)
+      }
+    }
+
+    // Fallback: detect if the user just closed the popup without completing OAuth
+    const closedCheck = setInterval(() => {
+      if (popup.closed) {
+        clearInterval(closedCheck)
+        window.removeEventListener("message", onMessage)
+        setConnecting(null)
+      }
+    }, 500)
+
+    window.addEventListener("message", onMessage)
   }
 
   // ── Determine which step gets the subtle highlight (next unconnected) ──────
@@ -698,30 +744,8 @@ function ConnectionsInner({ initialAccounts, brandId }: Props) {
             connecting={connecting}
           />
 
-          {/* Buffer section (separate card if not yet connected) */}
-          {!hasBuffer && (
-            <div className="rounded-xl border p-5 space-y-3">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="font-medium flex items-center gap-2">
-                    <PlatformBadge platform="buffer" variant="icon" />
-                    Buffer
-                  </p>
-                  <p className="text-sm text-[hsl(var(--muted-foreground))] mt-0.5">
-                    Buffer connects all your social platforms in one place.
-                    Connect Buffer to enable post scheduling.
-                  </p>
-                </div>
-                <Button
-                  size="sm"
-                  asChild
-                  className="bg-[var(--pf-color-brand-primary)] hover:bg-[#0B9090] text-white shrink-0"
-                >
-                  <a href="/settings">Connect Buffer →</a>
-                </Button>
-              </div>
-            </div>
-          )}
+          {/* Buffer inline PAT section */}
+          <BufferTokenSection onConnected={handleRefresh} />
 
           {/* Wizard for any remaining unconnected wizard platforms */}
           {WIZARD_STEPS.some(s => s.isBuffer ? !hasBuffer : !connectedPlatforms.has(s.key)) && (
@@ -766,6 +790,125 @@ function ConnectionsInner({ initialAccounts, brandId }: Props) {
 
       {/* Unused brandId — satisfies prop contract for future use */}
       <input type="hidden" value={brandId ?? ""} aria-hidden />
+    </div>
+  )
+}
+
+// ── BufferTokenSection ────────────────────────────────────────────────────────
+// Inline Buffer PAT form — no redirect to /settings needed.
+
+function BufferTokenSection({ onConnected }: { onConnected: () => void }) {
+  const [token,   setToken]   = useState("")
+  const [show,    setShow]    = useState(false)
+  const [saving,  setSaving]  = useState(false)
+  const [err,     setErr]     = useState<string | null>(null)
+  const [success, setSuccess] = useState(false)
+
+  async function save() {
+    if (!token.trim()) return
+    setSaving(true)
+    setErr(null)
+    try {
+      const res  = await fetch("/api/settings/buffer", {
+        method:  "POST",
+        headers: { "content-type": "application/json" },
+        body:    JSON.stringify({ access_token: token.trim() }),
+      })
+      const data = await res.json() as { error?: string; channels?: unknown[] }
+      if (!res.ok) {
+        setErr(data.error ?? "Failed to save token")
+      } else {
+        setSuccess(true)
+        setToken("")
+        onConnected()
+      }
+    } catch {
+      setErr("Network error — please try again")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div id="buffer-token-section" className="rounded-xl border p-5 space-y-4">
+      <div className="flex items-start gap-3">
+        <PlatformBadge platform="buffer" variant="icon" connected={success} />
+        <div>
+          <p className="font-medium text-sm">Buffer</p>
+          <p className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">
+            Buffer schedules and publishes your posts. Connect it with your API token.
+          </p>
+        </div>
+      </div>
+
+      {success ? (
+        <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400">
+          <CheckCircle2 className="h-4 w-4 shrink-0" />
+          Buffer connected! Your social accounts are now synced.
+        </div>
+      ) : (
+        <>
+          {/* Step-by-step guide */}
+          <div className="rounded-lg bg-[hsl(var(--muted))]/50 p-4 text-sm space-y-2">
+            <p className="font-medium text-xs uppercase tracking-wide text-[hsl(var(--muted-foreground))]">How to get your token</p>
+            <ol className="list-decimal list-inside space-y-1.5 text-[hsl(var(--muted-foreground))]">
+              <li>
+                Go to{" "}
+                <a
+                  href="https://buffer.com/app/account/api"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-[var(--pf-teal)] hover:underline font-medium"
+                >
+                  buffer.com/app/account/api ↗
+                </a>
+                {" "}(opens in a new tab)
+              </li>
+              <li>Make sure you&apos;re logged in to Buffer</li>
+              <li>Scroll to <strong>Access Token</strong> and copy it</li>
+              <li>Paste it below</li>
+            </ol>
+          </div>
+
+          {/* Token input */}
+          <div className="space-y-2">
+            <div className="relative">
+              <input
+                type={show ? "text" : "password"}
+                value={token}
+                onChange={e => { setToken(e.target.value); setErr(null) }}
+                onKeyDown={e => { if (e.key === "Enter") void save() }}
+                placeholder="Paste your Buffer access token here…"
+                className="w-full rounded-md border border-[hsl(var(--input))] bg-transparent px-3 py-2 pr-10 text-sm shadow-sm transition-colors placeholder:text-[hsl(var(--muted-foreground))] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[hsl(var(--ring))]"
+              />
+              <button
+                type="button"
+                onClick={() => setShow(v => !v)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[hsl(var(--muted-foreground))] hover:text-foreground transition-colors"
+                tabIndex={-1}
+                aria-label={show ? "Hide token" : "Show token"}
+              >
+                {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+
+            {err && (
+              <p className="text-xs text-[hsl(var(--destructive))] flex items-center gap-1">
+                <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                {err}
+              </p>
+            )}
+
+            <Button
+              onClick={() => void save()}
+              disabled={!token.trim() || saving}
+              className="w-full bg-[var(--pf-teal)] hover:bg-[#0B9090] text-white"
+            >
+              {saving ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Connecting…</> : "Connect Buffer"}
+            </Button>
+          </div>
+        </>
+      )}
     </div>
   )
 }

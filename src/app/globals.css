@@ -79,6 +79,9 @@
    Source of truth is src/lib/tokens/design.ts — values kept in sync manually.
    These are additive and do NOT replace the shadcn --color-* variables above. */
 :root {
+  /* Shorthand alias — used throughout UI as var(--pf-teal) */
+  --pf-teal: #0DA5A5;
+
   /* Brand */
   --pf-color-brand-primary:   #0DA5A5;
   --pf-color-brand-secondary: #1A203A;

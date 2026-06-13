@@ -8,7 +8,7 @@
  */
 
 import { redirect }              from "next/navigation"
-import { getBrand }              from "@/lib/server/brand/getBrand"
+import { getActiveBrand }              from "@/lib/server/brand/getActiveBrand"
 import { createServiceClient }   from "@/lib/supabase/service"
 import { InspirationClient }     from "./InspirationClient"
 import type { SavedAnalysis }    from "./InspirationClient"
@@ -17,7 +17,7 @@ import type { SavedAnalysis }    from "./InspirationClient"
 const nt = (x: unknown) => x as any
 
 export default async function InspirationPage() {
-  const brand = await getBrand()
+  const brand = await getActiveBrand()
   if (!brand) redirect("/onboarding")
 
   const service = createServiceClient()

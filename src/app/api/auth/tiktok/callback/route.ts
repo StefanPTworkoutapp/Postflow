@@ -16,41 +16,73 @@
  *   TIKTOK_CLIENT_KEY, TIKTOK_CLIENT_SECRET, NEXT_PUBLIC_APP_URL
  */
 
-import { NextRequest, NextResponse } from "next/server"
-import { cookies }                   from "next/headers"
-import { createClient }              from "@/lib/supabase/server"
-import { getBrand }                  from "@/lib/server/brand/getBrand"
+import { NextRequest } from "next/server"
+import { cookies }      from "next/headers"
+import { createClient } from "@/lib/supabase/server"
+import { getActiveBrand } from "@/lib/server/brand/getActiveBrand"
 
 const REDIRECT_BASE = process.env.NEXT_PUBLIC_APP_URL ?? "https://postflow-amber.vercel.app"
 const TT_API        = "https://open.tiktokapis.com/v2"
 
-function errorRedirect(reason: string) {
-  return NextResponse.redirect(
-    `${REDIRECT_BASE}/settings/connections?error=${encodeURIComponent(reason)}`
+function oauthResult(opts: {
+  success:  boolean
+  handle?:  string
+  returnTo: string
+  error?:   string
+}): Response {
+  const { success, handle = "", returnTo, error = "unknown" } = opts
+  const msg = success
+    ? `{ type: 'pf_oauth_success', platform: 'tiktok', handle: ${JSON.stringify(handle)} }`
+    : `{ type: 'pf_oauth_error', platform: 'tiktok', error: ${JSON.stringify(error)} }`
+  const fallback = success
+    ? `${REDIRECT_BASE}${returnTo}${returnTo.includes("?") ? "&" : "?"}connected=tiktok`
+    : `${REDIRECT_BASE}/settings/connections?error=${encodeURIComponent(error)}`
+  return new Response(
+    `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Connecting…</title></head><body>
+<script>
+  if (window.opener && !window.opener.closed) {
+    try { window.opener.postMessage(${msg}, '${REDIRECT_BASE}') } catch(e) {}
+    window.close()
+  } else {
+    window.location.replace('${fallback}')
+  }
+</script>
+<p style="font-family:system-ui,sans-serif;padding:2rem;color:#6b7280;text-align:center">
+  ${success ? "Connected! You can close this window." : "Something went wrong. Redirecting…"}
+</p>
+</body></html>`,
+    { headers: { "Content-Type": "text/html" } }
   )
 }
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
 
+  // ── Read PKCE cookie first (needed for returnTo even on early errors) ───────
+  const cookieStore  = await cookies()
+  const returnTo     = cookieStore.get("tiktok_return_to")?.value ?? "/settings/connections"
+  const codeVerifier = cookieStore.get("tiktok_code_verifier")?.value
+
+  const err = (reason: string) => oauthResult({ success: false, returnTo, error: reason })
+
   // ── TikTok error response ──────────────────────────────────────────────────
   const ttError = searchParams.get("error")
   if (ttError) {
     const desc = searchParams.get("error_description") ?? ttError
     console.error("[tiktok-callback] TikTok returned error:", ttError, desc)
-    return errorRedirect(desc)
+    return err(desc)
   }
 
   const code = searchParams.get("code")
-  if (!code) return errorRedirect("missing_code")
+  if (!code) return err("missing_code")
 
   // ── Auth + brand ───────────────────────────────────────────────────────────
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.redirect(`${REDIRECT_BASE}/login`)
+  if (!user) return Response.redirect(`${REDIRECT_BASE}/login`)
 
-  const brand = await getBrand()
-  if (!brand) return errorRedirect("no_brand")
+  const brand = await getActiveBrand()
+  if (!brand) return err("no_brand")
 
   const clientKey    = process.env.TIKTOK_CLIENT_KEY
   const clientSecret = process.env.TIKTOK_CLIENT_SECRET
@@ -58,21 +90,16 @@ export async function GET(req: NextRequest) {
 
   if (!clientKey || !clientSecret) {
     console.error("[tiktok-callback] Missing TIKTOK_CLIENT_KEY or TIKTOK_CLIENT_SECRET")
-    return errorRedirect("server_misconfigured")
+    return err("server_misconfigured")
   }
 
   // ── Read PKCE verifier from cookie ─────────────────────────────────────────
-  const cookieStore   = await cookies()
-  const codeVerifier  = cookieStore.get("tiktok_code_verifier")?.value
   if (!codeVerifier) {
     console.error("[tiktok-callback] Missing tiktok_code_verifier cookie")
-    return errorRedirect("missing_pkce_verifier")
+    return err("missing_pkce_verifier")
   }
-  // Clear the cookie immediately
+  // Clear the cookies immediately
   cookieStore.delete("tiktok_code_verifier")
-
-  // Read return destination set by initiation route
-  const returnTo = cookieStore.get("tiktok_return_to")?.value ?? "/settings/connections"
   cookieStore.delete("tiktok_return_to")
 
   try {
@@ -94,7 +121,7 @@ export async function GET(req: NextRequest) {
 
     if (!tokenRes.ok) {
       console.error("[tiktok-callback] Token exchange failed:", tokenRes.status, tokenBody.slice(0, 200))
-      return errorRedirect("token_exchange_failed")
+      return err("token_exchange_failed")
     }
 
     const tokenData = JSON.parse(tokenBody) as {
@@ -109,7 +136,7 @@ export async function GET(req: NextRequest) {
 
     if (tokenData.error?.code && tokenData.error.code !== "ok") {
       console.error("[tiktok-callback] TikTok token error:", tokenData.error)
-      return errorRedirect(`tt_${tokenData.error.code}`)
+      return err(`tt_${tokenData.error.code}`)
     }
 
     const { access_token, open_id, expires_in } = tokenData.data!
@@ -151,17 +178,15 @@ export async function GET(req: NextRequest) {
 
     if (upsertError) {
       console.error("[tiktok-callback] DB upsert failed:", upsertError.message)
-      return errorRedirect("db_error")
+      return err("db_error")
     }
 
     console.log(`[tiktok-callback] Connected @${displayName} (open_id: ${open_id}) for brand ${brand.id}`)
 
-    return NextResponse.redirect(
-      `${REDIRECT_BASE}${returnTo}${returnTo.includes("?") ? "&" : "?"}connected=tiktok`
-    )
+    return oauthResult({ success: true, handle: displayName, returnTo })
 
-  } catch (err) {
-    console.error("[tiktok-callback] Unexpected error:", err)
-    return errorRedirect("unexpected")
+  } catch (e) {
+    console.error("[tiktok-callback] Unexpected error:", e)
+    return err("unexpected")
   }
 }

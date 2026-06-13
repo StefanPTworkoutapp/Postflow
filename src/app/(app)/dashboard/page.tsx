@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/server"
-import { getBrand } from "@/lib/server/brand/getBrand"
+import { getActiveBrand } from "@/lib/server/brand/getActiveBrand"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -43,7 +43,7 @@ const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
 export default async function DashboardPage() {
   const supabase   = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  const brand      = await getBrand()
+  const brand      = await getActiveBrand()
   const firstName  = (user?.user_metadata?.full_name as string | undefined)?.split(" ")[0] ?? "there"
 
   // ── Real data queries (only if brand exists) ──────────────────────────────

@@ -268,6 +268,9 @@ export async function BrandIntelligenceContent({ brandId, brandIntelligenceToken
             <Link href="/brand/calibration" className="text-sm text-indigo-500 hover:underline">
               Complete calibration →
             </Link>
+            <p className="text-xs text-muted-foreground/60">
+              Based on your setup answers — confidence grows with every post you publish.
+            </p>
           </CardContent>
         </Card>
       )}
@@ -301,6 +304,14 @@ export async function BrandIntelligenceContent({ brandId, brandIntelligenceToken
               value={String(sourceBreakdown.length)}
               sub="active signal types"
             />
+          </div>
+
+          {/* Confidence context note */}
+          <div className="flex items-start gap-2 rounded-lg border bg-muted/30 px-4 py-3">
+            <Info className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+            <p className="text-sm text-muted-foreground">
+              <span className="font-medium text-foreground">Based on your setup</span> — confidence scores will improve automatically as you publish posts and PostFlow learns from engagement data.
+            </p>
           </div>
 
           {/* Stuck tokens alert */}

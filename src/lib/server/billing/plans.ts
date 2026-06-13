@@ -3,11 +3,12 @@
  * Single source of truth — used by checkout, webhooks, and limit enforcement.
  */
 
-export type PlanTier = "free" | "starter" | "pro" | "business"
+export type PlanTier = "free" | "starter" | "pro" | "studio" | "agency" | "business"
 export type BillingInterval = "monthly" | "annual"
 
 export interface PlanLimits {
   postsPerMonth:     number | null   // null = unlimited
+  /** Brand limit: positive integer, or -1 for unlimited. */
   brands:            number
   storageGb:         number
   customTemplates:   number | null   // null = unlimited
@@ -17,6 +18,9 @@ export interface PlanLimits {
   storiesReels:      boolean
   weeklyTrendEmail:  boolean
 }
+
+/** Sentinel value: brands limit = -1 means unlimited. */
+export const UNLIMITED_BRANDS = -1
 
 export interface PlanDefinition {
   tier:             PlanTier
@@ -97,6 +101,48 @@ export const PLANS: Record<PlanTier, PlanDefinition> = {
     molliePlanId:       process.env.MOLLIE_PLAN_PRO           ?? null,
   },
 
+  studio: {
+    tier:            "studio",
+    name:            "Studio",
+    monthlyEurCents: 14900,
+    annualEurCents:  11900,
+    limits: {
+      postsPerMonth:     null,
+      brands:            5,
+      storageGb:         100,
+      customTemplates:   null,
+      teamMembers:       5,
+      analyticsLevel:    "advanced",
+      bufferIntegration: true,
+      storiesReels:      true,
+      weeklyTrendEmail:  true,
+    },
+    stripePriceMonthly: process.env.STRIPE_PRICE_STUDIO_MONTHLY ?? null,
+    stripePriceAnnual:  process.env.STRIPE_PRICE_STUDIO_ANNUAL  ?? null,
+    molliePlanId:       process.env.MOLLIE_PLAN_STUDIO           ?? null,
+  },
+
+  agency: {
+    tier:            "agency",
+    name:            "Agency",
+    monthlyEurCents: 29900,
+    annualEurCents:  23900,
+    limits: {
+      postsPerMonth:     null,
+      brands:            UNLIMITED_BRANDS,
+      storageGb:         500,
+      customTemplates:   null,
+      teamMembers:       20,
+      analyticsLevel:    "advanced",
+      bufferIntegration: true,
+      storiesReels:      true,
+      weeklyTrendEmail:  true,
+    },
+    stripePriceMonthly: process.env.STRIPE_PRICE_AGENCY_MONTHLY ?? null,
+    stripePriceAnnual:  process.env.STRIPE_PRICE_AGENCY_ANNUAL  ?? null,
+    molliePlanId:       process.env.MOLLIE_PLAN_AGENCY           ?? null,
+  },
+
   business: {
     tier:            "business",
     name:            "Business",
@@ -117,6 +163,33 @@ export const PLANS: Record<PlanTier, PlanDefinition> = {
     stripePriceAnnual:  process.env.STRIPE_PRICE_BUSINESS_ANNUAL  ?? null,
     molliePlanId:       process.env.MOLLIE_PLAN_BUSINESS           ?? null,
   },
+}
+
+/** Returns the brand limit for a plan tier. -1 means unlimited. */
+export function getPlanBrandLimit(plan: string): number {
+  return getPlan(plan).limits.brands
+}
+
+/**
+ * Returns the slug of the next plan tier that offers more brands than the
+ * given plan, or null if no upgrade exists (already at unlimited).
+ *
+ * Ordered by brand capacity ascending so callers always get the *cheapest*
+ * upgrade that solves the limit.
+ */
+export function getNextPlanWithMoreBrands(plan: string): string | null {
+  const currentLimit = getPlanBrandLimit(plan)
+  if (currentLimit === UNLIMITED_BRANDS) return null
+
+  // Order matters: cheapest path forward first.
+  const upgradePath: PlanTier[] = ["starter", "pro", "studio", "business", "agency"]
+
+  for (const tier of upgradePath) {
+    const limit = PLANS[tier].limits.brands
+    if (limit === UNLIMITED_BRANDS) return tier
+    if (limit > currentLimit) return tier
+  }
+  return null
 }
 
 export function getPlan(tier: string): PlanDefinition {

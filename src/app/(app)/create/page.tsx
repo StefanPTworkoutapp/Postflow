@@ -7,7 +7,7 @@
 
 import type { Metadata }    from "next"
 import { redirect }         from "next/navigation"
-import { getBrand }         from "@/lib/server/brand/getBrand"
+import { getActiveBrand }         from "@/lib/server/brand/getActiveBrand"
 import { createClient }     from "@/lib/supabase/server"
 import { createServiceClient } from "@/lib/supabase/service"
 import { CreateClient }     from "./CreateClient"
@@ -28,7 +28,7 @@ export default async function CreatePage({
   const params    = await searchParams
   const activeTab = (params.tab as Tab | undefined) ?? "video"
 
-  const brand = await getBrand()
+  const brand = await getActiveBrand()
   if (!brand) redirect("/onboarding")
 
   // Templates data (needed for templates tab)

@@ -10,7 +10,7 @@ import { Suspense }        from "react"
 import { redirect }        from "next/navigation"
 import Link                from "next/link"
 import { createClient }    from "@/lib/supabase/server"
-import { getBrand }        from "@/lib/server/brand/getBrand"
+import { getActiveBrand }        from "@/lib/server/brand/getActiveBrand"
 import { InsightsTabBar }  from "./InsightsTabBar"
 import { SyncButton }      from "./SyncButton"
 import { TrendClient }     from "../trend/TrendClient"
@@ -175,7 +175,7 @@ export default async function InsightsPage({
   const activeTab = (params.tab as Tab | undefined) ?? "analytics"
 
   const supabase = await createClient()
-  const brand    = await getBrand()
+  const brand    = await getActiveBrand()
 
   // For the trends tab, brand must exist (guard)
   if (activeTab === "trends" && !brand) redirect("/onboarding")

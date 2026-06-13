@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
 import { createClient } from "@/lib/supabase/server"
-import { getBrand } from "@/lib/server/brand/getBrand"
+import { getActiveBrand } from "@/lib/server/brand/getActiveBrand"
 import { getBufferChannels, bufferServiceToPlatform } from "@/lib/server/buffer/client"
 import { SettingsClient } from "./SettingsClient"
 
@@ -9,7 +9,7 @@ export const metadata: Metadata = { title: "PostFlow · Settings" }
 export default async function SettingsPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  const brand = await getBrand()
+  const brand = await getActiveBrand()
 
   // Load account info
   const { data: account } = user

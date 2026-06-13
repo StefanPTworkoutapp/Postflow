@@ -8,7 +8,7 @@
 import type { Metadata }              from "next"
 import { Suspense }                   from "react"
 import { redirect }                   from "next/navigation"
-import { getBrand }                   from "@/lib/server/brand/getBrand"
+import { getActiveBrand }             from "@/lib/server/brand/getActiveBrand"
 import { BrandEditor }                from "./BrandEditor"
 import { BrandTabBar }                from "./BrandTabBar"
 import { BrandIntelligenceContent }   from "../brand-intelligence/BrandIntelligenceContent"
@@ -26,7 +26,7 @@ export default async function BrandPage({
   const params    = await searchParams
   const activeTab = (params.tab as Tab | undefined) ?? "brand"
 
-  const brand = await getBrand()
+  const brand = await getActiveBrand()
   if (!brand) redirect("/onboarding")
 
   return (
