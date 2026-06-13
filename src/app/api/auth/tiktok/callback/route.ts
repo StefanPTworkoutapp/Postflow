@@ -124,11 +124,18 @@ export async function GET(req: NextRequest) {
       return err("token_exchange_failed")
     }
 
-    // TikTok token response can come in two shapes:
-    //   Success: { data: { access_token, open_id, expires_in, ... }, message: "success" }
-    //   Error:   { error: "invalid_grant", error_description: "...", log_id: "..." }
-    //         or { data: { error_code: 10003, description: "..." }, message: "error" }
+    // TikTok v2 OAuth token response shapes:
+    //   Success (flat): { access_token, open_id, expires_in, refresh_token, scope, token_type }
+    //   Success (wrapped, older): { data: { access_token, open_id, ... }, message: "success" }
+    //   Error:          { error: "invalid_grant", error_description: "...", log_id: "..." }
     const tokenData = JSON.parse(tokenBody) as {
+      // flat v2 success fields
+      access_token?:  string
+      open_id?:       string
+      expires_in?:    number
+      refresh_token?: string
+      scope?:         string
+      // wrapped format (legacy)
       data?: {
         access_token?:  string
         expires_in?:    number
@@ -138,32 +145,34 @@ export async function GET(req: NextRequest) {
         description?:   string
       }
       message?: string
+      // error fields
       error?: string | { code: string; message: string }
       error_description?: string
     }
 
-    // Handle top-level error string (e.g. invalid_grant)
+    // Handle error responses
     if (typeof tokenData.error === "string") {
       console.error("[tiktok-callback] TikTok token error:", tokenData.error, tokenData.error_description)
       return err(`tt_${tokenData.error}`)
     }
-    // Handle error object
     if (tokenData.error && typeof tokenData.error === "object" && tokenData.error.code !== "ok") {
       console.error("[tiktok-callback] TikTok token error:", tokenData.error)
       return err(`tt_${tokenData.error.code}`)
     }
-    // Handle error inside data object
     if (tokenData.data?.error_code && tokenData.data.error_code !== 0) {
       console.error("[tiktok-callback] TikTok token error in data:", tokenData.data.error_code, tokenData.data.description)
       return err(`tt_err_${tokenData.data.error_code}`)
     }
-    // Ensure we actually got an access token
-    if (!tokenData.data?.access_token || !tokenData.data?.open_id) {
+
+    // Resolve fields from either flat or wrapped format
+    const access_token = tokenData.access_token ?? tokenData.data?.access_token
+    const open_id      = tokenData.open_id      ?? tokenData.data?.open_id
+    const expires_in   = tokenData.expires_in   ?? tokenData.data?.expires_in ?? 86400
+
+    if (!access_token || !open_id) {
       console.error("[tiktok-callback] Token response missing access_token/open_id:", tokenBody.slice(0, 300))
       return err("token_missing_fields")
     }
-
-    const { access_token, open_id, expires_in } = tokenData.data as Required<typeof tokenData.data>
     const expiresAt = new Date(Date.now() + expires_in * 1000).toISOString()
 
     // ── Step 2: Fetch user info ────────────────────────────────────────────
