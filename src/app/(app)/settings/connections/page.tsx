@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
 import { createClient } from "@/lib/supabase/server"
-import { getBrand } from "@/lib/server/brand/getBrand"
+import { getActiveBrand } from "@/lib/server/brand/getActiveBrand"
 import { getBufferChannels, bufferServiceToPlatform } from "@/lib/server/buffer/client"
 import { ConnectionsClient } from "./ConnectionsClient"
 
@@ -14,7 +14,7 @@ export const metadata: Metadata = { title: "PostFlow · Connect" }
  */
 export default async function ConnectionsPage() {
   const supabase = await createClient()
-  const brand = await getBrand()
+  const brand = await getActiveBrand()
 
   if (!brand) {
     return (

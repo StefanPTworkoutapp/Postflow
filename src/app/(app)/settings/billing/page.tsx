@@ -242,7 +242,9 @@ const PLAN_FEATURES: Record<PlanTier, string[]> = {
   free:     ["5 posts/month", "1 brand", "Basic analytics"],
   starter:  ["Unlimited posts", "1 brand", "Buffer scheduling", "Standard analytics", "Weekly trend email"],
   pro:      ["Everything in Starter", "3 brands", "3 team members", "Advanced analytics"],
-  business: ["Everything in Pro", "10 brands", "10 team members", "Priority support"],
+  studio:   ["Everything in Pro", "5 brands", "5 team members", "100 GB storage"],
+  business: ["Everything in Studio", "10 brands", "10 team members", "Priority support"],
+  agency:   ["Everything in Business", "Unlimited brands", "20 team members", "500 GB storage"],
 }
 
 function PlanFeatureList({ tier }: { tier: PlanTier }) {

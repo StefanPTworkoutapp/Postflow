@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
-import { getBrand } from "@/lib/server/brand/getBrand"
+import { getActiveBrand } from "@/lib/server/brand/getActiveBrand"
 import { getOptimalScheduleTime, formatOptimalTime, nextOccurrenceDate } from "@/lib/server/scheduling/optimal-time"
 import { PostEditor, type TemplateHealthMap } from "./PostEditor"
 
@@ -11,7 +11,7 @@ interface Props {
 export default async function PostPage({ params }: Props) {
   const { id } = await params
   const supabase = await createClient()
-  const brand = await getBrand()
+  const brand = await getActiveBrand()
 
   if (!brand) redirect("/onboarding")
 

@@ -1,9 +1,9 @@
 import { redirect } from "next/navigation"
-import { getBrand } from "@/lib/server/brand/getBrand"
+import { getActiveBrand } from "@/lib/server/brand/getActiveBrand"
 import { PostCreator } from "./PostCreator"
 
 export default async function NewPostPage() {
-  const brand = await getBrand()
+  const brand = await getActiveBrand()
   if (!brand) redirect("/onboarding")
 
   return (

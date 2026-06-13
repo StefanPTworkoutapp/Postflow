@@ -2,6 +2,8 @@ import { redirect } from "next/navigation"
 import { headers } from "next/headers"
 import { createClient } from "@/lib/supabase/server"
 import { getOrCreateAccount } from "@/lib/server/accounts/getOrCreateAccount"
+import { getBrands } from "@/lib/server/brand/getBrands"
+import { getActiveBrand } from "@/lib/server/brand/getActiveBrand"
 import { Sidebar } from "@/components/layout/Sidebar"
 import { TopBar } from "@/components/layout/TopBar"
 import { TooltipProvider } from "@/components/ui/tooltip"
@@ -21,15 +23,21 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const pathname = headersList.get("x-pathname") ?? ""
   const isOnboarding = pathname.startsWith("/onboarding")
 
-  // New users have no brand yet → send them to the onboarding wizard
-  if (!isOnboarding) {
-    const { data: brand } = await supabase
-      .from("brands")
-      .select("id")
-      .limit(1)
-      .maybeSingle()
+  // Resolve brands + active brand. Onboarding has no brands yet — skip the
+  // redirect there and skip the brand sidebar UI.
+  let sidebarBrands: { id: string; name: string; logo_url: string | null }[] = []
+  let activeBrandId: string | undefined
 
-    if (!brand) redirect("/onboarding")
+  if (!isOnboarding) {
+    const [brands, activeBrand] = await Promise.all([
+      getBrands(),
+      getActiveBrand(),
+    ])
+
+    if (brands.length === 0 || !activeBrand) redirect("/onboarding")
+
+    sidebarBrands = brands.map((b) => ({ id: b.id, name: b.name, logo_url: b.logo_url }))
+    activeBrandId = activeBrand.id
   }
 
   const userName = user.user_metadata?.full_name as string | undefined
@@ -38,7 +46,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <TooltipProvider>
       <div className="flex h-screen overflow-hidden bg-[hsl(var(--background))]">
-        <Sidebar userEmail={userEmail} />
+        <Sidebar
+          userEmail={userEmail}
+          brands={sidebarBrands}
+          activeBrandId={activeBrandId}
+        />
         <div className="flex flex-1 flex-col overflow-hidden">
           <TopBar userEmail={userEmail} userName={userName} />
           <main className="flex-1 overflow-y-auto p-6">{children}</main>

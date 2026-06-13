@@ -32,17 +32,28 @@ export async function GET(_req: NextRequest): Promise<NextResponse> {
 
     // Extract tone description from tone_profile JSON if available
     const toneProfile = brand.tone_profile as Record<string, unknown> | null
-    const toneSummary = toneProfile?.summary ?? brand.tone_suggestion ?? "professional"
+    const toneAdjectives = toneProfile?.tone_adjectives
+      ? (toneProfile.tone_adjectives as string[]).slice(0, 3).join(", ")
+      : null
+    const toneSummary = toneAdjectives ?? (toneProfile?.summary as string | undefined) ?? brand.tone_suggestion ?? "professional"
 
-    const prompt = `You are a social media strategist.
+    // Pull extra brand context that makes ideas more specific
+    const tagline    = (brand as unknown as Record<string, unknown>).tagline as string | undefined
+    const audience   = (brand as unknown as Record<string, unknown>).target_audience_description as string | undefined
+    const geoLine    = (brand as unknown as Record<string, unknown>).geographic_location as string | undefined
+
+    const prompt = `You are a social media strategist for a specific brand. Generate ideas that feel personal to THIS brand, not generic industry advice.
+
 Brand: ${brand.name}
+${tagline ? `Tagline: ${tagline}` : ""}
 Industry: ${brand.industry ?? "General"}
 Primary goal: ${brand.primary_goal ?? "Grow audience"}
-Voice tone: ${toneSummary}
+Voice / tone: ${toneSummary}
+${audience ? `Target audience: ${audience}` : ""}
+${geoLine ? `Location: ${geoLine}` : ""}
 
-Suggest 3 specific, actionable social media post ideas for this week.
-Each idea: hook (max 10 words), format (Reel/Carousel/Single/Story),
-platform (Instagram/LinkedIn/Facebook), why it works (1 sentence).
+Suggest 3 specific, actionable post ideas for this week that feel tailored to this exact brand — not generic fitness/wellness/PT tips.
+Each idea: hook (max 10 words — make it specific to the brand, not a template), format (Reel/Carousel/Single/Story), platform (Instagram/LinkedIn/Facebook), why it works for THIS brand (1 sentence, mention specific brand details).
 Return as JSON array with keys: hook, format, platform, reason.
 Only return the JSON array, no other text.`
 

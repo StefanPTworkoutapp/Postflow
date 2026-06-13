@@ -28,16 +28,45 @@
 
 import { NextRequest, NextResponse } from "next/server"
 import { createClient }              from "@/lib/supabase/server"
-import { getBrand }                  from "@/lib/server/brand/getBrand"
+import { getActiveBrand }            from "@/lib/server/brand/getActiveBrand"
+
+/** Respond with an HTML page that postMessages back to the opener (popup mode)
+ *  or falls back to a normal redirect if opened as a full navigation. */
+function oauthResult(opts: {
+  success:     boolean
+  platform:    string
+  handle?:     string
+  redirectBase: string
+  returnTo:    string
+  error?:      string
+}): Response {
+  const { success, platform, handle = "", redirectBase, returnTo, error = "unknown" } = opts
+  const msg = success
+    ? `{ type: 'pf_oauth_success', platform: '${platform}', handle: ${JSON.stringify(handle)} }`
+    : `{ type: 'pf_oauth_error', platform: '${platform}', error: ${JSON.stringify(error)} }`
+  const fallback = success
+    ? `${redirectBase}${returnTo}${returnTo.includes("?") ? "&" : "?"}connected=${platform}`
+    : `${redirectBase}/settings/connections?error=${encodeURIComponent(error)}`
+  return new Response(
+    `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Connecting…</title></head><body>
+<script>
+  if (window.opener && !window.opener.closed) {
+    try { window.opener.postMessage(${msg}, '${redirectBase}') } catch(e) {}
+    window.close()
+  } else {
+    window.location.replace('${fallback}')
+  }
+</script>
+<p style="font-family:system-ui,sans-serif;padding:2rem;color:#6b7280;text-align:center">
+  ${success ? "Connected! You can close this window." : "Something went wrong. Redirecting…"}
+</p>
+</body></html>`,
+    { headers: { "Content-Type": "text/html" } }
+  )
+}
 
 const GRAPH = "https://graph.facebook.com/v21.0"
 const REDIRECT_BASE = process.env.NEXT_PUBLIC_APP_URL ?? "https://postflow-amber.vercel.app"
-
-function errorRedirect(reason: string) {
-  return NextResponse.redirect(
-    `${REDIRECT_BASE}/settings/connections?error=${encodeURIComponent(reason)}`
-  )
-}
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
@@ -47,11 +76,11 @@ export async function GET(req: NextRequest) {
   if (metaError) {
     const desc = searchParams.get("error_description") ?? metaError
     console.error("[instagram-callback] Meta returned error:", metaError, desc)
-    return errorRedirect(desc)
+    return oauthResult({ success: false, platform: "instagram", redirectBase: REDIRECT_BASE, returnTo: "/settings/connections", error: desc })
   }
 
   const code = searchParams.get("code")
-  if (!code) return errorRedirect("missing_code")
+  if (!code) return oauthResult({ success: false, platform: "instagram", redirectBase: REDIRECT_BASE, returnTo: "/settings/connections", error: "missing_code" })
 
   // Decode return_to from state parameter (set during initiation)
   const stateParam = searchParams.get("state")
@@ -68,8 +97,8 @@ export async function GET(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.redirect(`${REDIRECT_BASE}/login`)
 
-  const brand = await getBrand()
-  if (!brand) return errorRedirect("no_brand")
+  const brand = await getActiveBrand()
+  if (!brand) return oauthResult({ success: false, platform: "instagram", redirectBase: REDIRECT_BASE, returnTo, error: "no_brand" })
 
   const appId      = process.env.INSTAGRAM_APP_ID
   const appSecret  = process.env.INSTAGRAM_APP_SECRET
@@ -77,7 +106,7 @@ export async function GET(req: NextRequest) {
 
   if (!appId || !appSecret) {
     console.error("[instagram-callback] Missing INSTAGRAM_APP_ID or INSTAGRAM_APP_SECRET")
-    return errorRedirect("server_misconfigured")
+    return oauthResult({ success: false, platform: "instagram", redirectBase: REDIRECT_BASE, returnTo, error: "server_misconfigured" })
   }
 
   try {
@@ -104,7 +133,7 @@ export async function GET(req: NextRequest) {
         const fbErr = JSON.parse(tokenBody) as { error?: { message?: string; code?: number } }
         if (fbErr.error?.message) fbMsg = `fb_${fbErr.error.code ?? 0}: ${fbErr.error.message}`
       } catch { /* leave default */ }
-      return errorRedirect(fbMsg)
+      return oauthResult({ success: false, platform: "instagram", redirectBase: REDIRECT_BASE, returnTo, error: fbMsg })
     }
 
     console.log("[instagram-callback] Step 1 OK. Raw response:", tokenBody.slice(0, 120))
@@ -184,19 +213,17 @@ export async function GET(req: NextRequest) {
 
     if (upsertError) {
       console.error("[instagram-callback] DB upsert failed:", upsertError.message)
-      return errorRedirect("db_error")
+      return oauthResult({ success: false, platform: "instagram", redirectBase: REDIRECT_BASE, returnTo, error: "db_error" })
     }
 
     console.log(
       `[instagram-callback] Connected @${username} (ig_account: ${igBusinessAccountId ?? igUserId}) for brand ${brand.id}`
     )
 
-    return NextResponse.redirect(
-      `${REDIRECT_BASE}${returnTo}${returnTo.includes("?") ? "&" : "?"}connected=instagram`
-    )
+    return oauthResult({ success: true, platform: "instagram", handle: username, redirectBase: REDIRECT_BASE, returnTo })
 
   } catch (err) {
     console.error("[instagram-callback] Unexpected error:", err)
-    return errorRedirect("unexpected")
+    return oauthResult({ success: false, platform: "instagram", redirectBase: REDIRECT_BASE, returnTo, error: "unexpected" })
   }
 }

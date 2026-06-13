@@ -167,12 +167,15 @@ async function runSync(brandId?: string): Promise<{
   let synced         = 0
   let brandsProcessed = 0
 
-  // Fetch Buffer tokens from social_accounts (platform = 'buffer')
+  // Buffer-connected accounts have buffer_profile_id set and store the Buffer PAT in
+  // access_token (set by /api/settings/buffer). One brand may have many Buffer channels —
+  // all channels for the same brand share the same PAT, so deduplicate by brand_id.
   let accountsQuery = supabase
     .from("social_accounts")
-    .select("brand_id, platform_access_token")
-    .eq("platform", "buffer")
-    .not("platform_access_token", "is", null)
+    .select("brand_id, access_token")
+    .not("buffer_profile_id", "is", null)
+    .not("access_token", "is", null)
+    .eq("is_active", true)
 
   if (brandId) accountsQuery = accountsQuery.eq("brand_id", brandId)
 
@@ -184,15 +187,15 @@ async function runSync(brandId?: string): Promise<{
   // Deduplicate by brand_id (take first token per brand)
   const seenBrands = new Map<string, string>()
   for (const acct of bufferAccounts) {
-    if (acct.brand_id && acct.platform_access_token && !seenBrands.has(acct.brand_id)) {
-      seenBrands.set(acct.brand_id, acct.platform_access_token)
+    if (acct.brand_id && acct.access_token && !seenBrands.has(acct.brand_id)) {
+      seenBrands.set(acct.brand_id, acct.access_token)
     }
   }
 
-  const brands = Array.from(seenBrands.entries()).map(([id, token]) => ({ id, platform_access_token: token }))
+  const brands = Array.from(seenBrands.entries()).map(([id, token]) => ({ id, access_token: token }))
 
   for (const brand of brands) {
-    const accessToken = brand.platform_access_token
+    const accessToken = brand.access_token
     if (!accessToken) continue
 
     try {
@@ -317,7 +320,7 @@ export async function GET(req: Request) {
 
 // ─── POST — manual trigger ────────────────────────────────────────────────────
 
-export async function POST(req: Request) {
+export async function POST() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
