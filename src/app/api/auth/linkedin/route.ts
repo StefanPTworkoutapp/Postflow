@@ -35,7 +35,9 @@ export async function GET(req: Request) {
   const returnTo = new URL(req.url).searchParams.get("return_to") ?? "/settings/connections"
   const state    = Buffer.from(JSON.stringify({ rt: returnTo })).toString("base64url")
 
-  const scopes = ["w_member_social", "r_organization_social"].join(" ")
+  // w_member_social: post on behalf of user (Share on LinkedIn product)
+  // r_organization_social requires Marketing Developer Platform — add later
+  const scopes = ["w_member_social"].join(" ")
 
   const oauthUrl = new URL("https://www.linkedin.com/oauth/v2/authorization")
   oauthUrl.searchParams.set("client_id",     clientId)

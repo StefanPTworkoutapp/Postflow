@@ -62,11 +62,12 @@ export async function GET(req: Request) {
     sameSite: "lax",
   })
 
+  // Scopes available in TikTok sandbox without extra product approvals.
+  // video.list and video.insights require additional scope approval in the
+  // TikTok Developer Portal — add them back once the app is out of sandbox.
   const scopes = [
     "user.info.basic",
     "user.info.profile",
-    "video.list",
-    "video.insights",
   ].join(",")
 
   const oauthUrl = new URL("https://www.tiktok.com/v2/auth/authorize/")
