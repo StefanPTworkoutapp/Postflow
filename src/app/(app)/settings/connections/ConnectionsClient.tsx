@@ -59,6 +59,11 @@ const WIZARD_STEPS: Array<{
     description: "Reach your professional network",
     time:        "~30 sec",
   },
+  {
+    key:         "tiktok",
+    description: "Publish videos and pull analytics",
+    time:        "~30 sec",
+  },
 ]
 
 /** Platforms supported for direct OAuth */
