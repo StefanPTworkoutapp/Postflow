@@ -125,20 +125,22 @@ export async function GET(req: NextRequest) {
     const { access_token, expires_in } = tokenData
     const expiresAt = new Date(Date.now() + (expires_in ?? 5_184_000) * 1000).toISOString()
 
-    // ── Step 2: Fetch profile via OIDC userinfo ────────────────────────────
+    // ── Step 2: Fetch profile ──────────────────────────────────────────────
+    // Try OIDC userinfo first (works if "Sign In with LinkedIn via OpenID Connect"
+    // product is enabled). Fall back to /v2/me for just the member ID.
     let displayName = "LinkedIn user"
     let sub         = ""
     let profileUrl: string | null = null
 
-    const profileRes = await fetch("https://api.linkedin.com/v2/userinfo", {
+    const oidcRes = await fetch("https://api.linkedin.com/v2/userinfo", {
       headers: {
         "Authorization":    `Bearer ${access_token}`,
         "LinkedIn-Version": "202401",
       },
     })
 
-    if (profileRes.ok) {
-      const profile = await profileRes.json() as {
+    if (oidcRes.ok) {
+      const profile = await oidcRes.json() as {
         sub?:         string
         name?:        string
         given_name?:  string
@@ -149,7 +151,23 @@ export async function GET(req: NextRequest) {
       displayName = profile.name ?? (`${profile.given_name ?? ""} ${profile.family_name ?? ""}`.trim() || displayName)
       profileUrl  = profile.picture ?? null
     } else {
-      console.warn("[linkedin-callback] Failed to fetch profile:", await profileRes.text())
+      // OIDC not available — fall back to basic member ID via /v2/me
+      console.info("[linkedin-callback] OIDC userinfo unavailable, trying /v2/me")
+      const meRes = await fetch("https://api.linkedin.com/v2/me", {
+        headers: { "Authorization": `Bearer ${access_token}` },
+      })
+      if (meRes.ok) {
+        const me = await meRes.json() as {
+          id?:                  string
+          localizedFirstName?:  string
+          localizedLastName?:   string
+        }
+        sub         = me.id ?? ""
+        const name  = `${me.localizedFirstName ?? ""} ${me.localizedLastName ?? ""}`.trim()
+        if (name) displayName = name
+      } else {
+        console.warn("[linkedin-callback] /v2/me also failed:", await meRes.text())
+      }
     }
 
     // ── Step 3: Upsert social_accounts ────────────────────────────────────
