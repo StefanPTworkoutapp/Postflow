@@ -5,12 +5,8 @@
  * Redirects to LinkedIn's authorization endpoint.
  *
  * Scopes requested:
- *   - w_member_social         (post on behalf of user)
- *   - r_organization_social   (read org post analytics)
- *
- * Note: openid/profile/email (OIDC) are omitted — they require the separate
- * "Sign In with LinkedIn using OpenID Connect" product. Profile is fetched
- * gracefully via /v2/userinfo with fallback to /v2/me.
+ *   - openid, profile, email  (OIDC — "Sign In with LinkedIn using OpenID Connect" product)
+ *   - w_member_social         (post on behalf of user — "Share on LinkedIn" product)
  *
  * Required env vars:
  *   LINKEDIN_CLIENT_ID   — from LinkedIn Developer Portal
@@ -35,9 +31,7 @@ export async function GET(req: Request) {
   const returnTo = new URL(req.url).searchParams.get("return_to") ?? "/settings/connections"
   const state    = Buffer.from(JSON.stringify({ rt: returnTo })).toString("base64url")
 
-  // w_member_social: post on behalf of user (Share on LinkedIn product)
-  // r_organization_social requires Marketing Developer Platform — add later
-  const scopes = ["w_member_social"].join(" ")
+  const scopes = ["openid", "profile", "email", "w_member_social"].join(" ")
 
   const oauthUrl = new URL("https://www.linkedin.com/oauth/v2/authorization")
   oauthUrl.searchParams.set("client_id",     clientId)
