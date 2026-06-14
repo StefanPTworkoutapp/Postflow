@@ -133,14 +133,15 @@ Run through this on `postflowsocials.app` after Steps 2–4:
 
 ---
 
-## PHASE H — Pre-H5 Quick Wins (do before H5)
+## PHASE H — Pre-H5 Quick Wins ✅ DONE
 
 ### Caption quality fixes (spec: `docs/specs/caption-quality-human-voice.md`)
-- [ ] Inject `do_use[]` patterns into `generateCaption.ts` (affirmative style rules)
-- [ ] Add anti-AI instruction block to caption system prompt
-- [ ] Inject 1–2 `tone_examples` as few-shot samples (when available)
-- [ ] Strengthen signature_phrases: "exactly one, woven in" not "use naturally"
-- [ ] Fix `toneLearningLoop.ts` line ~170: use `tone_profile` summary not raw `tone_examples`
+- [x] Inject `do_use[]` patterns into `generateCaption.ts` (affirmative style rules)
+- [x] Add anti-AI instruction block to caption system prompt
+- [x] Inject 1–2 `tone_examples` as few-shot samples (when available) + exposed in BrandContext
+- [x] Strengthen signature_phrases: "exactly one, woven in" not "use naturally"
+- [x] Fix `toneLearningLoop.ts` line ~170: use `tone_profile` summary not raw `tone_examples`
+- [x] Browser tested: caption returns 200, human-voiced, no AI-tells ✓
 
 ---
 
