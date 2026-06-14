@@ -336,3 +336,25 @@ Never let implicit signals accumulate faster than explicit ones. A single "wrong
 1. **Read `memory/ui_ux_patterns.md` before building any UI.** Not after — before.
 2. **Document new patterns immediately** in `ui_ux_patterns.md` with exact Tailwind class names, in the same session they were invented.
 3. **Audit existing pages before touching them** — classify Green / Amber / Red using the checklist in `ui_ux_patterns.md`. Fix Amber/Red violations before adding new features to the page.
+
+## [2026-06-14] Next.js 16 stuck-Suspense: never use Suspense for client components that call useSearchParams(), or async server components that call cookies()
+
+**What happened:** Four pages were stuck showing Suspense fallbacks (or blank content) permanently:
+- `/settings/connections` — `useSearchParams()` in a `"use client"` component inside `<Suspense>`
+- `/brand?tab=intelligence` — async server component calling `cookies()` inside `<Suspense>`
+- `/schedule` — `CalendarView` (client component) using `useSearchParams()` inside `<Suspense>`
+- `/insights?tab=trends` — pure client component `TrendClient` wrapped unnecessarily in `<Suspense>`
+
+In all cases, the Suspense fallback was shown on SSR and never replaced after hydration. No JS errors, no error boundary triggered — it simply never resolved.
+
+**Root cause:** In Next.js 16 + React 19, there are two broken patterns:
+1. `useSearchParams()` inside a client component that is wrapped in a server-side `<Suspense>` boundary causes the Suspense to never resolve on the client (the fallback persists indefinitely).
+2. An async server component that calls `cookies()` inside a `<Suspense>` boundary causes a streaming deadlock — the stream never sends the replacement HTML.
+
+**Rule going forward:**
+- NEVER wrap client components that use `useSearchParams()` in `<Suspense>`.
+  Instead: read the param in the parent server page (`await searchParams`), pass as a prop.
+- NEVER put async server components that call `cookies()` or `headers()` inside `<Suspense>`.
+  Instead: fetch all data in the page-level server component, pass data as props to child components.
+- Only use `<Suspense>` for: (a) client components that use `React.lazy()` / `dynamic()`, or (b) async server components that do NOT call Request-time APIs (`cookies`, `headers`).
+- When debugging a stuck Suspense: check `document.querySelectorAll('template').length` — a non-zero count means at least one Suspense is not resolving. Also check for 0 streaming `$RC` scripts in the page source.

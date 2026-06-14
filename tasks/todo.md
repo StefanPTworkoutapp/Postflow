@@ -38,6 +38,16 @@ Last updated: 2026-06-14
 - [x] **Architecture docs written**:
   - `docs/architecture/user-flows.md` — 14 complete user journeys
   - `docs/architecture/page-hierarchy.md` — all pages + ~80 API routes
+- [x] **E2E browser sweep complete** (committed 2026-06-14):
+  - Found and fixed root-cause Next.js 16 stuck-Suspense bug pattern:
+    - `/settings/connections` — `useSearchParams()` in Suspense (never resolved)
+    - `/brand?tab=intelligence` — `cookies()` inside async server component in Suspense (streaming deadlock)
+    - `/schedule` — `CalendarView` used `useSearchParams()` in Suspense (never resolved)
+    - `/insights?tab=trends` — `TrendClient` in unnecessary Suspense (never rendered)
+  - Fix pattern: read all params/data at server page level, pass as props; eliminate client-side `useSearchParams()`
+  - `photo-overlay` template seeded in DB (was in code but missing from DB since launch)
+  - Dead code removed: `SettingsClient` Buffer OAuth params handling
+  - All 8 pages tested clean: dashboard, brand, schedule, insights, create, connections, billing, admin
 
 ---
 
