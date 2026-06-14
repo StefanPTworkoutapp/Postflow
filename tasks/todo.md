@@ -1,26 +1,38 @@
 # PostFlow — Task Tracker
 
-Last updated: 2026-06-14 (session cleanup)
+Last updated: 2026-06-14
 
 ---
 
 ## ✅ DONE THIS SESSION
 
 - [x] All OAuth connections fixed (`NEXT_PUBLIC_APP_URL` corrected to `postflowsocials.app`)
-- [x] TikTok v2 flat token response fix
-- [x] TikTok domain verification file served correctly
+- [x] TikTok v2 flat token response fix + domain verification file
 - [x] TikTok sandbox connected; production app submitted for review
 - [x] LinkedIn OIDC real name working (OpenID Connect product added)
-- [x] Mollie test + live API keys set in Vercel
-- [x] Mollie webhook confirmed (per-payment URL, no dashboard webhook needed)
+- [x] Mollie test + live API keys set in Vercel; webhook confirmed (per-payment URL)
 - [x] Facebook + Instagram OAuth connected ✓
 - [x] Stripe account created (MindYourBodyPT B.V., NL)
-- [x] Stripe webhook configured (8 events, `postflowsocials.app/api/webhooks/stripe`)
+- [x] Stripe webhook configured (10 events, `postflowsocials.app/api/webhooks/stripe`)
 - [x] All 12 Stripe env vars pushed to Vercel + `.env.local`
-- [x] Stripe webhook handlers added: paused, resumed, trial_will_end
+- [x] Stripe webhook handlers: paused, resumed, trial_will_end, checkout.session.expired
 - [x] Stripe API version bumped to `2026-05-27.dahlia`
-- [x] Terms of Service updated: KVK/BTW, EU withdrawal waiver, cancellation, Mollie/Stripe split
-- [x] Privacy Policy updated: KVK/BTW, Mollie as processor, correct domain + contact email
+- [x] Terms of Service: KVK/BTW, EU withdrawal waiver, cancellation, Mollie/Stripe split
+- [x] Privacy Policy: KVK/BTW, Mollie as processor, correct domain + contact email
+- [x] **Step 1 DONE:** `clipAnalyzer` switched to `claude-haiku-4-5` (15× cheaper)
+- [x] **Step 1 DONE:** `checkStorageLimit()` added to `limits.ts`
+- [x] **Step 1 DONE:** Storage check wired into all 4 upload routes (HTTP 402 on breach)
+- [x] **Step 1 DONE:** Calendar upload now has 50 MB per-file cap
+- [x] **Step 1 DONE:** Storage usage bar in `/settings/billing` (amber ≥70%, red ≥90%)
+- [x] **Bell DONE:** Storage warning popover on Bell icon in TopBar (amber dot ≥70%, red ≥90%)
+- [x] **Bell DONE:** Dismissable (7 days for warning, 24h for critical); "Upgrade plan" CTA
+- [x] **Bell DONE:** Storage percent computed in AppLayout and passed as props
+- [x] `Popover` UI component created (`src/components/ui/popover.tsx`)
+- [x] Spec written: `docs/specs/analytics-template-feedback.md`
+- [x] Spec written: `docs/specs/template-preferences.md`
+- [x] Spec written: `docs/specs/caption-quality-human-voice.md`
+- [x] Spec written: `docs/specs/brand-voice-overview.md`
+- [x] Spec written: `docs/specs/storage-addon.md`
 
 ---
 
@@ -31,22 +43,13 @@ CONFIRMED DECISIONS (locked)
 - Pre-edited video scheduling via Buffer = MVP, no Shotstack needed
 - Stripe prices stay as created: €49/€99/€149/€199/€299 monthly
 - Brand limits: Starter=1, Pro=3, Studio=5, Business=10, Agency=unlimited
-- Templates ARE already brand-dynamic. Problem is design quality, not engine.
-- Analytics per brand already scoped correctly. Needs to be VISIBLE to users.
+- Templates ARE already brand-dynamic. Engine is fine. Quality = design + intelligence tokens
+- Analytics per brand already scoped correctly — just not VISIBLE to users
 - BTW number: NL869239909B01 | KVK: 42003965
+- Storage add-on: YES, build post-H5 (spec: docs/specs/storage-addon.md)
+- Template slots per post type: Free=1, Starter=1, Pro=3, Studio=5, Business=5, Agency=5
+- Template locking: Pro=1 lock, Studio/Business=2 locks, Agency=3 locks
 ================================================================
-
----
-
-## STEP 1 — Code fixes before deploy ⚠️ DO FIRST
-
-These must be committed and deployed before E2E testing. All are in the codebase.
-
-- [ ] Switch clip analyzer: `claude-opus-4-5` → `claude-haiku-4-5` in clip-forge (15× cheaper, same quality)
-- [ ] Add `checkStorageLimit()` to `src/lib/server/billing/limits.ts` — queries `SUM(file_size_mb)` vs plan limit
-- [ ] Wire storage check into all 4 upload routes (media, clip-forge, stories, calendar)
-- [ ] Fix `/api/calendar/[id]/upload-media` — missing per-file size check
-- [ ] Storage usage bar in `/settings/billing` — "X GB of Y GB used"
 
 ---
 
@@ -78,7 +81,7 @@ All of these are in `.env.local` already — just need to be pushed to Vercel:
 
 ## STEP 3 — Migrations to apply to production
 
-Must be applied via `supabase db push` or GitHub → merge to main → Vercel preview:
+Apply via `supabase db push` after review:
 
 - [ ] `20260509000004_billing_tables.sql` — billing schema (Stripe/Mollie tables)
 - [ ] `20260509000005_tone_suggestion_to_brands.sql` — tone_suggestion column
@@ -92,100 +95,148 @@ After migrations: `supabase gen types typescript --linked --schema postflow 2>/d
 
 ## STEP 4 — User actions required
 
-- [ ] **Facebook OAuth redirect URIs** — Facebook Developer Portal → Facebook Login for Business → Settings → Valid OAuth Redirect URIs → add:
+- [ ] **Facebook OAuth redirect URIs** — Facebook Developer Portal → Facebook Login for Business → Valid OAuth Redirect URIs:
   - `https://postflowsocials.app/api/auth/facebook/callback`
   - `https://postflowsocials.app/api/auth/instagram/callback`
-- [ ] **Vercel redeploy** — after env vars added, trigger redeploy so they take effect
-- [ ] **Stripe notification email** — Stripe dashboard → Settings → Business details → set support email to `support@mindyourbodypt.nl`
-- [ ] **Mollie notification email** — Mollie dashboard → account settings → notifications → set to `support@mindyourbodypt.nl`
+- [ ] **Vercel redeploy** — after env vars added, trigger redeploy
+- [ ] **Stripe notification email** → `support@mindyourbodypt.nl`
+- [ ] **Mollie notification email** → `support@mindyourbodypt.nl`
 
 ---
 
 ## STEP 5 — E2E test checklist
 
-Run through this in order on `postflowsocials.app`:
+Run through this on `postflowsocials.app` after Steps 2–4:
 
 **Billing:**
-- [ ] `/settings/billing` → click Upgrade → Stripe Starter checkout completes → plan shows "Starter"
+- [ ] `/settings/billing` → Upgrade → Stripe Starter checkout → plan shows "Starter"
 - [ ] Stripe dashboard confirms subscription created
-- [ ] Invoice PDF stored (check `invoices` table in Supabase)
+- [ ] Storage bar shows "0.00 GB of 10 GB used"
+- [ ] Bell icon: no dot at 0% usage
 
 **Connections:**
-- [ ] Instagram → connect → OAuth completes → green banner
-- [ ] Facebook → connect → OAuth completes
-- [ ] LinkedIn → connect → shows real name (not "LinkedIn user")
-- [ ] TikTok → connect → OAuth completes (sandbox)
-- [ ] Buffer → connect → OAuth completes
+- [ ] Instagram / Facebook / LinkedIn / TikTok / Buffer all OAuth correctly
 
 **Content flow:**
-- [ ] Create new post → AI generates caption → template renders → schedule to Buffer
-- [ ] Buffer queue shows post
-- [ ] Post published → Buffer webhook fires → PostFlow status updates to "published"
+- [ ] Create post → caption generated → template renders → schedule to Buffer
+- [ ] Post published → Buffer webhook → status "published"
 
 **Analytics:**
-- [ ] `/analytics` loads without 500 errors
-- [ ] Analytics data shows after at least 1 published post
+- [ ] `/insights` loads without errors
+- [ ] Data shows after 1+ published post
 
 **Inngest:**
-- [ ] Inngest dashboard → all 6 functions registered + scheduled crons visible
+- [ ] All functions registered + crons visible
 
 **Onboarding:**
-- [ ] Fresh account → onboarding wizard → Step 10 (calibration) → 3 sample posts → complete → reach dashboard
+- [ ] Fresh account → onboarding → calibration → dashboard
 
 ---
 
-## PHASE H — Brand System + Template Quality 📋 AFTER E2E
+## PHASE H — Pre-H5 Quick Wins (do before H5)
 
-**Goal:** Living brand organism. One source of truth. Every feature reads from it.
-**Start after:** E2E test passes.
+### Caption quality fixes (spec: `docs/specs/caption-quality-human-voice.md`)
+- [ ] Inject `do_use[]` patterns into `generateCaption.ts` (affirmative style rules)
+- [ ] Add anti-AI instruction block to caption system prompt
+- [ ] Inject 1–2 `tone_examples` as few-shot samples (when available)
+- [ ] Strengthen signature_phrases: "exactly one, woven in" not "use naturally"
+- [ ] Fix `toneLearningLoop.ts` line ~170: use `tone_profile` summary not raw `tone_examples`
 
-### H2 — Universal brand management (`/brands`)
-- [ ] `/brands` list page — all brands: logo, name, health score, last post, platform icons, switch + edit buttons
-- [ ] `/brands/[id]/edit` — name, logo, colors, niche, tone, template_style slider, preferred template — all in one place
+---
+
+## PHASE H2 — Universal Brand Management
+
+(spec: `docs/specs/brand-voice-overview.md` for Voice tab)
+
+- [ ] `/brands` list page — logo, name, health score, last post, switch/edit
+- [ ] `/brands/[id]/edit` — tabs: Overview | Voice | Templates | Connections
+- [ ] **Voice tab** — show/edit do_use, do_not_use, phrases, custom rules
+  - [ ] Migration: `custom_do_rules` + `custom_dont_rules` + `voice_updated_at` on brands
+  - [ ] PATCH `/api/brands/[id]/voice` — save edits, log to `brand_token_events`
+  - [ ] POST `/api/brands/[id]/voice/refresh` — re-run tone extraction from examples
+  - [ ] AI Update History — show last 20 `brand_token_events` in readable form
+  - [ ] Plan gating: view = all, edit = Starter+, custom rules = Pro+
 - [ ] Brand delete with impact warning + cascade
-- [ ] `preferred_template_slug` column on `brands` table (migration)
-- [ ] Surface `template_style` slider in brand editor
 - [ ] TopBar: active brand name + color dot (left slot is currently empty `<div />`)
 - [ ] Replace `window.location.reload()` on brand switch → `router.refresh()`
 
-### H3 — Universal `<BrandSelector />` component
+---
+
+## PHASE H3 — Universal `<BrandSelector />` component
+
 - [ ] Extract into `<BrandSelector variant="sidebar|topbar|inline|filter" />`
 - [ ] Wire into TopBar, Calendar, Analytics, New Post flow, Connections page
 
-### H4 — Multi-brand calendar
+---
+
+## PHASE H4 — Multi-brand calendar
+
 - [ ] "All brands" toggle — color-coded events by brand primary color
 - [ ] Brand filter chips above calendar
-- [ ] Post cards show brand logo/color badge
 - [ ] URL param `?brand=all|[id]` for bookmarking
 
-### H5 — Template quality upgrade (editorial-level)
-- [ ] 3 new editorial templates: multi-photo grid, circular cutout variant, bold-statement editorial
-- [ ] `/brands/[id]/templates` — all templates live-rendered in THAT brand's visual identity
-- [ ] AI template adjustment: text prompt → Claude adjusts style → saved per brand
-- [ ] Secondary template config per brand (base template untouched, brand overlay on top)
-- [ ] Template health scores visible in picker ("Best for your brand" / "Declining")
+---
 
-### H6 — Analytics visibility
-- [ ] Dashboard widget: "Top performing format this month"
-- [ ] Insights: engagement breakdown by post format (photo vs carousel vs reel)
-- [ ] LinkedIn + Buffer: add `brand_tokens_snapshot` at analytics ingest
+## PHASE H5 — Template quality + multi-slot system
 
-### H7 — Video add-on (post-MVP)
+(spec: `docs/specs/template-preferences.md`)
+
+- [ ] Migration: `brand_template_preferences` table (brand_id, post_type, template_slug, slot_index, locked)
+- [ ] Update `plans.ts`: add `templateSlotsPerPostType` + `templateLockSlots` to PlanLimits
+- [ ] `/src/lib/server/render/selectTemplate.ts` — rotation logic (round-robin from saved slots)
+- [ ] Brand editor: Templates tab with per-post-type slot manager
+  - [ ] Add/remove slots up to plan limit
+  - [ ] Lock toggle (Pro+ only, server enforced)
+  - [ ] Live preview on hover
+  - [ ] Auto-swap: replace lowest-score unlocked slot on templatePulse
+  - [ ] Upgrade prompt when at capacity
+- [ ] Post Editor: show brand preferred templates at top of picker
+- [ ] 3 new editorial templates (multi-photo grid, bold-statement, circular cutout)
+- [ ] Wire `intelligence_tokens` (`text_overlay_style`, `carousel_text_overlay_density`) into `buildHtml()` (currently only in Shotstack)
+
+---
+
+## PHASE H6 — Analytics visibility
+
+(spec: `docs/specs/analytics-template-feedback.md`)
+
+- [ ] Insights page: template performance table (top 5 by score, score + trend)
+- [ ] Insights page: post type filter chips (All / Single / Carousel / Reel / Story)
+- [ ] Dashboard: "Top performing format" card (best template this month)
+- [ ] Calendar generation: bias toward top-scoring templates (explicit slot counts)
+- [ ] Calendar: `template_slug` required in generation response schema
+
+---
+
+## PHASE H7 — Storage add-on (post H5)
+
+(spec: `docs/specs/storage-addon.md`)
+
+- [ ] Create Stripe add-on products: +50 GB / +200 GB / +500 GB
+- [ ] Migration: `storage_addon_gb` on subscriptions
+- [ ] Update `checkStorageLimit()` to include addon_gb in total
+- [ ] Webhook handler: update `storage_addon_gb` on subscription item changes
+- [ ] Billing page: Storage Add-on section (below plan cards)
+- [ ] Bell notification: show "Add +50 GB for €5" option at 90%
+
+---
+
+## PHASE H8 — Video add-on (post-MVP)
+
 - [ ] `render_credits` table + Stripe add-on products (10/50/100 renders)
 - [ ] Clip-forge gated behind credit balance (not plan tier)
 - [ ] Render credit purchase in `/settings/billing`
 - [ ] Prompt caching: `cache_control: ephemeral` on brand context block in all Claude calls
 
-### H1 — Pre-edited video scheduling
-- [ ] Verify MP4 upload → Buffer handoff passes video file (not just notification)
-- [ ] Gate: Pro+ only
-
 ---
 
-## BACKLOG — Brand setup + rendering audit
+## BACKLOG
 
-- [ ] **Brand setup (PostFlow)** — user provides ToV files → create PostFlow brand in app → set colors, logo, tone
-- [ ] **Post rendering audit** — set up brand fully → render all 9 templates → document quality → screenshot for reference
+- [ ] **Brand setup (PostFlow)** — user provides ToV files → create PostFlow brand → set colors, logo, tone
+- [ ] **Post rendering audit** — render all 9 templates → document quality → screenshot for reference
+- [ ] **Pre-edited video scheduling** — verify MP4 upload → Buffer handoff passes video file; gate Pro+
+- [ ] Inngest jobs for `story`, `linkedin_post`, `tiktok_video` token keys (currently empty arrays)
+- [ ] Analytics → token nudge path (`signalType: "analytics"` exists but nothing calls it)
 
 ---
 
