@@ -16,6 +16,8 @@ export interface PublishResult {
   postedUrl?: string
 }
 
+export type PostType = "single_image" | "carousel" | "reel" | "story" | "text_only" | "video"
+
 export interface PublishInput {
   /** PostFlow internal post ID (UUID). */
   postId: string
@@ -23,6 +25,16 @@ export interface PublishInput {
   brandId: string
   /** Platform slug: "linkedin" | "facebook" | "instagram" | "tiktok" */
   platform: string
+  /**
+   * Content type — tells the publisher which API path to use.
+   * - single_image: regular feed photo post
+   * - carousel:     multi-image carousel (Instagram) or multi-photo (Facebook)
+   * - reel:         short-form video published as a Reel (Instagram) or video post
+   * - story:        24-hour ephemeral Story (Instagram)
+   * - video:        longer-form video post (LinkedIn, Facebook, TikTok)
+   * - text_only:    no media attached (LinkedIn, Facebook)
+   */
+  postType: PostType
   /** Main post text (no hashtags). */
   caption: string
   /** Hashtag strings without the leading #. */

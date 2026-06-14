@@ -38,6 +38,18 @@ Last updated: 2026-06-14
 - [x] **Architecture docs written**:
   - `docs/architecture/user-flows.md` — 14 complete user journeys
   - `docs/architecture/page-hierarchy.md` — all pages + ~80 API routes
+  - `docs/architecture/components-library.md` — all 33 components catalogued
+  - `docs/standards/analytics-pattern.md` — canonical analytics roundtrip standard
+- [x] **Direct publishing system built** (committed 2026-06-14):
+  - LinkedIn, Facebook, Instagram, TikTok publish directly (no Buffer needed)
+  - `src/lib/server/publish/` — dispatcher + 4 platform publishers + types
+  - `publishScheduledPost` Inngest job — sleepUntil → dispatchPublish → mark posted → trigger analytics
+  - `POST /api/posts/[id]/schedule` — sign-off endpoint (saves scheduled_for, fires Inngest event)
+  - `GET /api/posts/[id]/optimal-time` — analytics-based or platform-default optimal time
+  - Calendar list view — "Schedule" button with inline time picker + confidence badge
+  - PostEditor — direct publish first, Buffer fallback for unsupported platforms (x, threads)
+  - TikTok OAuth updated to request `video.publish` scope
+  - Buffer kept in codebase as fallback; not required for core 4 platforms
 - [x] **E2E browser sweep complete** (committed 2026-06-14):
   - Found and fixed root-cause Next.js 16 stuck-Suspense bug pattern:
     - `/settings/connections` — `useSearchParams()` in Suspense (never resolved)
@@ -199,6 +211,11 @@ Run through this on `postflowsocials.app` after Steps 2–4:
 
 ## BACKLOG
 
+- [ ] **Verify direct publishing on localhost** — connect platform accounts in Settings → create post → schedule from Calendar → confirm Inngest job fires → confirm post status → "posted"
+- [ ] **LinkedIn image publishing Phase 2** — 3-step server-side upload (registerUpload → upload binary → include asset URN in post)
+- [ ] **TikTok users must reconnect** — new `video.publish` scope requires re-auth; show notice in Settings → Connections for existing TikTok users
+- [ ] **X (Twitter) and Threads** — future direct publish when needed; Buffer stays as fallback path
+- [ ] **Buffer cleanup** — once direct publishing is confirmed stable in production, remove Buffer API calls from PostEditor and `/api/buffer/schedule/route.ts` (not yet — keep as safety net)
 - [ ] **Brand setup (PostFlow)** — user provides ToV files → create PostFlow brand → set colors, logo, tone
 - [ ] **Post rendering audit** — render all 9 templates → screenshot for quality reference
 - [ ] **Pre-edited video scheduling** — verify MP4 upload → Buffer handoff passes video file; gate Pro+

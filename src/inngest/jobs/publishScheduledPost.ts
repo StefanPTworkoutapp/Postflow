@@ -21,6 +21,7 @@
 import { inngest }             from "../client"
 import { createServiceClient } from "@/lib/supabase/service"
 import { dispatchPublish }     from "@/lib/server/publish/dispatcher"
+import type { PostType }       from "@/lib/server/publish/types"
 
 export const publishScheduledPost = inngest.createFunction(
   {
@@ -49,7 +50,7 @@ export const publishScheduledPost = inngest.createFunction(
       const supabase = createServiceClient()
       const { data, error } = await supabase
         .from("posts")
-        .select("id, brand_id, platform, caption, hashtags, media_ids, carousel_image_urls, template_slug, slide_content, status")
+        .select("id, brand_id, platform, post_type, caption, hashtags, media_ids, carousel_image_urls, template_slug, slide_content, status")
         .eq("id", postId)
         .single()
 
@@ -85,10 +86,23 @@ export const publishScheduledPost = inngest.createFunction(
         ? true
         : post.template_slug?.startsWith("carousel") ?? false
 
+      // Derive postType: explicit DB column wins, fall back to template_slug inference
+      const rawType = (post.post_type as string | null) ?? ""
+      const postType: PostType = (
+        ["single_image", "carousel", "reel", "story", "text_only", "video"].includes(rawType)
+          ? rawType
+          : isCarousel
+            ? "carousel"
+            : mediaUrls.length === 0
+              ? "text_only"
+              : "single_image"
+      ) as PostType
+
       return dispatchPublish({
         postId:     post.id,
         brandId:    post.brand_id,
         platform:   post.platform,
+        postType,
         caption:    post.caption ?? "",
         hashtags,
         mediaUrls,

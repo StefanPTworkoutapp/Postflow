@@ -64,6 +64,16 @@ export interface CaptionInput {
    * These override any inferred style behaviour.
    */
   custom_dont_rules?: string | null
+  /**
+   * Content type — controls how the caption is written.
+   * - "reel":        needs a strong hook in the first 2–3 words; watch-time language; shorter
+   * - "story":       very short; often just a CTA or question; no hashtags (stories show them poorly)
+   * - "carousel":    each slide teased in order; caption builds anticipation; swipe prompt
+   * - "single_image": standard feed post
+   * - "text_only":   no visual; strong opening line; relies purely on writing
+   * If omitted, treated as single_image.
+   */
+  post_type?: string | null
 }
 
 export interface GeneratedCaption {
@@ -131,6 +141,7 @@ export async function generateCaption(input: CaptionInput): Promise<GeneratedCap
     tone_examples,
     custom_do_rules,
     custom_dont_rules,
+    post_type,
   } = input
 
   const EMOJI_RULES: Record<string, string> = {
@@ -198,6 +209,38 @@ The post must primarily serve the PRIMARY goal above all others.`
     x: "Under 280 characters for the core post. 1–3 hashtags.",
     threads: "Conversational. 1–3 short paragraphs. 0–5 hashtags.",
   }
+
+  // Post-type guidance: how the format affects caption writing
+  const postTypeGuidance: Record<string, string> = {
+    reel: `This is a REEL (short-form video). Caption rules:
+- First 2–3 words must be a hard hook — viewers decide in 0.5 s whether to watch.
+- Use watch-time language: "Watch until the end", "Part 1 of...", "POV:", "This changed everything".
+- Keep the caption SHORT — people read after (or not at all) watching.
+- 5–10 hashtags, mix niche + broad.
+- Never write a wall of text.`,
+    story: `This is an Instagram STORY (24-hour ephemeral content). Caption rules:
+- Stories are visual-first. The caption should be extremely short — 1 punchy sentence or a direct question.
+- Use conversational, immediate language: "Would you try this?", "Save this!", "Which one?".
+- Hashtags barely show in Stories — include 1–3 max or zero.
+- No long copy. People tap through Stories in under 2 seconds.`,
+    carousel: `This is a CAROUSEL post (multiple slides). Caption rules:
+- Open with a hook that makes people WANT to swipe: "Most people get this wrong...", "Swipe to see all 5."
+- Tease what's inside without giving everything away in the caption.
+- End with a "swipe" prompt or "save this for later."
+- Medium length — enough to hook, short enough to leave curiosity.`,
+    text_only: `This is a TEXT-ONLY post (no image or video). Caption rules:
+- The opening line is everything — it must stop the scroll by itself.
+- Think of it as a micro-essay or a strong opinion: one clear point, made well.
+- Longer-form works here (LinkedIn especially).
+- Avoid filler. Every sentence must earn its place.`,
+    video: `This is a VIDEO post. Caption rules:
+- Lead with what the video is about in 1 sentence.
+- Describe what to expect ("In this video...") for algorithm context.
+- Medium length. Include a CTA to watch, comment, or save.`,
+    single_image: "", // default — no extra guidance beyond platform
+  }
+
+  const postTypeNote = post_type ? (postTypeGuidance[post_type] ?? "") : ""
 
   // ── Performance + trend context ──────────────────────────────────────────────
   const DAY_NAMES = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"]
@@ -278,7 +321,7 @@ ${dnm}
 ${goalsDesc}
 ${perfContext}`
 
-  const taskBlock = `Write a ${platform} post using the "${template.name}" format.
+  const taskBlock = `Write a ${platform} ${post_type === "reel" ? "Reel" : post_type === "story" ? "Story" : post_type === "carousel" ? "carousel" : "post"} using the "${template.name}" format.
 
 Topic: ${topic}
 ${audience ? `Target audience: ${audience}` : ""}
@@ -287,6 +330,7 @@ ${trendContext}
 
 Template guidance: ${template.prompt_hint}
 Platform guidance: ${platformGuidance[platform] ?? "Adapt to the platform norms."}
+${postTypeNote ? `\nContent-type guidance (CRITICAL — this overrides generic platform guidance on format):\n${postTypeNote}` : ""}
 
 Return ONLY valid JSON in this exact shape:
 {

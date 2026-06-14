@@ -159,10 +159,38 @@ export async function publishToInstagram(input: PublishInput): Promise<PublishRe
   const firstMedia = input.mediaUrls[0]
   const firstIsVideo = isVideoUrl(firstMedia)
 
+  // Resolve the effective post type:
+  // - Explicit postType="story" or "reel" always wins
+  // - Fall back to detecting from file extension so older posts still work
+  const isStory = input.postType === "story"
+  const isReel  = input.postType === "reel" || (input.postType !== "story" && firstIsVideo)
+
   try {
-    // --- Video (Reel): single video file ---
-    if (firstIsVideo) {
-      // Step 1: create a REELS container — Instagram processes the video asynchronously
+    // --- Story: 24-hour ephemeral Story (photo or video) ---
+    if (isStory) {
+      if (!firstMedia) {
+        throw new Error("Instagram Stories require at least one image or video.")
+      }
+      const containerParams: Record<string, unknown> = firstIsVideo
+        ? { media_type: "STORIES", video_url: firstMedia, access_token: accessToken }
+        : { media_type: "STORIES", image_url: firstMedia, access_token: accessToken }
+      // Stories do not support captions via the API — Instagram silently ignores them.
+      // The caption is stored in PostFlow's DB for reference only.
+
+      const container = await graphPost(`/${igUserId}/media`, containerParams)
+      const containerId = String(container.id)
+
+      // Video stories need the same processing poll as Reels
+      if (firstIsVideo) {
+        await waitForContainerReady(igUserId, containerId, accessToken)
+      }
+
+      const publishedId = await publishContainer(igUserId, containerId, accessToken)
+      return { publishedId, postedUrl }
+    }
+
+    // --- Reel: short-form video published to the Reels tab ---
+    if (isReel) {
       const container = await graphPost(`/${igUserId}/media`, {
         media_type: "REELS",
         video_url: firstMedia,
@@ -171,10 +199,9 @@ export async function publishToInstagram(input: PublishInput): Promise<PublishRe
       })
       const containerId = String(container.id)
 
-      // Step 2: poll until the video finishes processing (up to 90 s)
+      // Reels require processing before publishing (up to 90 s)
       await waitForContainerReady(igUserId, containerId, accessToken)
 
-      // Step 3: publish
       const publishedId = await publishContainer(igUserId, containerId, accessToken)
       return { publishedId, postedUrl }
     }
@@ -206,7 +233,7 @@ export async function publishToInstagram(input: PublishInput): Promise<PublishRe
       return { publishedId, postedUrl }
     }
 
-    // --- Single image (or multiple images but not carousel-flagged — post first) ---
+    // --- Single image feed post ---
     const container = await graphPost(`/${igUserId}/media`, {
       image_url: firstMedia,
       caption: fullCaption,
