@@ -321,7 +321,7 @@ export default function PrivacyPage() {
 
         {/* Nav */}
         <nav className="pf-nav">
-          <a href="https://postflow.app" className="pf-logo">
+          <a href="https://postflowsocials.app" className="pf-logo">
             <div className="pf-logo-mark">
               <svg viewBox="0 0 16 16">
                 <path d="M3 3h4v4H3zM9 3h4v4H9zM3 9h4v4H3zM9 9h4v4H9z" opacity="0.4" />
@@ -330,7 +330,7 @@ export default function PrivacyPage() {
             </div>
             PostFlow
           </a>
-          <a href="https://postflow.app" className="pf-nav-link">← Back to PostFlow</a>
+          <a href="https://postflowsocials.app" className="pf-nav-link">← Back to PostFlow</a>
         </nav>
 
         {/* Hero */}
@@ -368,8 +368,9 @@ export default function PrivacyPage() {
             <div className="pf-section-number">1</div>
             <h2>Who we are</h2>
             <p>PostFlow (&ldquo;PostFlow&rdquo;, &ldquo;we&rdquo;, &ldquo;us&rdquo;, &ldquo;our&rdquo;) is a social media content creation and scheduling platform operated by MindYourBodyPT B.V., registered in the Netherlands.</p>
-            <p>MindYourBodyPT B.V. is the data controller for personal data collected through postflow.app and app.postflow.app.</p>
-            <p><strong>Contact:</strong> <a href="mailto:privacy@postflow.app" style={{ color: "var(--teal)" }}>privacy@postflow.app</a></p>
+            <p>MindYourBodyPT B.V. is the data controller for personal data collected through postflowsocials.app.</p>
+            <p><strong>KVK:</strong> 42003965 &nbsp;·&nbsp; <strong>BTW:</strong> NL869239909B01</p>
+            <p><strong>Contact:</strong> <a href="mailto:support@mindyourbodypt.nl?subject=PostFlow%20-%20Privacy" style={{ color: "var(--teal)" }}>support@mindyourbodypt.nl</a> (subject: <em>PostFlow – Privacy</em>)</p>
           </div>
 
           <div className="pf-divider" />
@@ -559,8 +560,13 @@ export default function PrivacyPage() {
                   <td>Australia (SCCs apply)</td>
                 </tr>
                 <tr>
+                  <td><strong>Mollie</strong></td>
+                  <td>Payment processing (NL and supported countries)</td>
+                  <td>Netherlands (EU)</td>
+                </tr>
+                <tr>
                   <td><strong>Stripe</strong></td>
-                  <td>Payment processing</td>
+                  <td>Payment processing (international)</td>
                   <td>EU/USA (SCCs apply)</td>
                 </tr>
                 <tr>
@@ -675,7 +681,7 @@ export default function PrivacyPage() {
               </div>
             </div>
 
-            <p>To exercise any of these rights, email <a href="mailto:privacy@postflow.app" style={{ color: "var(--teal)" }}>privacy@postflow.app</a>. We will respond within 30 days. We may ask you to verify your identity before processing the request.</p>
+            <p>To exercise any of these rights, email <a href="mailto:support@mindyourbodypt.nl?subject=PostFlow%20-%20Privacy" style={{ color: "var(--teal)" }}>support@mindyourbodypt.nl?subject=PostFlow%20-%20Privacy</a>. We will respond within 30 days. We may ask you to verify your identity before processing the request.</p>
           </div>
 
           <div className="pf-divider" />
@@ -743,9 +749,8 @@ export default function PrivacyPage() {
 
             <div className="pf-contact-card">
               <h3>PostFlow Privacy</h3>
-              <p>📧 <a href="mailto:privacy@postflow.app">privacy@postflow.app</a></p>
-              <p>🏢 MindYourBodyPT B.V.</p>
-              <p>📍 Cereslaan 63, 1402LH Bussum, Netherlands</p>
+              <p>📧 <a href="mailto:support@mindyourbodypt.nl?subject=PostFlow%20-%20Privacy">support@mindyourbodypt.nl</a> <span style={{ color: "rgba(255,255,255,0.4)", fontSize: "0.8125rem" }}>(subject: PostFlow – Privacy)</span></p>
+              <p>🏢 MindYourBodyPT B.V. · KVK: 42003965 · BTW: NL869239909B01</p>
               <p style={{ marginTop: "1rem", fontSize: "0.875rem" }}>We aim to respond to all privacy requests within 30 days.</p>
             </div>
 
@@ -765,7 +770,7 @@ export default function PrivacyPage() {
 
         {/* Footer */}
         <footer className="pf-footer">
-          <p>© 2026 MindYourBodyPT B.V. · <a href="/privacy">Privacy Policy</a> · <a href="/terms">Terms of Service</a> · <a href="mailto:privacy@postflow.app">privacy@postflow.app</a></p>
+          <p>© 2026 MindYourBodyPT B.V. · PostFlow · KVK: 42003965 · <a href="/terms">Terms of Service</a> · <a href="mailto:support@mindyourbodypt.nl?subject=PostFlow%20-%20Support">support@mindyourbodypt.nl</a></p>
         </footer>
 
       </div>
