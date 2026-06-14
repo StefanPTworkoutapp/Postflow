@@ -7,7 +7,6 @@
  */
 
 import type { Metadata } from "next"
-import { Suspense }       from "react"
 import Link               from "next/link"
 import { createClient }   from "@/lib/supabase/server"
 import { getActiveBrand }       from "@/lib/server/brand/getActiveBrand"
@@ -54,11 +53,12 @@ interface BrandInfo {
 export default async function SchedulePage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string; brand?: string }>
+  searchParams: Promise<{ tab?: string; brand?: string; open?: string }>
 }) {
   const params      = await searchParams
   const activeTab   = (params.tab as Tab | undefined) ?? "calendar"
-  const brandParam  = params.brand  // "all" | brand-id | undefined
+  const brandParam  = params.brand   // "all" | brand-id | undefined
+  const openEntryId = params.open ?? null  // auto-open a specific calendar entry
 
   const supabase = await createClient()
   const brand    = await getActiveBrand()
@@ -146,7 +146,7 @@ export default async function SchedulePage({
 
       {/* Tab content */}
       {activeTab === "calendar" && (
-        <Suspense>
+        <div>
           {/* ── Brand filter chips (only for multi-brand users) ────────────── */}
           {isMultiBrand && (
             <div className="flex items-center gap-2 flex-wrap">
@@ -194,8 +194,9 @@ export default async function SchedulePage({
             initialMonth={month}
             brandMode={showAllBrands ? "all" : "single"}
             brands={userBrands}
+            initialOpenId={openEntryId}
           />
-        </Suspense>
+        </div>
       )}
 
       {activeTab === "posts" && (

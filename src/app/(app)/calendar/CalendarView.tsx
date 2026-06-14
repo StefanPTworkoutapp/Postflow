@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useCallback, useRef, useEffect } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { ChevronLeft, ChevronRight, PlusCircle, Sparkles, LayoutGrid, List, Loader2, ArrowRight, Upload, X, Camera, Video, Palette, Trash2, RefreshCw, CalendarDays, Columns3 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -100,11 +100,15 @@ interface Props {
   brandMode?: "single" | "all"
   /** List of the user's brands — used for the "all brands" legend */
   brands?: BrandInfo[]
+  /**
+   * Entry ID to auto-open on mount — forwarded from the server via the
+   * `?open=` search param. Eliminates the need for useSearchParams() here.
+   */
+  initialOpenId?: string | null
 }
 
-export function CalendarView({ initialEntries, initialYear, initialMonth, brandMode = "single", brands = [] }: Props) {
-  const router       = useRouter()
-  const searchParams = useSearchParams()
+export function CalendarView({ initialEntries, initialYear, initialMonth, brandMode = "single", brands = [], initialOpenId }: Props) {
+  const router = useRouter()
 
   const [year,  setYear]  = useState(initialYear)
   const [month, setMonth] = useState(initialMonth)
@@ -137,10 +141,11 @@ export function CalendarView({ initialEntries, initialYear, initialMonth, brandM
   const uploadSlotIndex = useRef<number | null>(null) // null = append mode, number = slot mode
 
   // Auto-open an entry when arriving from the dashboard via ?open=[entryId]
+  // The open ID is forwarded as a prop from the server page so no
+  // useSearchParams() is needed here (avoids Next.js 16 Suspense deadlock).
   useEffect(() => {
-    const openId = searchParams.get("open")
-    if (!openId) return
-    const entry = entries.find(e => e.id === openId)
+    if (!initialOpenId) return
+    const entry = entries.find(e => e.id === initialOpenId)
     if (!entry) return
     // Switch to list view so the entry is visible, then open it
     setView("list")

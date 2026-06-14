@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useEffect, useRef, Suspense } from "react"
-import { useSearchParams, useRouter }             from "next/navigation"
+import { useState, useEffect, useRef } from "react"
+import { useRouter }                    from "next/navigation"
 import {
   Loader2, Unlink, ExternalLink, CheckCircle2,
   AlertCircle, RefreshCw, Link2, ChevronDown, ChevronUp,
@@ -27,6 +27,9 @@ interface SocialAccount {
 interface Props {
   initialAccounts: SocialAccount[]
   brandId:         string | null
+  /** OAuth callback params forwarded from the Server Component page */
+  oauthConnected?: string | null
+  oauthError?:     string | null
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -540,9 +543,10 @@ function UrlConnector({ onConnectPlatform }: UrlConnectorProps) {
 }
 
 // ── ConnectionsInner (main logic) ─────────────────────────────────────────────
+// No useSearchParams() here — params are forwarded from the Server Component as
+// props so we never need a Suspense boundary, and the component renders instantly.
 
-function ConnectionsInner({ initialAccounts, brandId }: Props) {
-  const searchParams  = useSearchParams()
+function ConnectionsInner({ initialAccounts, brandId, oauthConnected, oauthError }: Props) {
   const router        = useRouter()
   const [accounts,      setAccounts]      = useState<SocialAccount[]>(initialAccounts)
   const [disconnecting, setDisconnecting] = useState<string | null>(null)
@@ -550,27 +554,25 @@ function ConnectionsInner({ initialAccounts, brandId }: Props) {
   const [success,       setSuccess]       = useState<string | null>(null)
   const [connecting,    setConnecting]    = useState<string | null>(null)
 
-  // ── Handle OAuth callback params ───────────────────────────────────────────
+  // ── Handle OAuth callback params (passed from server page) ─────────────────
   useEffect(() => {
-    const connected = searchParams.get("connected")
-    const errParam  = searchParams.get("error")
-
-    if (connected) {
-      const label = PLATFORM_META[connected]?.label ?? connected
+    if (oauthConnected) {
+      const label = PLATFORM_META[oauthConnected]?.label ?? oauthConnected
       setSuccess(`${label} connected successfully`)
       router.replace("/settings/connections", { scroll: false })
       void fetch("/api/settings/social")
         .then(r => r.json())
         .then(d => { if (d.connections) setAccounts(d.connections) })
-    } else if (errParam) {
-      const isFbError = errParam.startsWith("fb_")
+    } else if (oauthError) {
+      const isFbError = oauthError.startsWith("fb_")
       setError(isFbError
-        ? `Facebook error — ${errParam}`
-        : `Connection failed: ${errParam.replace(/_/g, " ")}`
+        ? `Facebook error — ${oauthError}`
+        : `Connection failed: ${oauthError.replace(/_/g, " ")}`
       )
       router.replace("/settings/connections", { scroll: false })
     }
-  }, [searchParams, router])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // only on mount — params are static snapshot from SSR
 
   const hasBuffer         = accounts.some(a => a.buffer_profile_id)
   const connectedPlatforms = new Set(accounts.map(a => a.platform))
@@ -918,17 +920,9 @@ function BufferTokenSection({ onConnected }: { onConnected: () => void }) {
   )
 }
 
-// ── Exported wrapper with Suspense ────────────────────────────────────────────
+// ── Exported component ────────────────────────────────────────────────────────
+// No Suspense needed — useSearchParams() is not used; params come from the server.
 
 export function ConnectionsClient(props: Props) {
-  return (
-    <Suspense fallback={
-      <div className="h-48 flex items-center justify-center text-sm text-[hsl(var(--muted-foreground))]">
-        <Loader2 className="h-4 w-4 animate-spin mr-2" />
-        Loading connections…
-      </div>
-    }>
-      <ConnectionsInner {...props} />
-    </Suspense>
-  )
+  return <ConnectionsInner {...props} />
 }

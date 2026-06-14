@@ -6,7 +6,9 @@
  */
 
 import type { Metadata }   from "next"
-import { Suspense }        from "react"
+// Note: Suspense removed — wrapping "use client" components in Suspense inside
+// a server component causes a stuck-template bug in Next.js 16 (no useSearchParams
+// and no async server component needed; TrendClient renders synchronously on client).
 import { redirect }        from "next/navigation"
 import Link                from "next/link"
 import { createClient }    from "@/lib/supabase/server"
@@ -14,7 +16,6 @@ import { getActiveBrand }        from "@/lib/server/brand/getActiveBrand"
 import { InsightsTabBar }  from "./InsightsTabBar"
 import { SyncButton }      from "./SyncButton"
 import { TrendClient }     from "../trend/TrendClient"
-import { PageSkeleton }    from "@/components/ui/PageSkeleton"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge }    from "@/components/ui/badge"
@@ -810,11 +811,7 @@ export default async function InsightsPage({
       )}
 
       {/* ── Trends tab ──────────────────────────────────────────────────────── */}
-      {activeTab === "trends" && (
-        <Suspense fallback={<PageSkeleton rows={5} />}>
-          <TrendClient />
-        </Suspense>
-      )}
+      {activeTab === "trends" && <TrendClient />}
     </div>
   )
 }

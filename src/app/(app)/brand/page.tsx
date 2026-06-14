@@ -6,13 +6,12 @@
  */
 
 import type { Metadata }              from "next"
-import { Suspense }                   from "react"
 import { redirect }                   from "next/navigation"
+import { createClient }               from "@/lib/supabase/server"
 import { getActiveBrand }             from "@/lib/server/brand/getActiveBrand"
 import { BrandEditor }                from "./BrandEditor"
 import { BrandTabBar }                from "./BrandTabBar"
 import { BrandIntelligenceContent }   from "../brand-intelligence/BrandIntelligenceContent"
-import { PageSkeleton }               from "@/components/ui/PageSkeleton"
 
 export const metadata: Metadata = { title: "PostFlow · Brand" }
 
@@ -28,6 +27,32 @@ export default async function BrandPage({
 
   const brand = await getActiveBrand()
   if (!brand) redirect("/onboarding")
+
+  // Fetch intelligence data here (in the page-level server component) rather
+  // than inside BrandIntelligenceContent, to avoid the Next.js 16 streaming
+  // deadlock caused by cookies() inside a Suspense-wrapped async server component.
+  let intelligenceEvents:    import("../brand-intelligence/BrandIntelligenceContent").TokenEventRow[]    = []
+  let intelligenceProcessed: import("../brand-intelligence/BrandIntelligenceContent").AnalyticsProcessedRow[] = []
+
+  if (activeTab === "intelligence") {
+    const supabase = await createClient()
+    const [{ data: evts }, { data: proc }] = await Promise.all([
+      supabase
+        .from("brand_token_events")
+        .select("id, token_key, old_value, new_value, old_confidence, new_confidence, signal_type, signal_source_id, signal_detail, created_at")
+        .eq("brand_id", brand.id)
+        .order("created_at", { ascending: false })
+        .limit(100),
+      supabase
+        .from("analytics_processed")
+        .select("brand_id, post_id, platform, signals_applied, processed_at")
+        .eq("brand_id", brand.id)
+        .order("processed_at", { ascending: false })
+        .limit(50),
+    ])
+    intelligenceEvents    = (evts ?? []) as typeof intelligenceEvents
+    intelligenceProcessed = (proc ?? []) as typeof intelligenceProcessed
+  }
 
   return (
     <div className="space-y-6">
@@ -45,12 +70,12 @@ export default async function BrandPage({
       {/* Tab content */}
       {activeTab === "brand" && <BrandEditor brand={brand} />}
       {activeTab === "intelligence" && (
-        <Suspense fallback={<PageSkeleton rows={6} />}>
-          <BrandIntelligenceContent
-            brandId={brand.id}
-            brandIntelligenceTokens={brand.intelligence_tokens}
-          />
-        </Suspense>
+        <BrandIntelligenceContent
+          brandId={brand.id}
+          brandIntelligenceTokens={brand.intelligence_tokens}
+          events={intelligenceEvents}
+          processed={intelligenceProcessed}
+        />
       )}
     </div>
   )

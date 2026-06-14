@@ -8,7 +8,6 @@
  */
 
 import Link from "next/link"
-import { createClient } from "@/lib/supabase/server"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
@@ -36,7 +35,7 @@ interface TokenEntry {
   options?:           string[]
 }
 
-interface TokenEventRow {
+export interface TokenEventRow {
   id:               string
   token_key:        string
   old_value:        string | null
@@ -49,7 +48,7 @@ interface TokenEventRow {
   created_at:       string
 }
 
-interface AnalyticsProcessedRow {
+export interface AnalyticsProcessedRow {
   brand_id:        string
   post_id:         string
   platform:        string
@@ -190,34 +189,26 @@ function SummaryCard({
 
 // ── Main component ─────────────────────────────────────────────────────────────
 
-export async function BrandIntelligenceContent({ brandId, brandIntelligenceTokens }: {
-  brandId: string
+/**
+ * BrandIntelligenceContent — sync server component.
+ *
+ * All data is fetched by the parent (brand/page.tsx) and passed as props.
+ * This avoids the Next.js 16 streaming deadlock that occurs when an async
+ * server component inside a <Suspense> boundary calls cookies() internally.
+ */
+export function BrandIntelligenceContent({
+  brandIntelligenceTokens,
+  events: rawEventsProp,
+  processed: rawProcessedProp,
+}: {
+  brandId: string // kept for API compatibility; no longer used for fetching
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   brandIntelligenceTokens: any
+  events:    TokenEventRow[]
+  processed: AnalyticsProcessedRow[]
 }) {
-  const supabase = await createClient()
-
-  const [
-    { data: rawEvents },
-    { data: rawProcessed },
-  ] = await Promise.all([
-    supabase
-      .from("brand_token_events")
-      .select("id, token_key, old_value, new_value, old_confidence, new_confidence, signal_type, signal_source_id, signal_detail, created_at")
-      .eq("brand_id", brandId)
-      .order("created_at", { ascending: false })
-      .limit(100),
-
-    supabase
-      .from("analytics_processed")
-      .select("brand_id, post_id, platform, signals_applied, processed_at")
-      .eq("brand_id", brandId)
-      .order("processed_at", { ascending: false })
-      .limit(50),
-  ])
-
-  const events    = (rawEvents ?? []) as TokenEventRow[]
-  const processed = (rawProcessed ?? []) as AnalyticsProcessedRow[]
+  const events    = rawEventsProp
+  const processed = rawProcessedProp
 
   const rawTokens    = (brandIntelligenceTokens ?? {}) as unknown as Record<string, TokenEntry>
   const tokenEntries = Object.entries(rawTokens)

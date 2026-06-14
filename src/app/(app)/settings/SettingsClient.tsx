@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -56,17 +55,6 @@ export function SettingsClient({ user, account, socialAccounts: initial, brandId
   const [showToken,        setShowToken]        = useState(false)
   const [bufferSaving,     setBufferSaving]     = useState(false)
   const [bufferDisconnecting, setBufferDisconnecting] = useState(false)
-
-  const searchParams = useSearchParams()
-
-  // Suppress any stale OAuth redirect params (OAuth no longer used)
-  useEffect(() => {
-    const connected = searchParams.get("buffer_connected")
-    const error     = searchParams.get("buffer_error")
-    if (connected || error) {
-      window.history.replaceState({}, "", "/settings")
-    }
-  }, [searchParams])
 
   const isBufferConnected = socialAccounts.some(s => s.buffer_profile_id)
 

@@ -12,7 +12,12 @@ export const metadata: Metadata = { title: "PostFlow · Connect" }
  * Dedicated platform connections page. All social_accounts for the current brand
  * are shown here. Buffer channels are auto-synced on load (same logic as /settings).
  */
-export default async function ConnectionsPage() {
+export default async function ConnectionsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+  const params = await searchParams
   const supabase = await createClient()
   const brand = await getActiveBrand()
 
@@ -102,7 +107,12 @@ export default async function ConnectionsPage() {
           Connect your social accounts so PostFlow can schedule and analyse your posts.
         </p>
       </div>
-      <ConnectionsClient initialAccounts={displayAccounts} brandId={brand.id} />
+      <ConnectionsClient
+        initialAccounts={displayAccounts}
+        brandId={brand.id}
+        oauthConnected={typeof params.connected === "string" ? params.connected : null}
+        oauthError={typeof params.error === "string" ? params.error : null}
+      />
     </div>
   )
 }
