@@ -3,10 +3,23 @@
 import { useState, useCallback, useRef, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { ChevronLeft, ChevronRight, PlusCircle, Sparkles, LayoutGrid, List, Loader2, ArrowRight, Upload, X, Camera, Video, Palette, Trash2, RefreshCw, CalendarDays, Columns3 } from "lucide-react"
+import { ChevronLeft, ChevronRight, PlusCircle, Sparkles, LayoutGrid, List, Loader2, ArrowRight, Upload, X, Camera, Video, Palette, Trash2, RefreshCw, CalendarDays, Columns3, Clock, Send } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { GenerateCalendarModal } from "./GenerateCalendarModal"
+
+// ── Schedule sign-off panel state ─────────────────────────────────────────────
+interface SchedulePanelState {
+  entryId:     string
+  postId:      string
+  platform:    string
+  suggestedAt: string   // ISO string — next optimal occurrence
+  label:       string   // "Tuesday at 18:00"
+  confidence:  "data" | "fallback"
+  selectedAt:  string   // ISO string — what the user picked (starts = suggestedAt)
+  saving:      boolean
+  error:       string | null
+}
 
 interface SlideContent {
   headline:  string
@@ -136,6 +149,8 @@ export function CalendarView({ initialEntries, initialYear, initialMonth, brandM
   const [uploadingFor,    setUploadingFor]    = useState<string | null>(null)  // entryId being uploaded
   const [deletingEntry,   setDeletingEntry]   = useState<string | null>(null)  // entryId being deleted
   const [regeneratingEntry, setRegeneratingEntry] = useState<string | null>(null) // entryId being regenerated
+  const [schedulePanel,   setSchedulePanel]   = useState<SchedulePanelState | null>(null)
+  const [loadingOptimal,  setLoadingOptimal]  = useState<string | null>(null)  // entryId loading optimal time
   const fileInputRef = useRef<HTMLInputElement>(null)
   const uploadEntryId  = useRef<string | null>(null)
   const uploadSlotIndex = useRef<number | null>(null) // null = append mode, number = slot mode
@@ -325,6 +340,72 @@ export function CalendarView({ initialEntries, initialYear, initialMonth, brandM
         ? { ...e, media_urls: json.mediaUrls, status: json.mediaUrls.length === 0 ? "planned" : "media_pending" }
         : e
     ))
+  }
+
+  /** Open the schedule sign-off panel for a list-view entry */
+  async function handleScheduleOpen(entry: CalendarEntry) {
+    const post = entry.posts?.[0]
+    if (!post) return
+    setLoadingOptimal(entry.id)
+    try {
+      const res  = await fetch(`/api/posts/${post.id}/optimal-time`)
+      const json = await res.json() as {
+        suggestedAt: string
+        label:       string
+        confidence:  "data" | "fallback"
+        platform:    string
+        error?:      string
+      }
+      if (!res.ok || json.error) {
+        console.error("[schedule-open] optimal-time error:", json.error)
+        return
+      }
+      setSchedulePanel({
+        entryId:     entry.id,
+        postId:      post.id,
+        platform:    post.platform,
+        suggestedAt: json.suggestedAt,
+        label:       json.label,
+        confidence:  json.confidence,
+        selectedAt:  json.suggestedAt,
+        saving:      false,
+        error:       null,
+      })
+    } catch (e) {
+      console.error("[schedule-open] fetch error:", e)
+    } finally {
+      setLoadingOptimal(null)
+    }
+  }
+
+  /** Confirm and send the post to be published at the selected time */
+  async function handleScheduleConfirm() {
+    if (!schedulePanel) return
+    setSchedulePanel(prev => prev ? { ...prev, saving: true, error: null } : null)
+    try {
+      const res  = await fetch(`/api/posts/${schedulePanel.postId}/schedule`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ scheduledAt: schedulePanel.selectedAt }),
+      })
+      const json = await res.json()
+      if (!res.ok) {
+        setSchedulePanel(prev => prev ? { ...prev, saving: false, error: json.error ?? "Schedule failed" } : null)
+        return
+      }
+      // Optimistically update the entry status in calendar
+      setEntries(prev => prev.map(e =>
+        e.id === schedulePanel.entryId
+          ? { ...e, status: "scheduled", posts: e.posts?.map(p =>
+              p.id === schedulePanel.postId ? { ...p, status: "scheduled" } : p
+            ) ?? null }
+          : e
+      ))
+      setSchedulePanel(null)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error"
+      setSchedulePanel(prev => prev ? { ...prev, saving: false, error: msg } : null)
+    }
   }
 
   // ── Calendar grid ────────────────────────────────────────────────────────
@@ -847,6 +928,74 @@ export function CalendarView({ initialEntries, initialYear, initialMonth, brandM
                               : <><ArrowRight className="h-3 w-3" />Create post</>
                           }
                         </button>
+
+                        {/* Schedule — only for ready posts that aren't already scheduled/posted */}
+                        {existingPost && !["scheduled", "posted"].includes(existingPost.status) && (
+                          schedulePanel?.entryId === entry.id ? (
+                            // Inline schedule panel
+                            <div className="border rounded-lg bg-[hsl(var(--background))] p-2.5 space-y-2 min-w-[200px]">
+                              <div className="flex items-center gap-1.5 text-xs font-medium text-[hsl(var(--foreground))]">
+                                <Clock className="h-3 w-3 text-green-500 shrink-0" />
+                                Publish time
+                                {schedulePanel.confidence === "data" && (
+                                  <span className="text-[9px] bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300 px-1.5 py-0.5 rounded-full font-semibold">
+                                    based on your data
+                                  </span>
+                                )}
+                              </div>
+                              <input
+                                type="datetime-local"
+                                value={schedulePanel.selectedAt.slice(0, 16)}
+                                onChange={e => {
+                                  const iso = new Date(e.target.value).toISOString()
+                                  setSchedulePanel(prev => prev ? { ...prev, selectedAt: iso } : null)
+                                }}
+                                className="w-full text-xs rounded border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                              />
+                              {schedulePanel.error && (
+                                <p className="text-[10px] text-red-500">{schedulePanel.error}</p>
+                              )}
+                              <div className="flex gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={handleScheduleConfirm}
+                                  disabled={schedulePanel.saving}
+                                  className="flex-1 flex items-center justify-center gap-1 text-xs font-medium px-2 py-1.5 rounded-md bg-indigo-500 text-white hover:bg-indigo-600 disabled:opacity-60 transition-colors"
+                                >
+                                  {schedulePanel.saving
+                                    ? <Loader2 className="h-3 w-3 animate-spin" />
+                                    : <Send className="h-3 w-3" />
+                                  }
+                                  {schedulePanel.saving ? "Scheduling…" : "Schedule"}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setSchedulePanel(null)}
+                                  disabled={schedulePanel.saving}
+                                  className="px-2 py-1.5 rounded-md border text-xs text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:border-[hsl(var(--foreground))] transition-colors"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleScheduleOpen(entry)}
+                              disabled={loadingOptimal === entry.id}
+                              className={cn(
+                                "flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors",
+                                "border-green-200 bg-green-50 text-green-700 hover:bg-green-100 dark:border-green-800 dark:bg-green-950/30 dark:text-green-300",
+                                loadingOptimal === entry.id && "opacity-60 cursor-wait"
+                              )}
+                            >
+                              {loadingOptimal === entry.id
+                                ? <><Loader2 className="h-3 w-3 animate-spin" />Loading…</>
+                                : <><Clock className="h-3 w-3" />Schedule</>
+                              }
+                            </button>
+                          )
+                        )}
 
                         {/* Regenerate idea */}
                         <button

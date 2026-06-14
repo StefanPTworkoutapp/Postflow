@@ -137,6 +137,7 @@ export function PostEditor({ post, brandName, industry, contentLanguage = "en", 
   const [saving,      setSaving]      = useState(false)
   const [scheduling,  setScheduling]  = useState(false)
   const [scheduleMsg, setScheduleMsg] = useState<{ type: "success" | "warn"; text: string } | null>(null)
+  // notifyPublish: kept for backward-compat JSX; not triggered by direct publishing
   const [notifyPublish, setNotifyPublish] = useState(false)
   const [deleting,    setDeleting]    = useState(false)
   const [regen,       setRegen]       = useState(false)
@@ -248,7 +249,7 @@ export function PostEditor({ post, brandName, industry, contentLanguage = "en", 
     setError(null)
     setScheduleMsg(null)
     try {
-      // 1. Save & promote to "scheduled" first
+      // 1. Save latest caption / metadata first
       const saveRes = await fetch(`/api/posts/${post.id}`, {
         method:  "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -256,7 +257,6 @@ export function PostEditor({ post, brandName, industry, contentLanguage = "en", 
           caption,
           hashtags,
           cta:            cta || null,
-          status:         "scheduled",
           scheduled_date: scheduledDate,
           topic:          topic || null,
           media_ids:      mediaIds,
@@ -264,28 +264,44 @@ export function PostEditor({ post, brandName, industry, contentLanguage = "en", 
       })
       const saveJson = await saveRes.json()
       if (!saveRes.ok) { setError(saveJson.error ?? "Save failed"); return }
-      setStatus("scheduled")
-      router.refresh()
 
-      // 2. Push to Buffer
-      const bufRes = await fetch("/api/buffer/schedule", {
+      // 2. Schedule via direct publishing (no Buffer needed)
+      // Use the selected date at optimal time — default to 18:00 if no optimal time available
+      const optimalHour    = optimalTime ? parseInt(optimalTime.label.split("at ")[1]?.split(":")[0] ?? "18") : 18
+      const scheduledAt    = new Date(`${scheduledDate}T${String(optimalHour).padStart(2, "0")}:00:00`).toISOString()
+
+      const schedRes = await fetch(`/api/posts/${post.id}/schedule`, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ post_id: post.id }),
+        body:    JSON.stringify({ scheduledAt }),
       })
-      const bufJson = await bufRes.json()
+      const schedJson = await schedRes.json()
 
-      if (bufRes.ok) {
-        if (bufJson.notificationPublish) {
-          // Instagram / Facebook require a tap in the Buffer mobile app to go live
-          setNotifyPublish(true)
-        } else {
+      if (schedRes.ok) {
+        setStatus("scheduled")
+        setScheduleMsg({
+          type: "success",
+          text: `✅ Scheduled for ${new Date(scheduledAt).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })} at ${String(optimalHour).padStart(2, "0")}:00. PostFlow will publish it automatically.`,
+        })
+        router.refresh()
+      } else if (schedJson.needsBuffer) {
+        // Platform not yet supported for direct publishing — fall back to Buffer
+        const bufRes = await fetch("/api/buffer/schedule", {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ post_id: post.id }),
+        })
+        const bufJson = await bufRes.json()
+        if (bufRes.ok) {
+          setStatus("scheduled")
           setScheduleMsg({ type: "success", text: "✅ Sent to Buffer! It will auto-publish at the scheduled time." })
+          router.refresh()
+        } else {
+          const msg = bufJson.error ?? "Buffer not connected."
+          setScheduleMsg({ type: "warn", text: `⚠️ ${schedJson.error} Also tried Buffer: ${msg}` })
         }
       } else {
-        // Buffer not connected or other soft error — post is still saved as "scheduled"
-        const msg = bufJson.error ?? "Buffer not connected."
-        setScheduleMsg({ type: "warn", text: `⚠️ Post saved as scheduled, but Buffer push failed: ${msg} Connect Buffer in Settings to auto-publish.` })
+        setError(schedJson.error ?? "Scheduling failed")
       }
     } finally {
       setScheduling(false)

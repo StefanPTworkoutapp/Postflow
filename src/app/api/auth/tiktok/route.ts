@@ -62,10 +62,10 @@ export async function GET(req: Request) {
     sameSite: "lax",
   })
 
-  // Only user.info.basic is guaranteed in TikTok sandbox.
-  // user.info.profile, video.list, video.insights require explicit scope
-  // approval in the TikTok Developer Portal — add back after sandbox.
-  const scopes = "user.info.basic"
+  // user.info.basic — always available (profile info)
+  // video.publish — required for direct publishing via Content Posting API
+  //   (needs TikTok production app approval; will fail gracefully in sandbox)
+  const scopes = "user.info.basic,video.publish"
 
   const oauthUrl = new URL("https://www.tiktok.com/v2/auth/authorize/")
   oauthUrl.searchParams.set("client_key",             clientKey)

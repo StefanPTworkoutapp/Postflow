@@ -12,6 +12,7 @@ import { templatePulse }             from "@/inngest/jobs/templatePulse"
 import { nicheBenchmarkRefresh }     from "@/inngest/jobs/nicheBenchmarkRefresh"
 import { refreshTokens }             from "@/inngest/jobs/refreshTokens"
 import { recalibrationCheck }        from "@/inngest/jobs/recalibrationCheck"
+import { publishScheduledPost }      from "@/inngest/jobs/publishScheduledPost"
 
 export const { GET, POST, PUT } = serve({
   client:    inngest,
@@ -28,5 +29,6 @@ export const { GET, POST, PUT } = serve({
     nicheBenchmarkRefresh,
     refreshTokens,
     recalibrationCheck,
+    publishScheduledPost,
   ],
 })
