@@ -11,6 +11,7 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getBrand }     from "@/lib/server/brand/getBrand"
+import { checkStorageLimit } from "@/lib/server/billing/limits"
 
 const MAX_PHOTO_BYTES = 25  * 1024 * 1024   // 25 MB
 const MAX_VIDEO_BYTES = 200 * 1024 * 1024   // 200 MB
@@ -53,6 +54,16 @@ export async function POST(req: Request) {
     if (size > maxBytes) {
       const limit = isPhoto ? "25 MB" : "200 MB"
       return NextResponse.json({ error: `File too large (max ${limit})` }, { status: 400 })
+    }
+
+    // Plan storage quota check
+    const fileSizeMb = size / (1024 * 1024)
+    const storageCheck = await checkStorageLimit(brand.id, fileSizeMb)
+    if (!storageCheck.allowed) {
+      return NextResponse.json(
+        { error: storageCheck.reason, upgradeHint: storageCheck.upgradeHint },
+        { status: 402 },
+      )
     }
 
     const ext  = filename.split(".").pop() ?? (isPhoto ? "jpg" : "mp4")

@@ -1,24 +1,59 @@
 # PostFlow — Task Tracker
 
-Reconciled 2026-05-12. Active: Phase G (V1 remaining spec items). Phase A = user-action deploy steps.
-For full spec on each phase see `memory/implementation_plan.md`.
+Last updated: 2026-06-14 (session cleanup)
 
 ---
 
-## PHASE A — Deploy Blockers 🔨 ACTIVE
+## ✅ DONE THIS SESSION
 
-**Goal:** Get production fully operational — billing, analytics, trends, tone loop, Instagram OAuth, and all Phase F features live.
-**Blocked by:** pending migrations + missing env vars (user actions).
+- [x] All OAuth connections fixed (`NEXT_PUBLIC_APP_URL` corrected to `postflowsocials.app`)
+- [x] TikTok v2 flat token response fix
+- [x] TikTok domain verification file served correctly
+- [x] TikTok sandbox connected; production app submitted for review
+- [x] LinkedIn OIDC real name working (OpenID Connect product added)
+- [x] Mollie test + live API keys set in Vercel
+- [x] Mollie webhook confirmed (per-payment URL, no dashboard webhook needed)
+- [x] Facebook + Instagram OAuth connected ✓
+- [x] Stripe account created (MindYourBodyPT B.V., NL)
+- [x] Stripe webhook configured (8 events, `postflowsocials.app/api/webhooks/stripe`)
+- [x] All 12 Stripe env vars pushed to Vercel + `.env.local`
+- [x] Stripe webhook handlers added: paused, resumed, trial_will_end
+- [x] Stripe API version bumped to `2026-05-27.dahlia`
+- [x] Terms of Service updated: KVK/BTW, EU withdrawal waiver, cancellation, Mollie/Stripe split
+- [x] Privacy Policy updated: KVK/BTW, Mollie as processor, correct domain + contact email
 
-### Migrations to apply (push to GitHub → Vercel preview → merge)
-- [ ] `20260509000004_billing_tables.sql` — billing schema (required for Stripe/Mollie)
-- [ ] `20260509000005_tone_suggestion_to_brands.sql` — tone_suggestion column (required for tone loop)
-- [ ] `20260510000001_brand_intelligence_tokens.sql` — brand intelligence tokens (applied locally, confirm on prod)
-- [ ] `20260512000001_inspiration_posts.sql` — inspiration_posts table (Phase F5: Inspiration Link)
-- [ ] `20260512000002_calibration_status.sql` — CHECK constraint on calibration_status (Phase F5: Onboarding)
+---
 
-### Env vars to set in Vercel production
-Analytics / trends / email:
+================================================================
+CONFIRMED DECISIONS (locked)
+================================================================
+- Video clip rendering (Shotstack) → POST-MVP flat add-on, NOT in subscriptions
+- Pre-edited video scheduling via Buffer = MVP, no Shotstack needed
+- Stripe prices stay as created: €49/€99/€149/€199/€299 monthly
+- Brand limits: Starter=1, Pro=3, Studio=5, Business=10, Agency=unlimited
+- Templates ARE already brand-dynamic. Problem is design quality, not engine.
+- Analytics per brand already scoped correctly. Needs to be VISIBLE to users.
+- BTW number: NL869239909B01 | KVK: 42003965
+================================================================
+
+---
+
+## STEP 1 — Code fixes before deploy ⚠️ DO FIRST
+
+These must be committed and deployed before E2E testing. All are in the codebase.
+
+- [ ] Switch clip analyzer: `claude-opus-4-5` → `claude-haiku-4-5` in clip-forge (15× cheaper, same quality)
+- [ ] Add `checkStorageLimit()` to `src/lib/server/billing/limits.ts` — queries `SUM(file_size_mb)` vs plan limit
+- [ ] Wire storage check into all 4 upload routes (media, clip-forge, stories, calendar)
+- [ ] Fix `/api/calendar/[id]/upload-media` — missing per-file size check
+- [ ] Storage usage bar in `/settings/billing` — "X GB of Y GB used"
+
+---
+
+## STEP 2 — Env vars still missing in Vercel production
+
+All of these are in `.env.local` already — just need to be pushed to Vercel:
+
 - [ ] `SUPABASE_SERVICE_ROLE_KEY`
 - [ ] `SERPAPI_KEY`
 - [ ] `NEWSAPI_KEY`
@@ -27,204 +62,138 @@ Analytics / trends / email:
 - [ ] `RESEND_API_KEY`
 - [ ] `CALENDAR_LINK_SECRET`
 - [ ] `BUFFER_WEBHOOK_SECRET`
-- [ ] `NEXT_PUBLIC_APP_URL` → must be `https://postflow-amber.vercel.app` (NOT localhost)
-- [ ] `SUPADATA_API_KEY` — Inspiration Link scraping (Phase F5)
-
-Instagram OAuth (Meta):
-- [ ] `INSTAGRAM_APP_ID` → `2149364262528334`
-- [ ] `INSTAGRAM_APP_SECRET` → from Meta Developer Suite
-- [ ] Register `https://postflow-amber.vercel.app/api/auth/instagram/callback` in Meta Valid OAuth Redirect URIs
-- [ ] Add Instagram account as Tester in Meta app → Roles → Instagram Testers
-
-Billing:
-- [ ] `STRIPE_SECRET_KEY`
-- [ ] `STRIPE_WEBHOOK_SECRET`
-- [ ] `STRIPE_PRICE_STARTER_MONTHLY` + `STRIPE_PRICE_STARTER_ANNUAL`
-- [ ] `STRIPE_PRICE_PRO_MONTHLY` + `STRIPE_PRICE_PRO_ANNUAL`
-- [ ] `STRIPE_PRICE_BUSINESS_MONTHLY` + `STRIPE_PRICE_BUSINESS_ANNUAL`
-- [ ] `MOLLIE_API_KEY`
-- [ ] `MOLLIE_PLAN_STARTER` + `MOLLIE_PLAN_PRO` + `MOLLIE_PLAN_BUSINESS`
-
-### Verification (after migrations + env vars applied)
-- [ ] Stripe: go to `/settings/billing` → click upgrade → complete checkout → confirm plan updates
-- [ ] Mollie: go to `/settings/billing` → choose iDEAL → complete → confirm plan updates
-- [ ] Tone suggestion: submit 5 "too_formal" feedbacks on the same brand → confirm suggestion card appears in Brand > Voice
-- [ ] Analytics: open `/analytics` → confirm page loads without 500 errors
-- [ ] Inngest: open Inngest dashboard → confirm all 6 functions registered + scheduled
-- [ ] Buffer webhook: publish a post via Buffer → confirm post status updates to "published" in PostFlow
-
-Instagram OAuth verification:
-- [ ] Connect Instagram at `/settings/connections` → completes OAuth → green "Instagram connected" banner
-- [ ] Inspiration Link: paste an Instagram post URL → analysis runs → signals applied to brand tokens
-- [ ] Onboarding calibration: complete wizard → Step 10 shows 3 sample posts → approve/adjust each → "Finish calibration" reaches dashboard
-
-Preview URL fix:
-- [ ] Vercel: ensure `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KEY` are set for **Preview** environment (not just Production)
-
-**✅ Phase A complete when:** All env vars set, all 5 migrations applied, all verification checks pass.
+- [ ] `SUPADATA_API_KEY`
+- [ ] `META_APP_ID` (= `1295792886074969`)
+- [ ] `META_APP_SECRET`
+- [ ] `TIKTOK_CLIENT_KEY`
+- [ ] `TIKTOK_CLIENT_SECRET`
+- [ ] `LINKEDIN_CLIENT_ID`
+- [ ] `LINKEDIN_CLIENT_SECRET`
+- [ ] `POSTFLOW_ANTHROPIC_KEY`
+- [ ] `CRON_SECRET`
+- [ ] `MOLLIE_API_KEY` (live key)
+- [ ] `MOLLIE_API_KEY_LIVE`
 
 ---
 
-## PHASE G — V1 Remaining Spec Items ✅ COMPLETE (2026-05-12)
+## STEP 3 — Migrations to apply to production
 
-**Goal:** Complete every v1 spec item not yet built. Grouped by scope.
+Must be applied via `supabase db push` or GitHub → merge to main → Vercel preview:
 
-### G1 — Quick wins: standalone components + design token wiring ✅ COMPLETE (2026-05-12)
-- [x] `globals.css` — `--pf-*` CSS vars already present and matching tokens (verified)
-- [x] `src/components/shared/HealthBar.tsx` — standalone, score + size + showLabel, tier-colour logic
-- [x] `src/components/shared/HealthScore.tsx` — badge/pill numeric score with tier colour
-- [x] `src/components/shared/RenderQueueDrawer.tsx` — polling drawer, clip_forge + trend jobs
-- [x] `src/app/api/render/queue/route.ts` — feeds RenderQueueDrawer with aggregated job list
-- [x] `TemplatesClient.tsx` + `TemplateSuggestionCard.tsx` — now use shared HealthBar + HealthScore
+- [ ] `20260509000004_billing_tables.sql` — billing schema (Stripe/Mollie tables)
+- [ ] `20260509000005_tone_suggestion_to_brands.sql` — tone_suggestion column
+- [ ] `20260510000001_brand_intelligence_tokens.sql` — intelligence_tokens + brand_token_events
+- [ ] `20260512000001_inspiration_posts.sql` — inspiration_posts table
+- [ ] `20260512000002_calibration_status.sql` — calibration_status CHECK constraint
 
-### G2 — OAuth token refresh ✅ COMPLETE (2026-05-12)
-- [x] `src/inngest/jobs/refreshTokens.ts` — every 6h, Instagram auto-refresh, others log+deactivate
-- [x] Registered in `src/app/api/inngest/route.ts`
-
-### G3 — ffmpeg.wasm upload pipeline ✅ COMPLETE (2026-05-12)
-- [x] `next.config.ts` — COOP/COEP headers scoped to `/upload` (not global — avoids breaking OAuth)
-- [x] `compress-video.ts` — ffmpeg.wasm 720p H.264 CRF26, MOV→MP4 transcoding
-- [x] `compress-image.ts` — canvas 1200px JPEG 85%, HEIC→JPEG via heic2any
-- [x] `chunked-upload.ts` — TUS resumable upload via Supabase client for >50MB
-- [x] `upload-manager.ts` — compress→sign→upload→confirm with stage+progress callbacks
-- [x] `MediaUploader.tsx` — integrated upload-manager, compression progress overlay, 200MB limit, HEIC support
-
-### G4 — Whisper captions in clip-forge ✅ COMPLETE (2026-05-12)
-- [x] `src/lib/server/clip-forge/whisper-captions.ts` — OpenAI Whisper API, verbose_json with segment timestamps
-- [x] Wired into `/api/clip-forge/[id]/render` — auto-transcribes when no captions supplied + OPENAI_API_KEY set
-- [x] Transcription summaries passed as `captionText` into ClipInputs → Shotstack Layer 4 overlays
-- [x] Graceful fallback: skips transcription if OPENAI_API_KEY missing (no error, just no captions)
-
-### G5 — Final V1 spec gaps ✅ COMPLETE (2026-05-12)
-- [x] Buffer notification-publish fallback UI — `PostEditor.tsx` shows "Almost there" banner for Instagram/Facebook posts with media; `schedule/route.ts` returns `notificationPublish` flag
-- [x] Instagram OAuth debug tooling — `/api/auth/instagram/debug` endpoint shows masked app ID, redirect URI, full auth URL preview; callback route now logs full tokenUrl + raw response body for Vercel log diagnosis
-
-**Architectural debt (Amber — functionality exists, not separate module files):**
-- nudge-analyzer.ts — inline in `/api/trend/[id]/nudge/route.ts` as `extractNudgeSignals()`
-- version-builder.ts — inline via `getVersionTokens()` in `trend-filter.ts`
-- concept-generator.ts — part of `trend-filter.ts` as `generateTrendConcepts()`
-- useRenderStatus, useUploadManager, useBrandProfile, useTrendConcepts, useDualRender — state managed inline in client components (acceptable for V1)
-- `/inspiration/analyse/page.tsx` — analysis result is inline in `InspirationClient.tsx` (acceptable for V1)
+After migrations: `supabase gen types typescript --linked --schema postflow 2>/dev/null > src/types/database.types.ts`
 
 ---
 
-## PHASE F — V6 Spec Build ✅ COMPLETE (2026-05-12)
+## STEP 4 — User actions required
 
-- [x] Smart Video Builder (clip-forge) — upload clips → Shotstack assembly → brand overlay
-- [x] Trend Builder — Google Trends + NewsAPI → Claude concept cards → brand-fit score → accept/skip flow
-- [x] Template Health Engine — usage analytics, performance scoring, archival
-- [x] Meta webhook — GET challenge verification ✓, POST analytics ingest (comments/reactions)
-- [x] Instagram Business Login OAuth — `/api/auth/instagram` → callback → token stored in `social_accounts`
-- [x] `ConnectionsClient` — Direct connections section with Connect button + success/error banners
-- [x] Stories & Reels page — 3-step wizard: upload → customise → schedule
-- [x] Inspiration Link — Supadata scrape → Claude signal extraction → nudgeToken() per signal
-- [x] Onboarding Step 10: First Post Calibration — 3 sample posts (A/B/C), approve/adjust/refine, confirm seeds 13 tokens
-- [x] `TOTAL_STEPS` bumped to 10, Step9 calls `next()` → flows into Step10
+- [ ] **Facebook OAuth redirect URIs** — Facebook Developer Portal → Facebook Login for Business → Settings → Valid OAuth Redirect URIs → add:
+  - `https://postflowsocials.app/api/auth/facebook/callback`
+  - `https://postflowsocials.app/api/auth/instagram/callback`
+- [ ] **Vercel redeploy** — after env vars added, trigger redeploy so they take effect
+- [ ] **Stripe notification email** — Stripe dashboard → Settings → Business details → set support email to `support@mindyourbodypt.nl`
+- [ ] **Mollie notification email** — Mollie dashboard → account settings → notifications → set to `support@mindyourbodypt.nl`
 
 ---
 
-## PHASE B — Brand Intelligence Foundation ✅ COMPLETE (2026-05-10)
+## STEP 5 — E2E test checklist
 
-- [x] Migration `20260510000001_brand_intelligence_tokens.sql` — intelligence_tokens column, brand_token_events table, extended tone_feedback CHECK
-- [x] `getBrandContext.ts` built — queries brands + performance_patterns + niche_trends + intelligence_tokens, builds prompt block
-- [x] All 4 Claude callers refactored: generateCaption, calendar/generate, convert-format, calendar/regenerate
-- [x] Video/reel + carousel feedback tags added to PostEditor UI (conditional on selectedTemplate)
-- [x] Dutch language support: content_language auto-detected in extractToneProfile, injected into all generation prompts
-- [x] JSON fence-stripping added to extractToneProfile, generateSamplePost, generateCaption (robustJsonParse)
-- [x] `npx tsc --noEmit` — zero errors ✓
+Run through this in order on `postflowsocials.app`:
 
----
+**Billing:**
+- [ ] `/settings/billing` → click Upgrade → Stripe Starter checkout completes → plan shows "Starter"
+- [ ] Stripe dashboard confirms subscription created
+- [ ] Invoice PDF stored (check `invoices` table in Supabase)
 
-## PHASE C — Upload Hub ✅ COMPLETE (2026-05-10)
+**Connections:**
+- [ ] Instagram → connect → OAuth completes → green banner
+- [ ] Facebook → connect → OAuth completes
+- [ ] LinkedIn → connect → shows real name (not "LinkedIn user")
+- [ ] TikTok → connect → OAuth completes (sandbox)
+- [ ] Buffer → connect → OAuth completes
 
-- [x] `GET /api/media` — lists brand's media_uploads (newest first)
-- [x] `DELETE /api/media/[id]` — removes DB record + storage file (RLS checked)
-- [x] `GET /api/media/[id]/matches` — returns compatible upcoming calendar entries
-- [x] `MediaGallery.tsx` — grid with filter tabs (All/Photos/Videos), quality badges, AI tags, calendar match assignment, delete
-- [x] `tagMediaUpload` Inngest job — Claude Vision tagging + quality score on upload confirm
-- [x] `npx tsc --noEmit` — zero errors ✓
+**Content flow:**
+- [ ] Create new post → AI generates caption → template renders → schedule to Buffer
+- [ ] Buffer queue shows post
+- [ ] Post published → Buffer webhook fires → PostFlow status updates to "published"
 
----
+**Analytics:**
+- [ ] `/analytics` loads without 500 errors
+- [ ] Analytics data shows after at least 1 published post
 
-## PHASE D — Carousel Template Redesign ✅ COMPLETE (2026-05-10)
+**Inngest:**
+- [ ] Inngest dashboard → all 6 functions registered + scheduled crons visible
 
-- [x] `carousel-edu.ts` redesigned — dual-wave hook, media image-top content layout (38% band + gradient fade), dual-glow CTA
-- [x] `carousel-myth.ts` redesigned — photo texture overlay at 0.12 opacity (myth) / 0.14 (reality), dual-glow CTA
-- [x] `validate-carousel.ts` created — slide count check, per-slide headline/body truncation warnings (separate limits for media vs text layouts), `assertCarouselValid()` helper
-- [x] `render-carousel/route.ts` — `assertCarouselValid(slideContent, templateSlug)` called after body parse
-- [x] `renderPost.ts` bug fix — `resolvedInput.slideContent` (data URIs) correctly passed to buildTemplateData (was passing unresolved `input.slideContent`)
-- [x] `Step3Identity.tsx` fix — color picker double-registration removed; native `<input type="color">` is sole registered element
-- [x] `npx tsc --noEmit` + `npm run build` — zero errors, clean production build ✓
+**Onboarding:**
+- [ ] Fresh account → onboarding wizard → Step 10 (calibration) → 3 sample posts → complete → reach dashboard
 
 ---
 
-## PHASE E — Launch 🔨 ACTIVE
+## PHASE H — Brand System + Template Quality 📋 AFTER E2E
 
-**Goal:** Both brands live on PostFlow. First post scheduled to Buffer.
+**Goal:** Living brand organism. One source of truth. Every feature reads from it.
+**Start after:** E2E test passes.
 
-### Onboarding (requires user action)
-- [ ] Onboard PureProgressionX: complete onboarding wizard, connect Buffer, generate 2-week calendar
-- [ ] Schedule 3 posts to Buffer from PureProgressionX
-- [ ] Onboard MindyourBodyPT: same flow
-- [ ] Monitor first week: check Buffer queue, post status updates, email reminders
+### H2 — Universal brand management (`/brands`)
+- [ ] `/brands` list page — all brands: logo, name, health score, last post, platform icons, switch + edit buttons
+- [ ] `/brands/[id]/edit` — name, logo, colors, niche, tone, template_style slider, preferred template — all in one place
+- [ ] Brand delete with impact warning + cascade
+- [ ] `preferred_template_slug` column on `brands` table (migration)
+- [ ] Surface `template_style` slider in brand editor
+- [ ] TopBar: active brand name + color dot (left slot is currently empty `<div />`)
+- [ ] Replace `window.location.reload()` on brand switch → `router.refresh()`
 
-### Blocked by (Phase A prerequisites)
-- Migrations `20260509000004` (billing) + `20260509000005` (tone_suggestion) + `20260510000001` (intelligence_tokens) must be applied
-- Vercel env vars (see Phase A list above) must be set
+### H3 — Universal `<BrandSelector />` component
+- [ ] Extract into `<BrandSelector variant="sidebar|topbar|inline|filter" />`
+- [ ] Wire into TopBar, Calendar, Analytics, New Post flow, Connections page
 
-**✅ Launch complete when:** Both brands have posts in Buffer queue. No critical bugs.
+### H4 — Multi-brand calendar
+- [ ] "All brands" toggle — color-coded events by brand primary color
+- [ ] Brand filter chips above calendar
+- [ ] Post cards show brand logo/color badge
+- [ ] URL param `?brand=all|[id]` for bookmarking
 
----
+### H5 — Template quality upgrade (editorial-level)
+- [ ] 3 new editorial templates: multi-photo grid, circular cutout variant, bold-statement editorial
+- [ ] `/brands/[id]/templates` — all templates live-rendered in THAT brand's visual identity
+- [ ] AI template adjustment: text prompt → Claude adjusts style → saved per brand
+- [ ] Secondary template config per brand (base template untouched, brand overlay on top)
+- [ ] Template health scores visible in picker ("Best for your brand" / "Declining")
 
-## Completed: Weeks 1–6 ✅
+### H6 — Analytics visibility
+- [ ] Dashboard widget: "Top performing format this month"
+- [ ] Insights: engagement breakdown by post format (photo vs carousel vs reel)
+- [ ] LinkedIn + Buffer: add `brand_tokens_snapshot` at analytics ingest
 
-### Weeks 1–3 — Foundation + Brand + Post Editor + Calendar + Buffer
-All complete. See `memory/implementation_plan.md` for full list.
+### H7 — Video add-on (post-MVP)
+- [ ] `render_credits` table + Stripe add-on products (10/50/100 renders)
+- [ ] Clip-forge gated behind credit balance (not plan tier)
+- [ ] Render credit purchase in `/settings/billing`
+- [ ] Prompt caching: `cache_control: ephemeral` on brand context block in all Claude calls
 
-### Week 4 — Template Engine + Carousel + UX polish
-- [x] 9 Puppeteer templates
-- [x] Render pipeline (single, carousel, render-variants — shared browser)
-- [x] Format conversion bidirectional (single↔carousel)
-- [x] Template picker + variant selector
-- [x] Calendar: platform pills, shooting frequency, delete/regenerate entry
-- [x] Dashboard: clickable items
-- [x] New post flow: 2-step, direct to PostEditor
-- [x] Billing tables migration written
-- [x] Onboarding tour
-- [x] Presigned URL upload (bypass Vercel 5MB limit)
-
-### Week 5 — Analytics + Trends + Email
-- [x] Meta Graph API analytics ingest
-- [x] LinkedIn Analytics ingest
-- [x] `dailyAnalyticsFetch` Inngest cron
-- [x] `weeklyPerformancePatterns` Inngest cron
-- [x] Google Trends + News API trend fetch
-- [x] `niche_trends` table + `performance_patterns` table
-- [x] Weekly trend email (Resend + Claude narrative)
-- [x] Analytics dashboard UI
-- [x] Buffer webhook handlers
-- [x] Post reminders (24h + 1h via Inngest sleepUntil)
-- [x] Performance patterns + trends injected into caption generation
-
-### Week 6 — Billing + Tone Loop
-- [x] Stripe checkout + portal + webhooks
-- [x] Mollie iDEAL/SEPA + mandate + recurring
-- [x] Billing UI (`/settings/billing`)
-- [x] Plan limits enforcement
-- [x] Invoice table + VAT (21% Dutch BTW)
-- [x] Tone learning loop Inngest job
-- [x] Tone suggestion card in Brand > Voice
-- [x] Brand PATCH route
+### H1 — Pre-edited video scheduling
+- [ ] Verify MP4 upload → Buffer handoff passes video file (not just notification)
+- [ ] Gate: Pro+ only
 
 ---
 
-## V2 Backlog
+## BACKLOG — Brand setup + rendering audit
 
-- [ ] Smart Upload → Post Intelligence (full spec in features_mvp.md)
-- [ ] Reel assembly from clips (Shotstack/Creatomate)
-- [ ] Stock image search (Unsplash API)
-- [ ] AI-generated slide images (anatomy, infographics)
-- [ ] Client portal (read-only calendar + approval flow)
-- [ ] Multi-language caption generation
-- [ ] Auto-schedule optimisation
-- [ ] Prediction accuracy dashboard
+- [ ] **Brand setup (PostFlow)** — user provides ToV files → create PostFlow brand in app → set colors, logo, tone
+- [ ] **Post rendering audit** — set up brand fully → render all 9 templates → document quality → screenshot for reference
+
+---
+
+## COMPLETED PHASES (archive)
+
+- ✅ Phase G — V1 Remaining Spec Items (2026-05-12)
+- ✅ Phase F — V6 Spec Build (2026-05-12)
+- ✅ Phase B — Brand Intelligence Foundation (2026-05-10)
+- ✅ Phase C — Upload Hub (2026-05-10)
+- ✅ Phase D — Carousel Template Redesign (2026-05-10)
+- ✅ Weeks 1–6 — Foundation through Billing + Tone Loop

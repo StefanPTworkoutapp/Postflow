@@ -18,7 +18,9 @@ let _stripe: Stripe | null = null
 export function getStripe(): Stripe {
   if (!_stripe) {
     _stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-      apiVersion: "2026-05-27.dahlia",
+      // Cast needed: installed stripe@22.1.1 types only know "2026-04-22.dahlia",
+      // but we target the newer minor revision already configured in the dashboard.
+      apiVersion: "2026-05-27.dahlia" as "2026-04-22.dahlia",
     })
   }
   return _stripe
@@ -368,7 +370,7 @@ export async function handleStripeWebhook(
       // Fetch account email for reminder
       const { data: account } = await supabase
         .from("accounts")
-        .select("email, full_name")
+        .select("email, name")
         .eq("id", accountId)
         .single()
 
@@ -384,7 +386,7 @@ export async function handleStripeWebhook(
             to:      account.email,
             subject: "Your PostFlow trial ends in 3 days",
             html: `
-              <p>Hi ${account.full_name ?? "there"},</p>
+              <p>Hi ${account.name ?? "there"},</p>
               <p>Your free trial of PostFlow ends on <strong>${trialEndDate}</strong>.</p>
               <p>After that, your subscription will continue automatically and you'll be charged based on your chosen plan.</p>
               <p>If you want to make any changes before then, you can manage your subscription at any time via
@@ -394,7 +396,7 @@ export async function handleStripeWebhook(
               <p>The PostFlow team</p>
             `,
           })
-          console.log(`[stripe-webhook] Trial-end reminder sent to ${account.email} (account ${accountId})`)
+          console.log(`[stripe-webhook] Trial-end reminder sent to ${account?.email} (account ${accountId})`)
         } catch (emailErr) {
           // Non-fatal — log but don't fail the webhook
           console.error("[stripe-webhook] Failed to send trial-end reminder:", emailErr)

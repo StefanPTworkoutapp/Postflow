@@ -9,11 +9,11 @@
  */
 
 import { createClient } from "@/lib/supabase/server"
-import { PLANS, formatPrice, type PlanTier } from "@/lib/server/billing/plans"
+import { PLANS, getLimits, formatPrice, type PlanTier } from "@/lib/server/billing/plans"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
-import { CheckCircle2, CreditCard, FileText, Zap } from "lucide-react"
+import { CheckCircle2, CreditCard, FileText, HardDrive, Zap } from "lucide-react"
 import { BillingActions } from "./BillingActions"
 
 export default async function BillingPage() {
@@ -21,7 +21,7 @@ export default async function BillingPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
 
-  const [{ data: account }, { data: invoices }] = await Promise.all([
+  const [{ data: account }, { data: invoices }, { data: userBrands }] = await Promise.all([
     supabase
       .from("accounts")
       .select("subscription_tier, subscription_status, trial_ends_at, stripe_customer_id, mollie_customer_id")
@@ -34,11 +34,34 @@ export default async function BillingPage() {
       .eq("account_id", user.id)
       .order("created_at", { ascending: false })
       .limit(12),
+
+    supabase
+      .from("brands")
+      .select("id")
+      .eq("account_id", user.id),
   ])
 
   const tier   = (account?.subscription_tier ?? "free") as PlanTier
   const status = account?.subscription_status ?? "active"
   const plan   = PLANS[tier]
+  const limits = getLimits(tier)
+
+  // Storage usage — sum across all brands
+  const brandIds = (userBrands ?? []).map(b => b.id)
+  let usedStorageMb = 0
+  if (brandIds.length > 0) {
+    const { data: uploads } = await supabase
+      .from("media_uploads")
+      .select("file_size_mb")
+      .in("brand_id", brandIds)
+    usedStorageMb = (uploads ?? []).reduce(
+      (sum, row) => sum + (typeof row.file_size_mb === "number" ? row.file_size_mb : 0),
+      0,
+    )
+  }
+  const storageLimitMb  = limits.storageGb * 1024
+  const storagePercent  = storageLimitMb > 0 ? Math.min(100, (usedStorageMb / storageLimitMb) * 100) : 0
+  const usedStorageGb   = (usedStorageMb / 1024).toFixed(2)
 
   const isTrialing     = status === "trialing"
   const isPastDue      = status === "past_due"
@@ -101,6 +124,42 @@ export default async function BillingPage() {
               <BillingActions hasMollie={hasMollie} />
             )}
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Storage usage */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base font-semibold flex items-center gap-2">
+            <HardDrive className="h-4 w-4 text-muted-foreground" />
+            Storage
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">
+              {usedStorageGb} GB of {limits.storageGb} GB used
+            </span>
+            <span className="text-xs text-muted-foreground tabular-nums">
+              {storagePercent.toFixed(0)}%
+            </span>
+          </div>
+          <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
+            <div
+              className={cn(
+                "h-2 rounded-full transition-all",
+                storagePercent >= 90 ? "bg-red-500" :
+                storagePercent >= 70 ? "bg-amber-500" :
+                "bg-indigo-500"
+              )}
+              style={{ width: `${storagePercent}%` }}
+            />
+          </div>
+          {storagePercent >= 90 && (
+            <p className="text-xs text-red-600 dark:text-red-400">
+              You&apos;re almost out of storage. Upgrade your plan or delete unused media.
+            </p>
+          )}
         </CardContent>
       </Card>
 

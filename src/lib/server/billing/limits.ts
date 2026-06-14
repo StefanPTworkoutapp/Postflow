@@ -91,6 +91,64 @@ export async function checkBrandLimit(accountId: string): Promise<LimitCheckResu
   return { allowed: true }
 }
 
+/**
+ * Check whether the account has enough storage quota to upload a new file.
+ * Storage is shared across ALL brands for an account.
+ *
+ * @param brandId    - The brand the upload belongs to (used to resolve the account)
+ * @param fileSizeMb - Size of the new file in megabytes
+ */
+export async function checkStorageLimit(brandId: string, fileSizeMb: number): Promise<LimitCheckResult> {
+  const tier    = await getAccountTier()
+  const limits  = getLimits(tier)
+  const limitMb = limits.storageGb * 1024
+
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { allowed: false, reason: "Unauthorized" }
+
+  // Resolve account_id from the brand
+  const { data: brand } = await supabase
+    .from("brands")
+    .select("account_id")
+    .eq("id", brandId)
+    .single()
+
+  const accountId = brand?.account_id ?? user.id
+
+  // Get all brand IDs for this account
+  const { data: brands } = await supabase
+    .from("brands")
+    .select("id")
+    .eq("account_id", accountId)
+
+  const brandIds = (brands ?? []).map(b => b.id)
+  if (brandIds.length === 0) return { allowed: true }
+
+  // Sum storage used across all brands
+  const { data: uploads } = await supabase
+    .from("media_uploads")
+    .select("file_size_mb")
+    .in("brand_id", brandIds)
+
+  const usedMb = (uploads ?? []).reduce(
+    (sum, row) => sum + (typeof row.file_size_mb === "number" ? row.file_size_mb : 0),
+    0,
+  )
+
+  if (usedMb + fileSizeMb > limitMb) {
+    const usedGb  = (usedMb / 1024).toFixed(1)
+    const limitGb = limits.storageGb
+    return {
+      allowed:     false,
+      reason:      `Storage limit reached (${usedGb} GB of ${limitGb} GB used on the ${tier} plan).`,
+      upgradeHint: "Upgrade your plan for more storage.",
+    }
+  }
+
+  return { allowed: true }
+}
+
 /** Check whether a feature is enabled for the account's current plan */
 export async function checkFeature(
   feature: "bufferIntegration" | "storiesReels" | "weeklyTrendEmail"
