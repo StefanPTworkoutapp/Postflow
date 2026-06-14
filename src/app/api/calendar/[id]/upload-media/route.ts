@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getBrand } from "@/lib/server/brand/getBrand"
+import { checkStorageLimit } from "@/lib/server/billing/limits"
 
 /**
  * POST /api/calendar/[id]/upload-media
@@ -50,6 +51,21 @@ export async function POST(
   const file = formData.get("file")
   if (!file || !(file instanceof Blob)) {
     return NextResponse.json({ error: "No file provided" }, { status: 400 })
+  }
+
+  // Per-file size guard (50 MB max for calendar uploads)
+  if (file.size > 50 * 1024 * 1024) {
+    return NextResponse.json({ error: "File too large (max 50 MB)" }, { status: 400 })
+  }
+
+  // Plan storage quota check
+  const fileSizeMb = file.size / (1024 * 1024)
+  const storageCheck = await checkStorageLimit(brand.id, fileSizeMb)
+  if (!storageCheck.allowed) {
+    return NextResponse.json(
+      { error: storageCheck.reason, upgradeHint: storageCheck.upgradeHint },
+      { status: 402 },
+    )
   }
 
   // Optional slot index for carousel per-slide uploads

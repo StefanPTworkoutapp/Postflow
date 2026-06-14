@@ -29,7 +29,7 @@ export const MODELS = {
   docExtraction:   "claude-sonnet-4-6",
 
   // Background Inngest jobs — already individually tuned
-  clipAnalyzer:    "claude-opus-4-5",
+  clipAnalyzer:    "claude-haiku-4-5",
   inspireAnalyze:  "claude-opus-4-5",
   nicheResearch:   "claude-opus-4-5",
   toneLoop:        "claude-haiku-4-5",
