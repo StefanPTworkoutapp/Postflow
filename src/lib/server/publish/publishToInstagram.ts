@@ -2,14 +2,14 @@
  * Publishes a post to Instagram via the Instagram Graph API (Facebook Graph API v21.0).
  *
  * Supported content types:
- *   - Single image     → create media container → publish
- *   - Carousel         → create child containers → create carousel container → publish
- *   - Text-only        → not supported by Instagram; throws an error
+ *   - Single image     → create IMAGE container → publish
+ *   - Single video     → create REELS container → poll until FINISHED → publish
+ *   - Carousel         → create child containers per image → create CAROUSEL container → publish
+ *   - Text-only        → not supported by Instagram (Meta API restriction); throws an error
  *
  * The two-step flow (create then publish) is required by the Instagram Graph API.
- * For video content, the container status must be FINISHED before publishing —
- * this publisher retries once after 3 seconds if the first publish attempt returns
- * MEDIA_NOT_READY. (Images are usually ready immediately.)
+ * Videos (Reels) require polling the container status until FINISHED before publishing —
+ * this can take 10–60 seconds depending on video length and resolution.
  *
  * API reference:
  *   https://developers.facebook.com/docs/instagram-api/guides/content-publishing
@@ -49,6 +49,38 @@ async function graphPost(
   return body
 }
 
+/** Returns true if the URL points to a video file. */
+function isVideoUrl(url: string): boolean {
+  const ext = url.split("?")[0].split(".").pop()?.toLowerCase() ?? ""
+  return ["mp4", "mov", "avi", "mkv", "webm", "m4v"].includes(ext)
+}
+
+/**
+ * Polls the container status every 5 seconds until it's FINISHED or ERROR.
+ * Videos can take 10–60 seconds to process; images are usually ready immediately.
+ * Throws after 90 seconds (18 polls) to prevent infinite waiting.
+ */
+async function waitForContainerReady(
+  igUserId: string,
+  containerId: string,
+  accessToken: string
+): Promise<void> {
+  const MAX_POLLS = 18 // 90 seconds total
+  for (let i = 0; i < MAX_POLLS; i++) {
+    await new Promise((resolve) => setTimeout(resolve, 5000))
+    const res = await fetch(
+      `https://graph.facebook.com/v21.0/${containerId}?fields=status_code&access_token=${accessToken}`
+    )
+    const body = (await res.json()) as { status_code?: string; error?: unknown }
+    if (body.status_code === "FINISHED") return
+    if (body.status_code === "ERROR") {
+      throw new Error("Instagram media container processing failed. Check the video format and try again.")
+    }
+    // PUBLISHED, IN_PROGRESS, EXPIRED — keep polling
+  }
+  throw new Error("Instagram video processing timed out after 90 seconds. Try again or use a shorter/smaller video.")
+}
+
 /** Attempts to publish a prepared container ID; retries once after 3 s on MEDIA_NOT_READY. */
 async function publishContainer(
   igUserId: string,
@@ -68,7 +100,7 @@ async function publishContainer(
   } catch (err: unknown) {
     const apiErr = err as { status: number; body: Record<string, unknown> }
     const errCode = (apiErr?.body?.error as Record<string, unknown> | undefined)?.code
-    // Instagram error code for MEDIA_NOT_READY
+    // Instagram error code for MEDIA_NOT_READY — retry once after 3 s
     if (errCode === 9007) {
       await new Promise((resolve) => setTimeout(resolve, 3000))
       return await attempt()
@@ -124,7 +156,29 @@ export async function publishToInstagram(input: PublishInput): Promise<PublishRe
     ? `https://www.instagram.com/${handle}/`
     : `https://www.instagram.com/`
 
+  const firstMedia = input.mediaUrls[0]
+  const firstIsVideo = isVideoUrl(firstMedia)
+
   try {
+    // --- Video (Reel): single video file ---
+    if (firstIsVideo) {
+      // Step 1: create a REELS container — Instagram processes the video asynchronously
+      const container = await graphPost(`/${igUserId}/media`, {
+        media_type: "REELS",
+        video_url: firstMedia,
+        caption: fullCaption,
+        access_token: accessToken,
+      })
+      const containerId = String(container.id)
+
+      // Step 2: poll until the video finishes processing (up to 90 s)
+      await waitForContainerReady(igUserId, containerId, accessToken)
+
+      // Step 3: publish
+      const publishedId = await publishContainer(igUserId, containerId, accessToken)
+      return { publishedId, postedUrl }
+    }
+
     // --- Carousel: 2+ images and isCarousel requested ---
     if (input.isCarousel && input.mediaUrls.length >= 2) {
       // Step 1: create a child container for each image
@@ -154,7 +208,7 @@ export async function publishToInstagram(input: PublishInput): Promise<PublishRe
 
     // --- Single image (or multiple images but not carousel-flagged — post first) ---
     const container = await graphPost(`/${igUserId}/media`, {
-      image_url: input.mediaUrls[0],
+      image_url: firstMedia,
       caption: fullCaption,
       access_token: accessToken,
     })
