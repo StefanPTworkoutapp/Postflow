@@ -134,100 +134,18 @@ Run through this on `postflowsocials.app` after Steps 2–4:
 ---
 
 ## PHASE H — Pre-H5 Quick Wins ✅ DONE
+## PHASE H2 — Universal Brand Management ✅ DONE
+## PHASE H3 — BrandSelector (folded into H4/H6) ✅ DONE
+## PHASE H4 — Multi-brand calendar ✅ DONE
+## PHASE H5 — Template slot system ✅ DONE
+## PHASE H6 — Analytics visibility ✅ DONE
+## PHASE H7 — Storage add-on ✅ DONE
+## PHASE H8 — Render credits + prompt caching ✅ DONE
 
-### Caption quality fixes (spec: `docs/specs/caption-quality-human-voice.md`)
-- [x] Inject `do_use[]` patterns into `generateCaption.ts` (affirmative style rules)
-- [x] Add anti-AI instruction block to caption system prompt
-- [x] Inject 1–2 `tone_examples` as few-shot samples (when available) + exposed in BrandContext
-- [x] Strengthen signature_phrases: "exactly one, woven in" not "use naturally"
-- [x] Fix `toneLearningLoop.ts` line ~170: use `tone_profile` summary not raw `tone_examples`
-- [x] Browser tested: caption returns 200, human-voiced, no AI-tells ✓
-
----
-
-## PHASE H2 — Universal Brand Management
-
-(spec: `docs/specs/brand-voice-overview.md` for Voice tab)
-
-- [ ] `/brands` list page — logo, name, health score, last post, switch/edit
-- [ ] `/brands/[id]/edit` — tabs: Overview | Voice | Templates | Connections
-- [ ] **Voice tab** — show/edit do_use, do_not_use, phrases, custom rules
-  - [ ] Migration: `custom_do_rules` + `custom_dont_rules` + `voice_updated_at` on brands
-  - [ ] PATCH `/api/brands/[id]/voice` — save edits, log to `brand_token_events`
-  - [ ] POST `/api/brands/[id]/voice/refresh` — re-run tone extraction from examples
-  - [ ] AI Update History — show last 20 `brand_token_events` in readable form
-  - [ ] Plan gating: view = all, edit = Starter+, custom rules = Pro+
-- [ ] Brand delete with impact warning + cascade
-- [ ] TopBar: active brand name + color dot (left slot is currently empty `<div />`)
-- [ ] Replace `window.location.reload()` on brand switch → `router.refresh()`
-
----
-
-## PHASE H3 — Universal `<BrandSelector />` component
-
-- [ ] Extract into `<BrandSelector variant="sidebar|topbar|inline|filter" />`
-- [ ] Wire into TopBar, Calendar, Analytics, New Post flow, Connections page
-
----
-
-## PHASE H4 — Multi-brand calendar
-
-- [ ] "All brands" toggle — color-coded events by brand primary color
-- [ ] Brand filter chips above calendar
-- [ ] URL param `?brand=all|[id]` for bookmarking
-
----
-
-## PHASE H5 — Template quality + multi-slot system
-
-(spec: `docs/specs/template-preferences.md`)
-
-- [ ] Migration: `brand_template_preferences` table (brand_id, post_type, template_slug, slot_index, locked)
-- [ ] Update `plans.ts`: add `templateSlotsPerPostType` + `templateLockSlots` to PlanLimits
-- [ ] `/src/lib/server/render/selectTemplate.ts` — rotation logic (round-robin from saved slots)
-- [ ] Brand editor: Templates tab with per-post-type slot manager
-  - [ ] Add/remove slots up to plan limit
-  - [ ] Lock toggle (Pro+ only, server enforced)
-  - [ ] Live preview on hover
-  - [ ] Auto-swap: replace lowest-score unlocked slot on templatePulse
-  - [ ] Upgrade prompt when at capacity
-- [ ] Post Editor: show brand preferred templates at top of picker
-- [ ] 3 new editorial templates (multi-photo grid, bold-statement, circular cutout)
-- [ ] Wire `intelligence_tokens` (`text_overlay_style`, `carousel_text_overlay_density`) into `buildHtml()` (currently only in Shotstack)
-
----
-
-## PHASE H6 — Analytics visibility
-
-(spec: `docs/specs/analytics-template-feedback.md`)
-
-- [ ] Insights page: template performance table (top 5 by score, score + trend)
-- [ ] Insights page: post type filter chips (All / Single / Carousel / Reel / Story)
-- [ ] Dashboard: "Top performing format" card (best template this month)
-- [ ] Calendar generation: bias toward top-scoring templates (explicit slot counts)
-- [ ] Calendar: `template_slug` required in generation response schema
-
----
-
-## PHASE H7 — Storage add-on (post H5)
-
-(spec: `docs/specs/storage-addon.md`)
-
-- [ ] Create Stripe add-on products: +50 GB / +200 GB / +500 GB
-- [ ] Migration: `storage_addon_gb` on subscriptions
-- [ ] Update `checkStorageLimit()` to include addon_gb in total
-- [ ] Webhook handler: update `storage_addon_gb` on subscription item changes
-- [ ] Billing page: Storage Add-on section (below plan cards)
-- [ ] Bell notification: show "Add +50 GB for €5" option at 90%
-
----
-
-## PHASE H8 — Video add-on (post-MVP)
-
-- [ ] `render_credits` table + Stripe add-on products (10/50/100 renders)
-- [ ] Clip-forge gated behind credit balance (not plan tier)
-- [ ] Render credit purchase in `/settings/billing`
-- [ ] Prompt caching: `cache_control: ephemeral` on brand context block in all Claude calls
+### H7/H8 user actions still required:
+- [ ] Create Stripe storage add-on products (50/200/500 GB) + set STRIPE_ADDON_STORAGE_* env vars
+- [ ] Create Stripe render credit products (10/50/100 renders) + set STRIPE_CREDITS_*_PRICE env vars
+- [ ] Add `type=storage_addon` + `storage_gb` metadata to Stripe storage add-on price objects
 
 ---
 
