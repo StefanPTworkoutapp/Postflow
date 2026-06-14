@@ -18,7 +18,7 @@ let _stripe: Stripe | null = null
 export function getStripe(): Stripe {
   if (!_stripe) {
     _stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-      apiVersion: "2026-04-22.dahlia",
+      apiVersion: "2026-05-27.dahlia",
     })
   }
   return _stripe
@@ -312,6 +312,96 @@ export async function handleStripeWebhook(
       }).eq("id", accountId)
 
       return { accountId, tier: "current", status: "past_due" }
+    }
+
+    case "customer.subscription.paused": {
+      // Also fires customer.subscription.updated, but handle explicitly for clarity
+      const sub       = event.data.object as Stripe.Subscription
+      const accountId = sub.metadata?.postflow_account_id
+      if (!accountId) return null
+
+      await Promise.all([
+        supabase.from("accounts").update({
+          subscription_status: "paused",
+        }).eq("id", accountId),
+        supabase.from("subscriptions").upsert({
+          account_id:  accountId,
+          status:      "paused",
+          updated_at:  new Date().toISOString(),
+        }, { onConflict: "account_id" }),
+      ])
+
+      return { accountId, tier: "current", status: "paused" }
+    }
+
+    case "customer.subscription.resumed": {
+      const sub       = event.data.object as Stripe.Subscription
+      const accountId = sub.metadata?.postflow_account_id
+      if (!accountId) return null
+
+      const status = mapStripeStatus(sub.status)
+
+      await Promise.all([
+        supabase.from("accounts").update({
+          subscription_status: status,
+        }).eq("id", accountId),
+        supabase.from("subscriptions").upsert({
+          account_id:  accountId,
+          status,
+          updated_at:  new Date().toISOString(),
+        }, { onConflict: "account_id" }),
+      ])
+
+      return { accountId, tier: "current", status }
+    }
+
+    case "customer.subscription.trial_will_end": {
+      // Fires 3 days before trial ends — send reminder email via Resend
+      const sub       = event.data.object as Stripe.Subscription
+      const accountId = sub.metadata?.postflow_account_id
+      if (!accountId) return null
+
+      const trialEnd = sub.trial_end
+        ? new Date(sub.trial_end * 1000).toISOString()
+        : null
+
+      // Fetch account email for reminder
+      const { data: account } = await supabase
+        .from("accounts")
+        .select("email, full_name")
+        .eq("id", accountId)
+        .single()
+
+      if (account?.email && trialEnd) {
+        try {
+          const { Resend } = await import("resend")
+          const resend = new Resend(process.env.RESEND_API_KEY)
+          const trialEndDate = new Date(trialEnd).toLocaleDateString("en-GB", {
+            day: "numeric", month: "long", year: "numeric",
+          })
+          await resend.emails.send({
+            from:    "PostFlow <support@mindyourbodypt.nl>",
+            to:      account.email,
+            subject: "Your PostFlow trial ends in 3 days",
+            html: `
+              <p>Hi ${account.full_name ?? "there"},</p>
+              <p>Your free trial of PostFlow ends on <strong>${trialEndDate}</strong>.</p>
+              <p>After that, your subscription will continue automatically and you'll be charged based on your chosen plan.</p>
+              <p>If you want to make any changes before then, you can manage your subscription at any time via
+                <a href="https://postflowsocials.app/settings/billing">Settings → Billing</a>.
+              </p>
+              <p>Questions? Reply to this email or contact us at support@mindyourbodypt.nl (subject: PostFlow – Billing).</p>
+              <p>The PostFlow team</p>
+            `,
+          })
+          console.log(`[stripe-webhook] Trial-end reminder sent to ${account.email} (account ${accountId})`)
+        } catch (emailErr) {
+          // Non-fatal — log but don't fail the webhook
+          console.error("[stripe-webhook] Failed to send trial-end reminder:", emailErr)
+        }
+      }
+
+      return { accountId, tier: "current", status: "trial_ending" }
     }
 
     default:
