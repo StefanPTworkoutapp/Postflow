@@ -19,20 +19,25 @@ Last updated: 2026-06-14
 - [x] Stripe API version bumped to `2026-05-27.dahlia`
 - [x] Terms of Service: KVK/BTW, EU withdrawal waiver, cancellation, Mollie/Stripe split
 - [x] Privacy Policy: KVK/BTW, Mollie as processor, correct domain + contact email
-- [x] **Step 1 DONE:** `clipAnalyzer` switched to `claude-haiku-4-5` (15× cheaper)
-- [x] **Step 1 DONE:** `checkStorageLimit()` added to `limits.ts`
-- [x] **Step 1 DONE:** Storage check wired into all 4 upload routes (HTTP 402 on breach)
-- [x] **Step 1 DONE:** Calendar upload now has 50 MB per-file cap
-- [x] **Step 1 DONE:** Storage usage bar in `/settings/billing` (amber ≥70%, red ≥90%)
-- [x] **Bell DONE:** Storage warning popover on Bell icon in TopBar (amber dot ≥70%, red ≥90%)
-- [x] **Bell DONE:** Dismissable (7 days for warning, 24h for critical); "Upgrade plan" CTA
-- [x] **Bell DONE:** Storage percent computed in AppLayout and passed as props
-- [x] `Popover` UI component created (`src/components/ui/popover.tsx`)
-- [x] Spec written: `docs/specs/analytics-template-feedback.md`
-- [x] Spec written: `docs/specs/template-preferences.md`
-- [x] Spec written: `docs/specs/caption-quality-human-voice.md`
-- [x] Spec written: `docs/specs/brand-voice-overview.md`
-- [x] Spec written: `docs/specs/storage-addon.md`
+- [x] `clipAnalyzer` switched to `claude-haiku-4-5` (15× cheaper)
+- [x] `checkStorageLimit()` added to `limits.ts`; storage check wired into all 4 upload routes
+- [x] Storage usage bar in `/settings/billing` (amber ≥70%, red ≥90%)
+- [x] Bell storage warning (dismissable, 7d/24h, CTA to billing)
+- [x] `Popover` UI component created
+- [x] Specs written: analytics-template-feedback, template-preferences, caption-quality-human-voice, brand-voice-overview, storage-addon
+- [x] **PHASE H1–H8** — all complete (see archive below)
+- [x] **AUDIT COMPLETE** — analytics roundtrip ✅, rendering gaps ✅, security audit ✅, user flows ✅
+- [x] **Security fixes** (committed 2026-06-14):
+  - `ai_usage_logs` RLS enabled (migration `20260616000001`)
+  - `CALENDAR_LINK_SECRET` hardcoded fallback removed — throws 500 if env var absent
+  - Upload MIME type allowlist added (`image/*`, `video/*`, `application/pdf`)
+- [x] **Brand identity gaps closed** (committed 2026-06-14):
+  - `accent_color` wired through all render routes → `BrandVars.accentColor`
+  - `tagline`, `website_url`, `target_age_range`, `geographic_location` added to `BrandContext`
+    and injected into every Claude caption/calendar call via `buildPromptBlock`
+- [x] **Architecture docs written**:
+  - `docs/architecture/user-flows.md` — 14 complete user journeys
+  - `docs/architecture/page-hierarchy.md` — all pages + ~80 API routes
 
 ---
 
@@ -63,7 +68,7 @@ All of these are in `.env.local` already — just need to be pushed to Vercel:
 - [ ] `INNGEST_SIGNING_KEY`
 - [ ] `INNGEST_EVENT_KEY`
 - [ ] `RESEND_API_KEY`
-- [ ] `CALENDAR_LINK_SECRET`
+- [ ] `CALENDAR_LINK_SECRET`  ← CRITICAL (hardcoded fallback removed — must be set in prod)
 - [ ] `BUFFER_WEBHOOK_SECRET`
 - [ ] `SUPADATA_API_KEY`
 - [ ] `META_APP_ID` (= `1295792886074969`)
@@ -88,6 +93,11 @@ Apply via `supabase db push` after review:
 - [ ] `20260510000001_brand_intelligence_tokens.sql` — intelligence_tokens + brand_token_events
 - [ ] `20260512000001_inspiration_posts.sql` — inspiration_posts table
 - [ ] `20260512000002_calibration_status.sql` — calibration_status CHECK constraint
+- [ ] `20260615000001_brand_voice_custom_rules.sql` — custom_do_rules / custom_dont_rules columns
+- [ ] `20260615000002_brand_template_preferences.sql` — template slot system table
+- [ ] `20260615000003_storage_addon.sql` — storage_addon_gb column on subscriptions
+- [ ] `20260615000004_render_credits.sql` — render_credit_transactions table
+- [ ] `20260616000001_ai_usage_logs_rls.sql` — RLS on ai_usage_logs (SECURITY)
 
 After migrations: `supabase gen types typescript --linked --schema postflow 2>/dev/null > src/types/database.types.ts`
 
@@ -98,15 +108,24 @@ After migrations: `supabase gen types typescript --linked --schema postflow 2>/d
 - [ ] **Facebook OAuth redirect URIs** — Facebook Developer Portal → Facebook Login for Business → Valid OAuth Redirect URIs:
   - `https://postflowsocials.app/api/auth/facebook/callback`
   - `https://postflowsocials.app/api/auth/instagram/callback`
-- [ ] **Vercel redeploy** — after env vars added, trigger redeploy
+- [ ] **Vercel: push all STEP 2 env vars** then trigger redeploy
 - [ ] **Stripe notification email** → `support@mindyourbodypt.nl`
 - [ ] **Mollie notification email** → `support@mindyourbodypt.nl`
+- [ ] **Stripe add-on products** (H7/H8):
+  - 3 recurring storage products: +50 GB (€5), +200 GB (€15), +500 GB (€30) — set price metadata `type=storage_addon` + `storage_gb=N`
+  - 3 one-time render credit products: 10 renders (€9), 50 renders (€39), 100 renders (€69)
+  - Set 6 new env vars: `STRIPE_ADDON_STORAGE_50_PRICE`, `STRIPE_ADDON_STORAGE_200_PRICE`, `STRIPE_ADDON_STORAGE_500_PRICE`, `STRIPE_CREDITS_10_PRICE`, `STRIPE_CREDITS_50_PRICE`, `STRIPE_CREDITS_100_PRICE`
+  - Set 3 annual variants if wanted: `STRIPE_ADDON_STORAGE_50_ANNUAL`, `STRIPE_ADDON_STORAGE_200_ANNUAL`, `STRIPE_ADDON_STORAGE_500_ANNUAL`
 
 ---
 
 ## STEP 5 — E2E test checklist
 
 Run through this on `postflowsocials.app` after Steps 2–4:
+
+**Auth + Onboarding:**
+- [ ] Fresh account signup → onboarding wizard → brand created → dashboard
+- [ ] Login with Google works
 
 **Billing:**
 - [ ] `/settings/billing` → Upgrade → Stripe Starter checkout → plan shows "Starter"
@@ -128,9 +147,6 @@ Run through this on `postflowsocials.app` after Steps 2–4:
 **Inngest:**
 - [ ] All functions registered + crons visible
 
-**Onboarding:**
-- [ ] Fresh account → onboarding → calibration → dashboard
-
 ---
 
 ## PHASE H — Pre-H5 Quick Wins ✅ DONE
@@ -142,20 +158,43 @@ Run through this on `postflowsocials.app` after Steps 2–4:
 ## PHASE H7 — Storage add-on ✅ DONE
 ## PHASE H8 — Render credits + prompt caching ✅ DONE
 
-### H7/H8 user actions still required:
-- [ ] Create Stripe storage add-on products (50/200/500 GB) + set STRIPE_ADDON_STORAGE_* env vars
-- [ ] Create Stripe render credit products (10/50/100 renders) + set STRIPE_CREDITS_*_PRICE env vars
-- [ ] Add `type=storage_addon` + `storage_gb` metadata to Stripe storage add-on price objects
+---
+
+## AUDIT FINDINGS SUMMARY (2026-06-14)
+
+### ✅ Analytics roundtrip — WORKING
+- Buffer webhook → cron sync → post_analytics → performance_patterns → getBrandContext → generateCaption (fully wired)
+- Template health scored every 6h by Inngest → shown in /insights
+- Only gap: 24h analytics lag (acceptable — cron-based sync)
+
+### ✅ Render pipeline — WORKING
+- 9 templates all registered and compiling
+- Single image, carousel, variants, clip-forge all wired
+- Stories: upload-only (no auto-render — by design for MVP)
+
+### ✅ Security — FIXED
+- RLS: ai_usage_logs now enabled; sync_runs/analytics_sync_errors/research_runs correctly service-role-only
+- CALENDAR_LINK_SECRET: hardcoded fallback removed
+- MIME validation: upload-url now enforces allowlist
+- Stripe webhook: constructEvent() verified ✅
+- Cross-brand isolation: brand ownership checks confirmed ✅
+- No secret key leakage confirmed ✅
+- Rate limiting: still missing (low priority — plan limits provide soft ceiling)
+
+### ✅ Brand identity — FIXED
+- accent_color: now flows from DB → render routes → BrandVars → all 9 templates
+- tagline, website_url, target_age_range, geographic_location: now in BrandContext + every caption prompt
 
 ---
 
 ## BACKLOG
 
 - [ ] **Brand setup (PostFlow)** — user provides ToV files → create PostFlow brand → set colors, logo, tone
-- [ ] **Post rendering audit** — render all 9 templates → document quality → screenshot for reference
+- [ ] **Post rendering audit** — render all 9 templates → screenshot for quality reference
 - [ ] **Pre-edited video scheduling** — verify MP4 upload → Buffer handoff passes video file; gate Pro+
 - [ ] Inngest jobs for `story`, `linkedin_post`, `tiktok_video` token keys (currently empty arrays)
 - [ ] Analytics → token nudge path (`signalType: "analytics"` exists but nothing calls it)
+- [ ] Rate limiting on expensive routes (optional pre-launch hardening)
 
 ---
 
