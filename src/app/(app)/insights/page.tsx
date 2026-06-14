@@ -30,6 +30,7 @@ import {
   ImageIcon,
   Info,
   Brain,
+  LayoutTemplate,
 } from "lucide-react"
 
 export const metadata: Metadata = { title: "PostFlow · Insights" }
@@ -54,7 +55,7 @@ interface PostWithAnalytics {
   posted_at:            string | null
   scheduled_for:        string | null
   post_analytics:       PostAnalyticsRow | PostAnalyticsRow[] | null
-  content_calendar:     { topic: string | null; content_pillar: string | null } | null
+  content_calendar:     { topic: string | null; content_pillar: string | null; post_type?: string | null } | null
   predicted_performance?: { token_snapshot?: Record<string, unknown>; captured_at?: string } | null
   actual_performance?:    { engagement_rate?: number | null; impressions?: number | null; fetched_at?: string } | null
 }
@@ -136,6 +137,43 @@ function buildHeatmap(posts: PostWithAnalytics[]): { matrix: number[][]; maxVal:
   return { matrix, maxVal }
 }
 
+// ── Template helpers ──────────────────────────────────────────────────────────
+
+interface TemplateHealthRow {
+  template_slug: string
+  health_score:  number
+  trend:         string | null
+  posts_count:   number
+}
+
+interface TemplateSuggestionRow {
+  current_slug:   string
+  suggested_slug: string
+  reason:         string | null
+  status:         string
+}
+
+function toHumanTemplateName(slug: string): string {
+  return slug
+    .split("_")
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ")
+}
+
+function templateScoreColor(score: number): string {
+  if (score >= 70) return "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300"
+  if (score >= 50) return "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+  return "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"
+}
+
+function templateTrendLabel(trend: string | null): { label: string; className: string } {
+  switch (trend) {
+    case "rising":   return { label: "↑ rising",   className: "text-green-600 dark:text-green-400" }
+    case "declining":return { label: "↓ declining", className: "text-red-500 dark:text-red-400" }
+    default:         return { label: "→ stable",    className: "text-zinc-400 dark:text-zinc-500" }
+  }
+}
+
 // ── Sub-components ────────────────────────────────────────────────────────────
 
 function KpiCard({
@@ -169,10 +207,11 @@ type Tab = "analytics" | "trends"
 export default async function InsightsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string }>
+  searchParams: Promise<{ tab?: string; postType?: string }>
 }) {
   const params    = await searchParams
   const activeTab = (params.tab as Tab | undefined) ?? "analytics"
+  const postTypeFilter = params.postType ?? "all"
 
   const supabase = await createClient()
   const brand    = await getActiveBrand()
@@ -184,7 +223,7 @@ export default async function InsightsPage({
   const ninetyDaysAgo = new Date()
   ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90)
 
-  const [{ data: rawPosts }, { data: patterns }] = brand
+  const [{ data: rawPosts }, { data: patterns }, { data: templateHealth }, { data: templateSuggestions }] = brand
     ? await Promise.all([
         supabase
           .from("posts")
@@ -192,7 +231,7 @@ export default async function InsightsPage({
             id, platform, caption, generated_image_url, posted_at, scheduled_for,
             predicted_performance, actual_performance,
             post_analytics(impressions, reach, engagement_rate, likes, comments, shares, saves),
-            content_calendar(topic, content_pillar)
+            content_calendar(topic, content_pillar, post_type)
           `)
           .eq("brand_id", brand.id)
           .eq("status", "posted")
@@ -205,11 +244,29 @@ export default async function InsightsPage({
           .select("platform, avg_engagement_rate, avg_impressions, avg_reach, best_days_of_week, best_hours_of_day, best_content_pillars, best_post_types, top_hashtags, sample_size")
           .eq("brand_id", brand.id)
           .order("avg_engagement_rate", { ascending: false }),
-      ])
-    : [{ data: [] }, { data: [] }]
 
-  const posts        = (rawPosts ?? []) as unknown as PostWithAnalytics[]
-  const perfPatterns = (patterns ?? []) as PerformancePattern[]
+        supabase
+          .from("template_health")
+          .select("template_slug, health_score, trend, posts_count")
+          .eq("brand_id", brand.id)
+          .gte("posts_count", 1)
+          .order("health_score", { ascending: false })
+          .limit(8),
+
+        supabase
+          .from("template_suggestions")
+          .select("current_slug, suggested_slug, reason, status")
+          .eq("brand_id", brand.id)
+          .eq("status", "pending")
+          .order("created_at", { ascending: false })
+          .limit(3),
+      ])
+    : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }]
+
+  const posts            = (rawPosts ?? []) as unknown as PostWithAnalytics[]
+  const perfPatterns     = (patterns ?? []) as PerformancePattern[]
+  const templateHealthRows  = (templateHealth ?? []) as TemplateHealthRow[]
+  const templateSuggestionRows = (templateSuggestions ?? []) as TemplateSuggestionRow[]
 
   // ── Overview metrics ───────────────────────────────────────────────────────
   let totalImpressions = 0
@@ -230,8 +287,20 @@ export default async function InsightsPage({
     ? engRates.reduce((a, b) => a + b, 0) / engRates.length
     : null
 
+  const POST_TYPE_VALUES: Record<string, string> = {
+    photo:    "photo",
+    carousel: "carousel",
+    reel:     "reel",
+    story:    "story",
+  }
+
   const topPosts = [...posts]
-    .filter(p => getAnalytics(p)?.engagement_rate != null)
+    .filter(p => {
+      if (!getAnalytics(p)?.engagement_rate) return false
+      if (postTypeFilter === "all" || !POST_TYPE_VALUES[postTypeFilter]) return true
+      const pt = (p.content_calendar as any)?.post_type as string | null | undefined
+      return pt === POST_TYPE_VALUES[postTypeFilter]
+    })
     .sort((a, b) => (getAnalytics(b)?.engagement_rate ?? 0) - (getAnalytics(a)?.engagement_rate ?? 0))
     .slice(0, 8)
 
@@ -369,11 +438,103 @@ export default async function InsightsPage({
                     </Card>
                   )}
 
+                  {/* Template Performance */}
+                  <Card>
+                    <CardHeader className="pb-4">
+                      <CardTitle className="text-base font-semibold flex items-center gap-2">
+                        <LayoutTemplate className="h-4 w-4 text-muted-foreground" />
+                        Template performance
+                      </CardTitle>
+                      <p className="text-xs text-muted-foreground mt-0.5">Which post formats are working</p>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      {templateHealthRows.length === 0 ? (
+                        <p className="text-sm text-muted-foreground py-2 text-center">
+                          No template data yet — generate and post content to see which formats perform best.
+                        </p>
+                      ) : (
+                        <>
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="border-b text-xs text-muted-foreground">
+                                  <th className="text-left py-2 font-medium">Template</th>
+                                  <th className="text-center py-2 font-medium">Score</th>
+                                  <th className="text-left py-2 font-medium">Trend</th>
+                                  <th className="text-right py-2 font-medium">Posts</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {templateHealthRows.map(row => {
+                                  const trend = templateTrendLabel(row.trend)
+                                  return (
+                                    <tr key={row.template_slug} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
+                                      <td className="py-2.5 pr-4">
+                                        <span className="font-medium text-foreground/90">{toHumanTemplateName(row.template_slug)}</span>
+                                      </td>
+                                      <td className="py-2.5 text-center">
+                                        <span className={cn("inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold tabular-nums", templateScoreColor(row.health_score))}>
+                                          {row.health_score}
+                                        </span>
+                                      </td>
+                                      <td className="py-2.5">
+                                        <span className={cn("text-xs font-medium", trend.className)}>{trend.label}</span>
+                                      </td>
+                                      <td className="py-2.5 text-right text-xs text-muted-foreground">{row.posts_count} posts</td>
+                                    </tr>
+                                  )
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                          {templateSuggestionRows.length > 0 && (
+                            <div className="space-y-2 pt-1">
+                              {templateSuggestionRows.map((s, i) => (
+                                <div key={i} className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20 px-4 py-3 text-xs text-amber-800 dark:text-amber-300">
+                                  <span className="font-medium">Consider replacing</span>{" "}
+                                  <span className="font-mono bg-amber-100 dark:bg-amber-900/40 px-1 py-0.5 rounded">{toHumanTemplateName(s.current_slug)}</span>{" "}
+                                  <span className="font-medium">with</span>{" "}
+                                  <span className="font-mono bg-amber-100 dark:bg-amber-900/40 px-1 py-0.5 rounded">{toHumanTemplateName(s.suggested_slug)}</span>
+                                  {s.reason && <> — {s.reason}</>}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </CardContent>
+                  </Card>
+
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     {/* Top Posts */}
                     <Card className="lg:col-span-2">
                       <CardHeader className="pb-4">
-                        <CardTitle className="text-base font-semibold">Top Posts by Engagement</CardTitle>
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <CardTitle className="text-base font-semibold">Top Posts by Engagement</CardTitle>
+                          {/* Post-type filter chips */}
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {[
+                              { key: "all",      label: "All" },
+                              { key: "photo",    label: "Photo" },
+                              { key: "carousel", label: "Carousel" },
+                              { key: "reel",     label: "Reel / Video" },
+                              { key: "story",    label: "Story" },
+                            ].map(({ key, label }) => (
+                              <Link
+                                key={key}
+                                href={`?tab=analytics&postType=${key}`}
+                                className={cn(
+                                  "text-xs px-2.5 py-1 rounded-full border font-medium transition-colors",
+                                  (postTypeFilter === key || (key === "all" && postTypeFilter === "all"))
+                                    ? "bg-indigo-600 text-white border-indigo-600 dark:bg-indigo-500 dark:border-indigo-500"
+                                    : "bg-transparent text-muted-foreground border-border hover:border-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-400"
+                                )}
+                              >
+                                {label}
+                              </Link>
+                            ))}
+                          </div>
+                        </div>
                       </CardHeader>
                       <CardContent className="p-0">
                         <div className="overflow-x-auto">
@@ -389,7 +550,13 @@ export default async function InsightsPage({
                               </tr>
                             </thead>
                             <tbody>
-                              {topPosts.map(post => {
+                              {topPosts.length === 0 ? (
+                                <tr>
+                                  <td colSpan={6} className="py-10 text-center text-sm text-muted-foreground">
+                                    No posts found for this filter.
+                                  </td>
+                                </tr>
+                              ) : topPosts.map(post => {
                                 const a       = getAnalytics(post)!
                                 const date    = post.posted_at ? new Date(post.posted_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "—"
                                 const snippet = post.content_calendar?.topic ?? post.caption?.slice(0, 60) ?? "—"

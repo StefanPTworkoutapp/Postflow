@@ -17,6 +17,10 @@ export interface PlanLimits {
   bufferIntegration: boolean
   storiesReels:      boolean
   weeklyTrendEmail:  boolean
+  /** Max saved template slots per post type. 1 = no rotation. */
+  templateSlotsPerPostType: number
+  /** How many of those slots can be locked (immune to auto-swap). 0 = no locking. */
+  templateLockSlots: number
 }
 
 /** Sentinel value: brands limit = -1 means unlimited. */
@@ -52,6 +56,8 @@ export const PLANS: Record<PlanTier, PlanDefinition> = {
       bufferIntegration: false,
       storiesReels:      false,
       weeklyTrendEmail:  false,
+      templateSlotsPerPostType: 1,
+      templateLockSlots:        0,
     },
     stripePriceMonthly: null,
     stripePriceAnnual:  null,
@@ -73,6 +79,8 @@ export const PLANS: Record<PlanTier, PlanDefinition> = {
       bufferIntegration: true,
       storiesReels:      true,
       weeklyTrendEmail:  true,
+      templateSlotsPerPostType: 1,
+      templateLockSlots:        0,
     },
     stripePriceMonthly: process.env.STRIPE_PRICE_STARTER_MONTHLY ?? null,
     stripePriceAnnual:  process.env.STRIPE_PRICE_STARTER_ANNUAL  ?? null,
@@ -95,6 +103,8 @@ export const PLANS: Record<PlanTier, PlanDefinition> = {
       bufferIntegration: true,
       storiesReels:      true,
       weeklyTrendEmail:  true,
+      templateSlotsPerPostType: 3,
+      templateLockSlots:        1,
     },
     stripePriceMonthly: process.env.STRIPE_PRICE_PRO_MONTHLY ?? null,
     stripePriceAnnual:  process.env.STRIPE_PRICE_PRO_ANNUAL  ?? null,
@@ -116,6 +126,8 @@ export const PLANS: Record<PlanTier, PlanDefinition> = {
       bufferIntegration: true,
       storiesReels:      true,
       weeklyTrendEmail:  true,
+      templateSlotsPerPostType: 5,
+      templateLockSlots:        2,
     },
     stripePriceMonthly: process.env.STRIPE_PRICE_STUDIO_MONTHLY ?? null,
     stripePriceAnnual:  process.env.STRIPE_PRICE_STUDIO_ANNUAL  ?? null,
@@ -137,6 +149,8 @@ export const PLANS: Record<PlanTier, PlanDefinition> = {
       bufferIntegration: true,
       storiesReels:      true,
       weeklyTrendEmail:  true,
+      templateSlotsPerPostType: 5,
+      templateLockSlots:        3,
     },
     stripePriceMonthly: process.env.STRIPE_PRICE_AGENCY_MONTHLY ?? null,
     stripePriceAnnual:  process.env.STRIPE_PRICE_AGENCY_ANNUAL  ?? null,
@@ -158,6 +172,8 @@ export const PLANS: Record<PlanTier, PlanDefinition> = {
       bufferIntegration: true,
       storiesReels:      true,
       weeklyTrendEmail:  true,
+      templateSlotsPerPostType: 5,
+      templateLockSlots:        2,
     },
     stripePriceMonthly: process.env.STRIPE_PRICE_BUSINESS_MONTHLY ?? null,
     stripePriceAnnual:  process.env.STRIPE_PRICE_BUSINESS_ANNUAL  ?? null,

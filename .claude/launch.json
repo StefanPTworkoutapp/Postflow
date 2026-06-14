@@ -2,10 +2,10 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "ppx-dev",
+      "name": "postflow",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "/Users/stefanduimstra/Documents/GitHub/PureProgressionX", "run", "dev"],
-      "port": 3000
+      "runtimeArgs": ["run", "dev"],
+      "port": 3001
     }
   ]
 }

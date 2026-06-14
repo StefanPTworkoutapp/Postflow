@@ -17,9 +17,33 @@ import {
   Upload,
   ImageIcon,
   Video,
+  LayoutTemplate,
 } from "lucide-react"
 
 export const metadata: Metadata = { title: "PostFlow · Home" }
+
+// ── Template helpers ──────────────────────────────────────────────────────────
+
+function toHumanTemplateName(slug: string): string {
+  return slug
+    .split("_")
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ")
+}
+
+function templateScoreBadgeClass(score: number): string {
+  if (score >= 70) return "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300"
+  if (score >= 50) return "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+  return "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"
+}
+
+function templateTrendLabel(trend: string | null): { label: string; className: string } {
+  switch (trend) {
+    case "rising":    return { label: "↑ rising",    className: "text-green-600 dark:text-green-400" }
+    case "declining": return { label: "↓ declining", className: "text-red-500 dark:text-red-400" }
+    default:          return { label: "→ stable",    className: "text-zinc-400 dark:text-zinc-500" }
+  }
+}
 
 const PLATFORM_EMOJI: Record<string, string> = {
   instagram: "📸",
@@ -60,6 +84,7 @@ export default async function DashboardPage() {
     { count: mediaCount    },
     { data:  upcomingPosts },
     { data:  actionItems   },
+    { data:  topTemplateData },
   ] = brand
     ? await Promise.all([
         supabase.from("posts").select("*", { count: "exact", head: true })
@@ -87,11 +112,21 @@ export default async function DashboardPage() {
           .gte("scheduled_date", todayStr)
           .order("scheduled_date", { ascending: true })
           .limit(5),
+        // Top performing template
+        supabase.from("template_health")
+          .select("template_slug, health_score, trend")
+          .eq("brand_id", brand.id)
+          .gte("posts_count", 2)
+          .order("health_score", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
       ])
     : [
         { count: 0 }, { count: 0 }, { count: 0 }, { count: 0 },
-        { data: [] }, { data: [] },
+        { data: [] }, { data: [] }, { data: null },
       ]
+
+  const topTemplate = topTemplateData as { template_slug: string; health_score: number; trend: string | null } | null
 
   // ── Setup checklist (dynamic) ─────────────────────────────────────────────
   const hasBrand      = !!brand?.name
@@ -169,7 +204,7 @@ export default async function DashboardPage() {
       </div>
 
       {/* Stats row */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className={cn("grid grid-cols-1 gap-4", topTemplate ? "sm:grid-cols-2 lg:grid-cols-4" : "sm:grid-cols-3")}>
         <StatCard
           title="Ready to post"
           value={String(readyCount ?? 0)}
@@ -191,6 +226,30 @@ export default async function DashboardPage() {
           description="Published across platforms"
           href="/schedule?tab=calendar"
         />
+        {topTemplate && (
+          <Link href="/insights?tab=analytics" className="block">
+            <Card className="transition-shadow hover:shadow-md h-full">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-[hsl(var(--muted-foreground))]">
+                  Top format
+                </CardTitle>
+                <LayoutTemplate className="h-4 w-4 text-indigo-500" />
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xl font-bold leading-tight">{toHumanTemplateName(topTemplate.template_slug)}</span>
+                  <span className={cn("text-xs font-medium", templateTrendLabel(topTemplate.trend).className)}>
+                    {templateTrendLabel(topTemplate.trend).label}
+                  </span>
+                  <span className={cn("inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold tabular-nums", templateScoreBadgeClass(topTemplate.health_score))}>
+                    {topTemplate.health_score}
+                  </span>
+                </div>
+                <p className="text-xs text-[hsl(var(--muted-foreground))] mt-1">Your best-performing template</p>
+              </CardContent>
+            </Card>
+          </Link>
+        )}
       </div>
 
       {/* Weekly ideas widget — client component, uses localStorage cache */}

@@ -31,6 +31,15 @@ interface CalendarEntry {
   slide_content: SlideContent[] | null
   status: string
   posts: Array<{ id: string; caption: string | null; status: string; platform: string }> | null
+  /** Present when fetched in multi-brand mode (brand=all) */
+  brand_id?:    string | null
+  brand_color?: string | null
+}
+
+interface BrandInfo {
+  id:            string
+  name:          string
+  primary_color: string | null
 }
 
 const PLATFORM_EMOJI: Record<string, string> = {
@@ -87,9 +96,13 @@ interface Props {
   initialEntries: CalendarEntry[]
   initialYear:  number
   initialMonth: number
+  /** "all" when showing entries from multiple brands; "single" (default) for one brand */
+  brandMode?: "single" | "all"
+  /** List of the user's brands — used for the "all brands" legend */
+  brands?: BrandInfo[]
 }
 
-export function CalendarView({ initialEntries, initialYear, initialMonth }: Props) {
+export function CalendarView({ initialEntries, initialYear, initialMonth, brandMode = "single", brands = [] }: Props) {
   const router       = useRouter()
   const searchParams = useSearchParams()
 
@@ -371,6 +384,7 @@ export function CalendarView({ initialEntries, initialYear, initialMonth }: Prop
             ? PILLAR_COLOR[entry.content_pillar]
             : "bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))]"
         )}
+        style={entry.brand_color ? { borderLeft: `3px solid ${entry.brand_color}`, paddingLeft: "4px" } : undefined}
         title={entry.topic ?? entry.status}
       >
         <div className="flex items-center gap-1 min-w-0">
@@ -530,6 +544,25 @@ export function CalendarView({ initialEntries, initialYear, initialMonth }: Prop
               </span>
             ))}
           </div>
+
+          {/* Brand colour legend — only shown in multi-brand mode */}
+          {brandMode === "all" && brands.length > 0 && (
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-[hsl(var(--muted-foreground))]">
+              <span className="font-medium">Brands:</span>
+              {brands.map(b => (
+                <span key={b.id} className="flex items-center gap-1.5">
+                  {b.primary_color && (
+                    <span
+                      className="h-2.5 w-1 rounded-sm shrink-0"
+                      style={{ backgroundColor: b.primary_color }}
+                    />
+                  )}
+                  {b.name}
+                </span>
+              ))}
+            </div>
+          )}
+
           <p className="text-xs text-[hsl(var(--muted-foreground))]">
             Click any post to create/open it in the editor. Drag to reschedule.
           </p>

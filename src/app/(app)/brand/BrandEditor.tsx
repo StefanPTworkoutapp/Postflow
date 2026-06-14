@@ -1,12 +1,14 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { FileText, ImagePlus, Lightbulb, Loader2, Plus, RefreshCw, X } from "lucide-react"
+import { FileText, ImagePlus, Lightbulb, Loader2, Lock, Plus, RefreshCw, Unlock, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { INDUSTRIES, FONTS } from "@/lib/shared/onboarding/types"
+import { DEFAULT_TEMPLATES } from "@/lib/shared/posts/templates"
+import type { PostType } from "@/lib/shared/posts/templates"
 import { RankedGoalPicker } from "@/components/ui/RankedGoalPicker"
 import { EmojiInput } from "@/components/ui/EmojiInput"
 import type { Database } from "@/types/database.types"
@@ -88,12 +90,13 @@ const TONE_LEVEL_LABELS: Record<number, string> = {
 type Brand = Database["postflow"]["Tables"]["brands"]["Row"]
 
 const TABS = [
-  { id: "identity", label: "Identity" },
-  { id: "audience", label: "Audience" },
-  { id: "voice", label: "Voice" },
-  { id: "goals", label: "Goals" },
-  { id: "ai", label: "AI behaviour" },
-  { id: "sharing", label: "Client sharing" },
+  { id: "identity",  label: "Identity" },
+  { id: "audience",  label: "Audience" },
+  { id: "voice",     label: "Voice" },
+  { id: "goals",     label: "Goals" },
+  { id: "templates", label: "Templates" },
+  { id: "ai",        label: "AI behaviour" },
+  { id: "sharing",   label: "Client sharing" },
 ] as const
 
 type Tab = (typeof TABS)[number]["id"]
@@ -225,6 +228,19 @@ export function BrandEditor({ brand }: Props) {
   const [voiceRefreshing, setVoiceRefreshing] = useState(false)
   const [voiceRefreshError, setVoiceRefreshError] = useState<string | null>(null)
 
+  // ── Templates ─────────────────────────────────────────────
+  interface TemplateSlot { id: string; template_slug: string; slot_index: number; locked: boolean }
+  interface TemplateLimits { slotsPerPostType: number; lockSlots: number }
+  interface TemplateApiResponse { slots: Record<string, TemplateSlot[]>; limits: TemplateLimits }
+
+  const [templateData, setTemplateData] = useState<TemplateApiResponse | null>(null)
+  const [templatesLoading, setTemplatesLoading] = useState(false)
+  const [templatesError, setTemplatesError] = useState<string | null>(null)
+  const [activePostType, setActivePostType] = useState<PostType>("single_image")
+  const [addingSlot, setAddingSlot] = useState(false)
+  const [addingSlotType, setAddingSlotType] = useState<string | null>(null)
+  const [addSlugPicker, setAddSlugPicker] = useState<string | null>(null)
+
   // ── Goals ─────────────────────────────────────────────────
   const [goals, setGoals] = useState<string[]>(
     (brand as unknown as { goals?: string[] }).goals ?? (brand.primary_goal ? [brand.primary_goal] : [])
@@ -263,6 +279,7 @@ export function BrandEditor({ brand }: Props) {
   useEffect(() => {
     if (tab === "sharing") loadInvites()
     if (tab === "voice" && voiceData === null && !voiceLoading) loadVoiceData()
+    if (tab === "templates" && templateData === null && !templatesLoading) loadTemplates()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab])
 
@@ -493,6 +510,109 @@ export function BrandEditor({ brand }: Props) {
       setVoiceRulesError("Network error. Please try again.")
     } finally {
       setVoiceRulesSaving(false)
+    }
+  }
+
+  // ── Template handlers ─────────────────────────────────────
+
+  async function loadTemplates() {
+    setTemplatesLoading(true)
+    setTemplatesError(null)
+    try {
+      const res = await fetch(`/api/brands/${brand.id}/templates`)
+      const json = await res.json()
+      if (!res.ok) setTemplatesError(json.error ?? "Failed to load templates")
+      else setTemplateData(json as TemplateApiResponse)
+    } catch {
+      setTemplatesError("Network error. Please try again.")
+    } finally {
+      setTemplatesLoading(false)
+    }
+  }
+
+  async function addSlot(postType: string, templateSlug: string) {
+    setAddingSlot(true)
+    setAddingSlotType(postType)
+    try {
+      const res = await fetch(`/api/brands/${brand.id}/templates`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ post_type: postType, template_slug: templateSlug }),
+      })
+      const json = await res.json()
+      if (!res.ok) {
+        setTemplatesError(json.upgradeHint ?? json.error ?? "Failed to add template")
+      } else {
+        // Optimistic update
+        setTemplateData((prev) => {
+          if (!prev) return prev
+          const existing = prev.slots[postType] ?? []
+          return {
+            ...prev,
+            slots: {
+              ...prev.slots,
+              [postType]: [...existing, { id: Math.random().toString(), template_slug: templateSlug, slot_index: json.slot_index, locked: false }],
+            },
+          }
+        })
+        setAddSlugPicker(null)
+      }
+    } catch {
+      setTemplatesError("Network error. Please try again.")
+    } finally {
+      setAddingSlot(false)
+      setAddingSlotType(null)
+    }
+  }
+
+  async function removeSlot(postType: string, slotIndex: number) {
+    try {
+      await fetch(`/api/brands/${brand.id}/templates`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ post_type: postType, slot_index: slotIndex }),
+      })
+      setTemplateData((prev) => {
+        if (!prev) return prev
+        return {
+          ...prev,
+          slots: {
+            ...prev.slots,
+            [postType]: (prev.slots[postType] ?? []).filter(s => s.slot_index !== slotIndex),
+          },
+        }
+      })
+    } catch {
+      setTemplatesError("Network error.")
+    }
+  }
+
+  async function toggleLock(postType: string, slotIndex: number, locked: boolean) {
+    try {
+      const res = await fetch(`/api/brands/${brand.id}/templates`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ post_type: postType, slot_index: slotIndex, locked }),
+      })
+      const json = await res.json()
+      if (!res.ok) {
+        setTemplatesError(json.upgradeHint ?? json.error ?? "Failed to update lock")
+        return
+      }
+      setTemplateData((prev) => {
+        if (!prev) return prev
+        return {
+          ...prev,
+          slots: {
+            ...prev.slots,
+            [postType]: (prev.slots[postType] ?? []).map(s =>
+              s.slot_index === slotIndex ? { ...s, locked } : s
+            ),
+          },
+        }
+      })
+    } catch {
+      setTemplatesError("Network error.")
     }
   }
 
@@ -1503,6 +1623,227 @@ export function BrandEditor({ brand }: Props) {
           </>
         )}
 
+        {/* ── Templates ── */}
+        {tab === "templates" && (() => {
+          const POST_TYPE_LABELS: Record<string, string> = {
+            single_image:     "Photo",
+            carousel:         "Carousel",
+            reel:             "Reel / Video",
+            story:            "Story",
+            quote:            "Quote",
+            text_only:        "Text Only",
+            testimonial:      "Testimonial",
+            behind_the_scenes:"Behind the Scenes",
+          }
+          const allPostTypes = Array.from(new Set(DEFAULT_TEMPLATES.map(t => t.post_type)))
+          const slotsForType = templateData?.slots[activePostType] ?? []
+          const limit        = templateData?.limits.slotsPerPostType ?? 1
+          const lockLimit    = templateData?.limits.lockSlots ?? 0
+          const lockedCount  = slotsForType.filter(s => s.locked).length
+          const availableTemplates = DEFAULT_TEMPLATES.filter(t => t.post_type === activePostType)
+          const usedSlugs    = new Set(slotsForType.map(s => s.template_slug))
+
+          return (
+            <div className="space-y-6">
+              <div>
+                <h3 className="text-sm font-semibold mb-1">Template rotation</h3>
+                <p className="text-xs text-[hsl(var(--muted-foreground))] leading-relaxed">
+                  PostFlow rotates through these templates when generating posts for each format.
+                  Locked slots stay in place; unlocked slots can be swapped by the AI health engine.
+                </p>
+              </div>
+
+              {/* Error banner */}
+              {templatesError && (
+                <div className="rounded-lg border border-[hsl(var(--destructive))]/30 bg-[hsl(var(--destructive))]/10 px-4 py-3 text-sm text-[hsl(var(--destructive))]">
+                  {templatesError}
+                  <button className="ml-2 underline" onClick={() => setTemplatesError(null)}>Dismiss</button>
+                </div>
+              )}
+
+              {templatesLoading && (
+                <div className="flex items-center gap-2 text-sm text-[hsl(var(--muted-foreground))]">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading template preferences…
+                </div>
+              )}
+
+              {!templatesLoading && templateData && (
+                <>
+                  {/* Post-type pills */}
+                  <div className="flex flex-wrap gap-2">
+                    {allPostTypes.map(pt => (
+                      <button
+                        key={pt}
+                        onClick={() => { setActivePostType(pt as PostType); setAddSlugPicker(null); setTemplatesError(null) }}
+                        className={cn(
+                          "px-3 py-1 rounded-full text-xs font-medium transition-colors",
+                          activePostType === pt
+                            ? "bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]"
+                            : "bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
+                        )}
+                      >
+                        {POST_TYPE_LABELS[pt] ?? pt}
+                        {(templateData.slots[pt]?.length ?? 0) > 0 && (
+                          <span className="ml-1.5 opacity-70">
+                            {templateData.slots[pt].length}
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Slots for active post type */}
+                  <div className="space-y-2">
+                    {slotsForType.length === 0 && (
+                      <p className="text-sm text-[hsl(var(--muted-foreground))] py-2">
+                        No templates saved for {POST_TYPE_LABELS[activePostType] ?? activePostType} posts.
+                        PostFlow will pick from all available formats automatically.
+                      </p>
+                    )}
+
+                    {slotsForType.map((slot, idx) => {
+                      const tpl = DEFAULT_TEMPLATES.find(t => t.id === slot.template_slug)
+                      const canLock = lockLimit > 0
+                      return (
+                        <div
+                          key={slot.id}
+                          className={cn(
+                            "flex items-center gap-3 rounded-lg border px-4 py-3",
+                            slot.locked
+                              ? "border-[hsl(var(--primary))]/40 bg-[hsl(var(--primary))]/5"
+                              : "border-[hsl(var(--border))] bg-[hsl(var(--card))]"
+                          )}
+                        >
+                          {/* Slot index badge */}
+                          <span className="text-xs font-medium text-[hsl(var(--muted-foreground))] w-5 shrink-0">
+                            #{idx + 1}
+                          </span>
+
+                          {/* Template info */}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{tpl?.name ?? slot.template_slug}</p>
+                            {tpl && (
+                              <p className="text-xs text-[hsl(var(--muted-foreground))] truncate">{tpl.description}</p>
+                            )}
+                          </div>
+
+                          {/* Lock toggle */}
+                          {canLock ? (
+                            <button
+                              title={slot.locked ? "Unlock slot" : "Lock slot (AI won't auto-swap)"}
+                              onClick={() => toggleLock(activePostType, slot.slot_index, !slot.locked)}
+                              className={cn(
+                                "p-1.5 rounded-md transition-colors shrink-0",
+                                slot.locked
+                                  ? "text-[hsl(var(--primary))] hover:text-[hsl(var(--primary))]/70"
+                                  : "text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
+                              )}
+                            >
+                              {slot.locked ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
+                            </button>
+                          ) : (
+                            <span title="Upgrade to Pro to lock slots" className="p-1.5 text-[hsl(var(--muted-foreground))]/40 shrink-0">
+                              <Lock className="h-4 w-4" />
+                            </span>
+                          )}
+
+                          {/* Remove */}
+                          <button
+                            onClick={() => removeSlot(activePostType, slot.slot_index)}
+                            className="p-1.5 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--destructive))] rounded-md transition-colors shrink-0"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                      )
+                    })}
+
+                    {/* Add slot row */}
+                    {slotsForType.length < limit && (
+                      <>
+                        {addSlugPicker === activePostType ? (
+                          <div className="rounded-lg border border-dashed border-[hsl(var(--border))] p-3 space-y-2">
+                            <p className="text-xs font-medium text-[hsl(var(--muted-foreground))]">
+                              Choose a template to add:
+                            </p>
+                            <div className="grid gap-2">
+                              {availableTemplates
+                                .filter(t => !usedSlugs.has(t.id))
+                                .map(t => (
+                                  <button
+                                    key={t.id}
+                                    onClick={() => addSlot(activePostType, t.id)}
+                                    disabled={addingSlot && addingSlotType === activePostType}
+                                    className="flex items-start gap-3 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card))] px-3 py-2.5 text-left hover:border-[hsl(var(--primary))]/50 hover:bg-[hsl(var(--primary))]/5 transition-colors"
+                                  >
+                                    {addingSlot && addingSlotType === activePostType ? (
+                                      <Loader2 className="h-4 w-4 animate-spin mt-0.5 shrink-0 text-[hsl(var(--muted-foreground))]" />
+                                    ) : (
+                                      <Plus className="h-4 w-4 mt-0.5 shrink-0 text-[hsl(var(--muted-foreground))]" />
+                                    )}
+                                    <div className="min-w-0">
+                                      <p className="text-sm font-medium">{t.name}</p>
+                                      <p className="text-xs text-[hsl(var(--muted-foreground))]">{t.description}</p>
+                                    </div>
+                                  </button>
+                                ))}
+                              {availableTemplates.filter(t => !usedSlugs.has(t.id)).length === 0 && (
+                                <p className="text-xs text-[hsl(var(--muted-foreground))] py-1">
+                                  All available templates for this post type are already added.
+                                </p>
+                              )}
+                            </div>
+                            <button
+                              onClick={() => setAddSlugPicker(null)}
+                              className="text-xs text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] mt-1"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => { setAddSlugPicker(activePostType); setTemplatesError(null) }}
+                            className="flex items-center gap-2 rounded-lg border border-dashed border-[hsl(var(--border))] px-4 py-3 text-sm text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--primary))]/50 hover:text-[hsl(var(--foreground))] transition-colors w-full"
+                          >
+                            <Plus className="h-4 w-4" />
+                            Add template slot
+                            <span className="ml-auto text-xs opacity-60">
+                              {slotsForType.length}/{limit} used
+                            </span>
+                          </button>
+                        )}
+                      </>
+                    )}
+
+                    {/* At-limit message */}
+                    {slotsForType.length >= limit && limit > 0 && (
+                      <p className="text-xs text-[hsl(var(--muted-foreground))] text-center py-1">
+                        {limit === 1
+                          ? "Upgrade to Pro to save up to 3 templates per format."
+                          : `Maximum of ${limit} template slots reached.`}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Lock info */}
+                  {lockLimit === 0 && slotsForType.length > 0 && (
+                    <p className="text-xs text-[hsl(var(--muted-foreground))] border-t border-[hsl(var(--border))] pt-3">
+                      🔒 Template locking (prevents AI auto-swap) is available on Pro plans and above.
+                    </p>
+                  )}
+                  {lockLimit > 0 && slotsForType.length > 0 && (
+                    <p className="text-xs text-[hsl(var(--muted-foreground))] border-t border-[hsl(var(--border))] pt-3">
+                      {lockedCount}/{lockLimit} lock slot{lockLimit > 1 ? "s" : ""} used for this format.
+                      Locked templates are never auto-swapped by the analytics engine.
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
+          )
+        })()}
+
         {/* ── AI behaviour ── */}
         {tab === "ai" && (
           <div className="space-y-6">
@@ -1701,7 +2042,7 @@ export function BrandEditor({ brand }: Props) {
         )}
 
         {/* Save bar — only shown for tabs that use the shared handleSave */}
-        {tab !== "ai" && tab !== "sharing" && tab !== "voice" && (
+        {tab !== "ai" && tab !== "sharing" && tab !== "voice" && tab !== "templates" && (
         <div className="flex items-center gap-3 pt-2">
           <Button onClick={handleSave} disabled={saving}>
             {saving ? "Saving…" : "Save changes"}

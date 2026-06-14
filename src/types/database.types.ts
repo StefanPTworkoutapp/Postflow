@@ -170,6 +170,47 @@ export type Database = {
           },
         ]
       }
+      brand_template_preferences: {
+        Row: {
+          brand_id: string
+          created_at: string
+          id: string
+          locked: boolean
+          post_type: string
+          slot_index: number
+          template_slug: string
+          updated_at: string
+        }
+        Insert: {
+          brand_id: string
+          created_at?: string
+          id?: string
+          locked?: boolean
+          post_type: string
+          slot_index: number
+          template_slug: string
+          updated_at?: string
+        }
+        Update: {
+          brand_id?: string
+          created_at?: string
+          id?: string
+          locked?: boolean
+          post_type?: string
+          slot_index?: number
+          template_slug?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "brand_template_preferences_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       brand_token_events: {
         Row: {
           brand_id: string
@@ -229,6 +270,8 @@ export type Database = {
           calibration_done_at: string | null
           calibration_status: string
           created_at: string
+          custom_do_rules: string | null
+          custom_dont_rules: string | null
           description: string | null
           do_not_mention: string[] | null
           emoji_favorites: string | null
@@ -257,6 +300,7 @@ export type Database = {
           tone_suggestion_at: string | null
           tone_suggestion_type: string | null
           updated_at: string
+          voice_updated_at: string | null
           website_url: string | null
         }
         Insert: {
@@ -267,6 +311,8 @@ export type Database = {
           calibration_done_at?: string | null
           calibration_status?: string
           created_at?: string
+          custom_do_rules?: string | null
+          custom_dont_rules?: string | null
           description?: string | null
           do_not_mention?: string[] | null
           emoji_favorites?: string | null
@@ -295,6 +341,7 @@ export type Database = {
           tone_suggestion_at?: string | null
           tone_suggestion_type?: string | null
           updated_at?: string
+          voice_updated_at?: string | null
           website_url?: string | null
         }
         Update: {
@@ -305,6 +352,8 @@ export type Database = {
           calibration_done_at?: string | null
           calibration_status?: string
           created_at?: string
+          custom_do_rules?: string | null
+          custom_dont_rules?: string | null
           description?: string | null
           do_not_mention?: string[] | null
           emoji_favorites?: string | null
@@ -333,6 +382,7 @@ export type Database = {
           tone_suggestion_at?: string | null
           tone_suggestion_type?: string | null
           updated_at?: string
+          voice_updated_at?: string | null
           website_url?: string | null
         }
         Relationships: [
