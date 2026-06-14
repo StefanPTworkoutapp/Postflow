@@ -206,17 +206,24 @@ export async function publishToInstagram(input: PublishInput): Promise<PublishRe
       return { publishedId, postedUrl }
     }
 
-    // --- Carousel: 2+ images and isCarousel requested ---
+    // --- Carousel: 2+ items (mixed images and/or videos) ---
     if (input.isCarousel && input.mediaUrls.length >= 2) {
-      // Step 1: create a child container for each image
+      // Step 1: create a child container for each image or video.
+      // Instagram supports mixed-media carousels (some images, some video).
+      // Video carousel children must finish processing before the parent can be published.
       const childIds: string[] = []
-      for (const imageUrl of input.mediaUrls) {
-        const child = await graphPost(`/${igUserId}/media`, {
-          image_url: imageUrl,
-          is_carousel_item: true,
-          access_token: accessToken,
-        })
-        childIds.push(String(child.id))
+      for (const mediaUrl of input.mediaUrls) {
+        const isVid = isVideoUrl(mediaUrl)
+        const child = await graphPost(`/${igUserId}/media`, isVid
+          ? { video_url: mediaUrl, is_carousel_item: true, access_token: accessToken }
+          : { image_url: mediaUrl, is_carousel_item: true, access_token: accessToken }
+        )
+        const childId = String(child.id)
+        // Video carousel items need their own processing poll before the parent can be built
+        if (isVid) {
+          await waitForContainerReady(igUserId, childId, accessToken)
+        }
+        childIds.push(childId)
       }
 
       // Step 2: create the carousel container

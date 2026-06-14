@@ -13,6 +13,7 @@ import { nicheBenchmarkRefresh }     from "@/inngest/jobs/nicheBenchmarkRefresh"
 import { refreshTokens }             from "@/inngest/jobs/refreshTokens"
 import { recalibrationCheck }        from "@/inngest/jobs/recalibrationCheck"
 import { publishScheduledPost }      from "@/inngest/jobs/publishScheduledPost"
+import { evergreenRepurpose }        from "@/inngest/jobs/evergreenRepurpose"
 
 export const { GET, POST, PUT } = serve({
   client:    inngest,
@@ -30,5 +31,6 @@ export const { GET, POST, PUT } = serve({
     refreshTokens,
     recalibrationCheck,
     publishScheduledPost,
+    evergreenRepurpose,
   ],
 })

@@ -1170,6 +1170,7 @@ export type Database = {
           id: string
           media_ids: string[] | null
           platform: string
+          post_type: string | null
           posted_at: string | null
           posted_url: string | null
           predicted_performance: Json | null
@@ -1200,6 +1201,7 @@ export type Database = {
           id?: string
           media_ids?: string[] | null
           platform: string
+          post_type?: string | null
           posted_at?: string | null
           posted_url?: string | null
           predicted_performance?: Json | null
@@ -1230,6 +1232,7 @@ export type Database = {
           id?: string
           media_ids?: string[] | null
           platform?: string
+          post_type?: string | null
           posted_at?: string | null
           posted_url?: string | null
           predicted_performance?: Json | null
