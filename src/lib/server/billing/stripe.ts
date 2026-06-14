@@ -207,6 +207,15 @@ export async function handleStripeWebhook(
         ? new Date(item.current_period_end * 1000).toISOString()
         : null
 
+      // Detect storage add-on items and sum their GB
+      const storageAddonGb = sub.items.data.reduce((sum, si) => {
+        const addonGb = si.price?.metadata?.storage_gb
+        if (si.price?.metadata?.type === "storage_addon" && addonGb) {
+          return sum + (parseInt(addonGb, 10) * (si.quantity ?? 1))
+        }
+        return sum
+      }, 0)
+
       await Promise.all([
         supabase.from("accounts").update({
           subscription_tier:   tier,
@@ -223,6 +232,7 @@ export async function handleStripeWebhook(
           current_period_start:   periodStart,
           current_period_end:     periodEnd,
           canceled_at:            sub.canceled_at ? new Date(sub.canceled_at * 1000).toISOString() : null,
+          storage_addon_gb:       storageAddonGb,
           updated_at:             new Date().toISOString(),
         }, { onConflict: "account_id" }),
       ])

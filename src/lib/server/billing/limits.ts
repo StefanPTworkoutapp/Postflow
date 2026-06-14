@@ -101,7 +101,6 @@ export async function checkBrandLimit(accountId: string): Promise<LimitCheckResu
 export async function checkStorageLimit(brandId: string, fileSizeMb: number): Promise<LimitCheckResult> {
   const tier    = await getAccountTier()
   const limits  = getLimits(tier)
-  const limitMb = limits.storageGb * 1024
 
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -115,6 +114,17 @@ export async function checkStorageLimit(brandId: string, fileSizeMb: number): Pr
     .single()
 
   const accountId = brand?.account_id ?? user.id
+
+  // Include storage add-on in the limit
+  const { data: sub } = await supabase
+    .from("subscriptions")
+    .select("storage_addon_gb")
+    .eq("account_id", accountId)
+    .maybeSingle()
+
+  const addonGb = sub?.storage_addon_gb ?? 0
+  const limitGb = limits.storageGb + addonGb
+  const limitMb = limitGb * 1024
 
   // Get all brand IDs for this account
   const { data: brands } = await supabase
@@ -137,12 +147,11 @@ export async function checkStorageLimit(brandId: string, fileSizeMb: number): Pr
   )
 
   if (usedMb + fileSizeMb > limitMb) {
-    const usedGb  = (usedMb / 1024).toFixed(1)
-    const limitGb = limits.storageGb
+    const usedGb = (usedMb / 1024).toFixed(1)
     return {
       allowed:     false,
-      reason:      `Storage limit reached (${usedGb} GB of ${limitGb} GB used on the ${tier} plan).`,
-      upgradeHint: "Upgrade your plan for more storage.",
+      reason:      `Storage limit reached (${usedGb} GB of ${limitGb} GB used on the ${tier} plan${addonGb > 0 ? ` + ${addonGb} GB add-on` : ""}).`,
+      upgradeHint: addonGb > 0 ? "Upgrade your plan or add more storage." : "Upgrade your plan or add a storage add-on.",
     }
   }
 

@@ -1355,6 +1355,7 @@ export type Database = {
           plan: string | null
           provider: string | null
           status: string | null
+          storage_addon_gb: number
           stripe_subscription_id: string | null
           trial_ends_at: string | null
           updated_at: string
@@ -1376,6 +1377,7 @@ export type Database = {
           plan?: string | null
           provider?: string | null
           status?: string | null
+          storage_addon_gb?: number
           stripe_subscription_id?: string | null
           trial_ends_at?: string | null
           updated_at?: string
@@ -1397,6 +1399,7 @@ export type Database = {
           plan?: string | null
           provider?: string | null
           status?: string | null
+          storage_addon_gb?: number
           stripe_subscription_id?: string | null
           trial_ends_at?: string | null
           updated_at?: string

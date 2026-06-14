@@ -47,8 +47,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     activeBrandName  = activeBrand.name ?? undefined
     activeBrandColor = (activeBrand as unknown as { primary_color?: string }).primary_color ?? undefined
 
-    // Storage usage for bell notification — lightweight aggregate
+    // Storage usage for bell notification — lightweight aggregate (includes add-on)
     const brandIds = brands.map(b => b.id)
+    const { data: subRow } = await supabase
+      .from("subscriptions")
+      .select("storage_addon_gb")
+      .eq("account_id", user.id)
+      .maybeSingle()
+    const addonGb   = subRow?.storage_addon_gb ?? 0
+    storageLimitGb  = getLimits(tier).storageGb + addonGb
+
     if (brandIds.length > 0) {
       const { data: uploads } = await supabase
         .from("media_uploads")

@@ -13,15 +13,16 @@ import { PLANS, getLimits, formatPrice, type PlanTier } from "@/lib/server/billi
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
-import { CheckCircle2, CreditCard, FileText, HardDrive, Zap } from "lucide-react"
+import { CheckCircle2, CreditCard, FileText, HardDrive, Plus, Zap } from "lucide-react"
 import { BillingActions } from "./BillingActions"
+import { StorageAddonSection } from "./StorageAddonSection"
 
 export default async function BillingPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
 
-  const [{ data: account }, { data: invoices }, { data: userBrands }] = await Promise.all([
+  const [{ data: account }, { data: invoices }, { data: userBrands }, { data: subRow }] = await Promise.all([
     supabase
       .from("accounts")
       .select("subscription_tier, subscription_status, trial_ends_at, stripe_customer_id, mollie_customer_id")
@@ -39,6 +40,12 @@ export default async function BillingPage() {
       .from("brands")
       .select("id")
       .eq("account_id", user.id),
+
+    supabase
+      .from("subscriptions")
+      .select("storage_addon_gb")
+      .eq("account_id", user.id)
+      .maybeSingle(),
   ])
 
   const tier   = (account?.subscription_tier ?? "free") as PlanTier
@@ -59,7 +66,9 @@ export default async function BillingPage() {
       0,
     )
   }
-  const storageLimitMb  = limits.storageGb * 1024
+  const storageAddonGb  = subRow?.storage_addon_gb ?? 0
+  const totalStorageGb  = limits.storageGb + storageAddonGb
+  const storageLimitMb  = totalStorageGb * 1024
   const storagePercent  = storageLimitMb > 0 ? Math.min(100, (usedStorageMb / storageLimitMb) * 100) : 0
   const usedStorageGb   = (usedStorageMb / 1024).toFixed(2)
 
@@ -138,7 +147,12 @@ export default async function BillingPage() {
         <CardContent className="space-y-2">
           <div className="flex items-center justify-between text-sm">
             <span className="text-muted-foreground">
-              {usedStorageGb} GB of {limits.storageGb} GB used
+              {usedStorageGb} GB of {totalStorageGb} GB used
+              {storageAddonGb > 0 && (
+                <span className="ml-1 text-xs text-indigo-500">
+                  ({limits.storageGb} GB plan + {storageAddonGb} GB add-on)
+                </span>
+              )}
             </span>
             <span className="text-xs text-muted-foreground tabular-nums">
               {storagePercent.toFixed(0)}%
@@ -157,11 +171,20 @@ export default async function BillingPage() {
           </div>
           {storagePercent >= 90 && (
             <p className="text-xs text-red-600 dark:text-red-400">
-              You&apos;re almost out of storage. Upgrade your plan or delete unused media.
+              You&apos;re almost out of storage. Upgrade your plan, add storage below, or delete unused media.
             </p>
           )}
         </CardContent>
       </Card>
+
+      {/* Storage add-on — only for paid plans */}
+      {tier !== "free" && (
+        <StorageAddonSection
+          tier={tier}
+          hasStripe={hasStripe}
+          currentAddonGb={storageAddonGb}
+        />
+      )}
 
       {/* Pricing cards */}
       <div>

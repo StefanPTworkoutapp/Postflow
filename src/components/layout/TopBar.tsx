@@ -174,22 +174,52 @@ export function TopBar({ userEmail, userName, storagePercent = 0, storageLimitGb
 
                   {/* Actions */}
                   <div className="flex gap-2 pt-1">
-                    <Button
-                      size="sm"
-                      className="flex-1 h-8 text-xs"
-                      onClick={() => { router.push("/settings/billing"); setBellOpen(false) }}
-                    >
-                      Upgrade plan
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-8 text-xs"
-                      onClick={dismiss}
-                    >
-                      Dismiss
-                    </Button>
+                    {isCritical ? (
+                      <>
+                        <Button
+                          size="sm"
+                          className="flex-1 h-8 text-xs"
+                          onClick={() => { router.push("/settings/billing#storage-addon"); setBellOpen(false) }}
+                        >
+                          Add +50 GB — €5
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8 text-xs"
+                          onClick={() => { router.push("/settings/billing"); setBellOpen(false) }}
+                        >
+                          Upgrade plan
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <Button
+                          size="sm"
+                          className="flex-1 h-8 text-xs"
+                          onClick={() => { router.push("/settings/billing"); setBellOpen(false) }}
+                        >
+                          Upgrade plan
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8 text-xs"
+                          onClick={dismiss}
+                        >
+                          Dismiss
+                        </Button>
+                      </>
+                    )}
                   </div>
+                  {isCritical && (
+                    <button
+                      onClick={dismiss}
+                      className="text-xs text-muted-foreground hover:text-foreground text-right w-full"
+                    >
+                      Dismiss for 24h
+                    </button>
+                  )}
 
                   {/* Storage icon footer */}
                   <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground pt-1 border-t">
