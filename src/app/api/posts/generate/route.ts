@@ -47,6 +47,8 @@ export async function POST(request: Request) {
       performance:       ctx.performance,
       trends:            ctx.trends,
       tone_examples:     ctx.tone_examples,
+      custom_do_rules:   ctx.custom_do_rules,
+      custom_dont_rules: ctx.custom_dont_rules,
       model:             models.caption,
       brand_id:          brand.id,
       // Language override — when set and different from brand's content_language,

@@ -28,14 +28,16 @@ const DISMISS_TTL_70  = 7 * 24 * 60 * 60 * 1000   // 7 days
 const DISMISS_TTL_90  = 24 * 60 * 60 * 1000        // 24 h (re-warn sooner at critical)
 
 interface TopBarProps {
-  userEmail?:      string
-  userName?:       string
-  storagePercent?: number   // 0–100
-  storageLimitGb?: number
-  tier?:           string
+  userEmail?:        string
+  userName?:         string
+  storagePercent?:   number   // 0–100
+  storageLimitGb?:   number
+  tier?:             string
+  activeBrandName?:  string
+  activeBrandColor?: string
 }
 
-export function TopBar({ userEmail, userName, storagePercent = 0, storageLimitGb = 1, tier = "free" }: TopBarProps) {
+export function TopBar({ userEmail, userName, storagePercent = 0, storageLimitGb = 1, tier = "free", activeBrandName, activeBrandColor }: TopBarProps) {
   const router   = useRouter()
   const supabase = createClient()
   const [drawerOpen, setDrawerOpen]   = useState(false)
@@ -83,8 +85,18 @@ export function TopBar({ userEmail, userName, storagePercent = 0, storageLimitGb
   return (
     <>
       <header className="flex h-14 items-center justify-between border-b bg-[hsl(var(--background))] px-4 shrink-0">
-        {/* Left: page title slot */}
-        <div />
+        {/* Left: active brand slot */}
+        <div>
+          {activeBrandName && (
+            <div className="flex items-center gap-2">
+              <span
+                className="h-2.5 w-2.5 rounded-full shrink-0"
+                style={{ backgroundColor: activeBrandColor ?? "#6366f1" }}
+              />
+              <span className="text-sm font-medium truncate max-w-[180px]">{activeBrandName}</span>
+            </div>
+          )}
+        </div>
 
         {/* Right: actions */}
         <div className="flex items-center gap-2">

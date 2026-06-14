@@ -1,0 +1,18 @@
+<svg viewBox="0 0 1024 1024" width="1024" height="1024" xmlns="http://www.w3.org/2000/svg">
+
+  <!-- Navy rounded square background -->
+  <rect width="1024" height="1024" rx="220" ry="220" fill="#1B2B4B"/>
+
+  <!-- Play triangle — white, optically centered -->
+  <path d="M 437,272 L 437,548 L 663,410 Z" fill="#ffffff"/>
+
+  <!-- Flow wave — teal, stroke only, below triangle -->
+  <path
+    d="M 150,700 C 253,640 303,640 406,700 C 509,760 559,760 662,700 C 765,640 815,640 874,700"
+    fill="none"
+    stroke="#0DA5A5"
+    stroke-width="52"
+    stroke-linecap="round"
+    stroke-linejoin="round"/>
+
+</svg>

@@ -1,0 +1,44 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;800&amp;display=swap');
+    </style>
+  </defs>
+
+  <!-- White background -->
+  <rect width="1024" height="1024" fill="#ffffff"/>
+
+  <!-- Line 1: PostFlow — centered -->
+  <text
+    x="512"
+    y="510"
+    text-anchor="middle"
+    font-family="'Inter', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif"
+    font-weight="800"
+    font-size="196"
+    letter-spacing="-5">
+    <tspan fill="#1B2B4B">Post</tspan><tspan fill="#0DA5A5">Flow</tspan>
+  </text>
+
+  <!-- Line 2: icon + socials — grouped and centered -->
+  <!-- Triangle icon: 38px tall, right-pointing, teal -->
+  <!-- "socials" at ~56px, light weight -->
+  <!-- Combined width estimate: triangle(33px) + gap(14px) + "socials"(~230px) = ~277px -->
+  <!-- Start x = 512 - 277/2 = 373 -->
+
+  <g transform="translate(373, 548)">
+    <!-- Small play triangle -->
+    <path d="M 0,0 L 0,38 L 33,19 Z" fill="#0DA5A5"/>
+
+    <!-- "socials" text -->
+    <text
+      x="47"
+      y="35"
+      font-family="'Inter', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif"
+      font-weight="400"
+      font-size="46"
+      letter-spacing="10"
+      fill="#8FA8B0">socials</text>
+  </g>
+
+</svg>

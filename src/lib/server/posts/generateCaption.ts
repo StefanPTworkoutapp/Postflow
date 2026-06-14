@@ -54,6 +54,16 @@ export interface CaptionInput {
    * Select longest examples (most signal). Truncated to 400 chars each in the prompt.
    */
   tone_examples?: string[] | null
+  /**
+   * User-written "always do X" rules — injected as absolute constraints.
+   * These override any inferred style behaviour.
+   */
+  custom_do_rules?: string | null
+  /**
+   * User-written "never do Y" rules — injected as absolute constraints.
+   * These override any inferred style behaviour.
+   */
+  custom_dont_rules?: string | null
 }
 
 export interface GeneratedCaption {
@@ -119,6 +129,8 @@ export async function generateCaption(input: CaptionInput): Promise<GeneratedCap
     trends,
     target_language,
     tone_examples,
+    custom_do_rules,
+    custom_dont_rules,
   } = input
 
   const EMOJI_RULES: Record<string, string> = {
@@ -223,6 +235,18 @@ ${trends.slice(0, 5).map(t => `- ${t.topic}${t.headline ? ` ("${t.headline}")` :
     ? `\nIMPORTANT: Write the entire post in ${langLabel}. Never switch languages.`
     : ""
 
+  // ── Custom brand rules (user-written, absolute constraints) ──────────────
+  const customRulesBlock = (() => {
+    const lines: string[] = []
+    if (custom_do_rules?.trim()) {
+      lines.push(`BRAND CUSTOM RULES — ALWAYS (absolute — the brand manager wrote these):\n${custom_do_rules.trim()}`)
+    }
+    if (custom_dont_rules?.trim()) {
+      lines.push(`BRAND CUSTOM RULES — NEVER (absolute — the brand manager wrote these):\n${custom_dont_rules.trim()}`)
+    }
+    return lines.length ? lines.join("\n\n") : ""
+  })()
+
   const antiAiBlock = `
 WRITE AS A HUMAN, NOT AN AI:
 This is a real person/brand with their own voice. Write exactly as they would.
@@ -246,6 +270,7 @@ ${audience ? `Target audience: ${audience}` : ""}
 ${goalsDesc}
 ${toneDesc}
 ${fewShotBlock}
+${customRulesBlock}
 Emoji rule (STRICT — override everything else): ${emojiRule}
 ${dnm}
 ${feedbackLine}

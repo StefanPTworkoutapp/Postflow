@@ -71,8 +71,9 @@ export function BrandSwitcher({ brands, activeBrandId }: Props) {
         body: JSON.stringify({ brandId }),
       })
       if (res.ok) {
-        // Full reload so all server components re-read the cookie.
-        window.location.reload()
+        // router.refresh() triggers a fresh server render so all
+        // server components re-read the active-brand cookie.
+        router.refresh()
       } else {
         setSwitching(null)
       }

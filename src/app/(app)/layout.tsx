@@ -29,6 +29,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // redirect there and skip the brand sidebar UI.
   let sidebarBrands: { id: string; name: string; logo_url: string | null }[] = []
   let activeBrandId: string | undefined
+  let activeBrandName: string | undefined
+  let activeBrandColor: string | undefined
   let storagePercent = 0
   let storageLimitGb = getLimits(tier).storageGb
 
@@ -41,7 +43,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     if (brands.length === 0 || !activeBrand) redirect("/onboarding")
 
     sidebarBrands = brands.map((b) => ({ id: b.id, name: b.name, logo_url: b.logo_url }))
-    activeBrandId = activeBrand.id
+    activeBrandId    = activeBrand.id
+    activeBrandName  = activeBrand.name ?? undefined
+    activeBrandColor = (activeBrand as unknown as { primary_color?: string }).primary_color ?? undefined
 
     // Storage usage for bell notification — lightweight aggregate
     const brandIds = brands.map(b => b.id)
@@ -74,6 +78,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             storagePercent={storagePercent}
             storageLimitGb={storageLimitGb}
             tier={tier}
+            activeBrandName={activeBrandName}
+            activeBrandColor={activeBrandColor}
           />
           <main className="flex-1 overflow-y-auto p-6">{children}</main>
         </div>

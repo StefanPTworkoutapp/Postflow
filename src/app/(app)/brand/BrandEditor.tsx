@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { FileText, ImagePlus, Lightbulb, Loader2, X } from "lucide-react"
+import { FileText, ImagePlus, Lightbulb, Loader2, Plus, RefreshCw, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -10,6 +10,80 @@ import { INDUSTRIES, FONTS } from "@/lib/shared/onboarding/types"
 import { RankedGoalPicker } from "@/components/ui/RankedGoalPicker"
 import { EmojiInput } from "@/components/ui/EmojiInput"
 import type { Database } from "@/types/database.types"
+
+// ── Voice types ───────────────────────────────────────────────────────────────
+
+interface ToneProfile {
+  tone_level?:        number
+  personality_traits?: string[]
+  expertise_level?:   string
+  do_use?:            string[]
+  do_not_use?:        string[]
+  signature_phrases?: string[]
+}
+
+interface VoiceHistoryEntry {
+  id:          string
+  token_key:   string
+  old_value:   unknown
+  new_value:   unknown
+  signal_type: string
+  delta:       number | null
+  metadata:    Record<string, unknown> | null
+  created_at:  string
+}
+
+interface VoiceApiResponse {
+  voice: {
+    tone_profile:     ToneProfile | null
+    tone_examples:    string[] | null
+    custom_do_rules:  string | null
+    custom_dont_rules: string | null
+    voice_updated_at: string | null
+  }
+  history: VoiceHistoryEntry[]
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function relativeDate(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime()
+  const mins  = Math.floor(diff / 60_000)
+  const hours = Math.floor(diff / 3_600_000)
+  const days  = Math.floor(diff / 86_400_000)
+  if (mins  < 2)  return "just now"
+  if (mins  < 60) return `${mins} minutes ago`
+  if (hours < 24) return `${hours} hour${hours > 1 ? "s" : ""} ago`
+  if (days  < 30) return `${days} day${days > 1 ? "s" : ""} ago`
+  const months = Math.floor(days / 30)
+  return `${months} month${months > 1 ? "s" : ""} ago`
+}
+
+const TOKEN_KEY_LABELS: Record<string, string> = {
+  voice_profile:         "Voice profile",
+  caption_tone:          "Caption tone",
+  tone_level:            "Tone level",
+  personality_traits:    "Personality traits",
+  do_use:                "DO use list",
+  do_not_use:            "DON'T use list",
+  signature_phrases:     "Signature phrases",
+  custom_do_rules:       "Always-do rules",
+  custom_dont_rules:     "Never-do rules",
+  style_volatility_preference: "Style balance",
+}
+
+const SIGNAL_TYPE_LABELS: Record<string, string> = {
+  manual:      "You edited",
+  calibration: "AI refresh",
+  feedback:    "Learning loop",
+  reject:      "Learning loop",
+}
+
+const TONE_LEVEL_LABELS: Record<number, string> = {
+  1: "Very formal", 2: "Formal", 3: "Mostly formal", 4: "Slightly formal",
+  5: "Balanced", 6: "Slightly casual", 7: "Mostly casual", 8: "Casual",
+  9: "Very casual", 10: "Very casual",
+}
 
 type Brand = Database["postflow"]["Tables"]["brands"]["Row"]
 
@@ -122,6 +196,35 @@ export function BrandEditor({ brand }: Props) {
   const [docExtractError, setDocExtractError] = useState<string | null>(null)
   const docInputRef = useRef<HTMLInputElement>(null)
 
+  // ── Voice API data (lazy-loaded) ──────────────────────────
+  const [voiceData, setVoiceData] = useState<VoiceApiResponse | null>(null)
+  const [voiceLoading, setVoiceLoading] = useState(false)
+  const [voiceLoadError, setVoiceLoadError] = useState<string | null>(null)
+
+  // Editable voice fields — synced from voiceData when it loads
+  const [doUse, setDoUse] = useState<string[]>([])
+  const [doNotUse, setDoNotUse] = useState<string[]>([])
+  const [signaturePhrases, setSignaturePhrases] = useState<string[]>([])
+  const [customDoRules, setCustomDoRules] = useState<string>("")
+  const [customDontRules, setCustomDontRules] = useState<string>("")
+
+  // Tag input buffers
+  const [doUseInput, setDoUseInput] = useState("")
+  const [doNotUseInput, setDoNotUseInput] = useState("")
+  const [signatureInput, setSignatureInput] = useState("")
+
+  // Voice save states
+  const [voiceTagsSaving, setVoiceTagsSaving] = useState(false)
+  const [voiceTagsSaved, setVoiceTagsSaved] = useState(false)
+  const [voiceTagsError, setVoiceTagsError] = useState<string | null>(null)
+  const [voiceRulesSaving, setVoiceRulesSaving] = useState(false)
+  const [voiceRulesSaved, setVoiceRulesSaved] = useState(false)
+  const [voiceRulesError, setVoiceRulesError] = useState<string | null>(null)
+
+  // Refresh state
+  const [voiceRefreshing, setVoiceRefreshing] = useState(false)
+  const [voiceRefreshError, setVoiceRefreshError] = useState<string | null>(null)
+
   // ── Goals ─────────────────────────────────────────────────
   const [goals, setGoals] = useState<string[]>(
     (brand as unknown as { goals?: string[] }).goals ?? (brand.primary_goal ? [brand.primary_goal] : [])
@@ -159,6 +262,7 @@ export function BrandEditor({ brand }: Props) {
   // ── Side effects ──────────────────────────────────────────
   useEffect(() => {
     if (tab === "sharing") loadInvites()
+    if (tab === "voice" && voiceData === null && !voiceLoading) loadVoiceData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab])
 
@@ -298,6 +402,97 @@ export function BrandEditor({ brand }: Props) {
       setLogoError(err instanceof Error ? err.message : "Upload failed")
     } finally {
       setLogoUploading(false)
+    }
+  }
+
+  // ── Voice handlers ────────────────────────────────────────
+
+  async function loadVoiceData() {
+    setVoiceLoading(true)
+    setVoiceLoadError(null)
+    try {
+      const res = await fetch(`/api/brands/${brand.id}/voice`)
+      const json: VoiceApiResponse = await res.json()
+      if (!res.ok) { setVoiceLoadError((json as unknown as { error?: string }).error ?? "Failed to load"); return }
+      setVoiceData(json)
+      const tp = json.voice.tone_profile
+      setDoUse(tp?.do_use ?? [])
+      setDoNotUse(tp?.do_not_use ?? [])
+      setSignaturePhrases(tp?.signature_phrases ?? [])
+      setCustomDoRules(json.voice.custom_do_rules ?? "")
+      setCustomDontRules(json.voice.custom_dont_rules ?? "")
+    } catch {
+      setVoiceLoadError("Network error. Please try again.")
+    } finally {
+      setVoiceLoading(false)
+    }
+  }
+
+  async function refreshVoiceProfile() {
+    setVoiceRefreshing(true)
+    setVoiceRefreshError(null)
+    try {
+      const res = await fetch(`/api/brands/${brand.id}/voice/refresh`, { method: "POST" })
+      const json = await res.json()
+      if (!res.ok || json.error) { setVoiceRefreshError(json.error ?? "Refresh failed"); return }
+      // Reload the full voice data so UI reflects the new profile
+      setVoiceData(null)
+      await loadVoiceData()
+    } catch {
+      setVoiceRefreshError("Network error. Please try again.")
+    } finally {
+      setVoiceRefreshing(false)
+    }
+  }
+
+  async function saveVoiceTags() {
+    setVoiceTagsSaving(true)
+    setVoiceTagsError(null)
+    setVoiceTagsSaved(false)
+    try {
+      const res = await fetch(`/api/brands/${brand.id}/voice`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ do_use: doUse, do_not_use: doNotUse, signature_phrases: signaturePhrases }),
+      })
+      const json = await res.json()
+      if (!res.ok || json.error) { setVoiceTagsError(json.error ?? "Failed to save"); return }
+      setVoiceTagsSaved(true)
+      setTimeout(() => setVoiceTagsSaved(false), 3000)
+      // Reload history
+      setVoiceData(null)
+      await loadVoiceData()
+    } catch {
+      setVoiceTagsError("Network error. Please try again.")
+    } finally {
+      setVoiceTagsSaving(false)
+    }
+  }
+
+  async function saveVoiceRules() {
+    setVoiceRulesSaving(true)
+    setVoiceRulesError(null)
+    setVoiceRulesSaved(false)
+    try {
+      const res = await fetch(`/api/brands/${brand.id}/voice`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          custom_do_rules:   customDoRules.trim() || null,
+          custom_dont_rules: customDontRules.trim() || null,
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok || json.error) { setVoiceRulesError(json.error ?? "Failed to save"); return }
+      setVoiceRulesSaved(true)
+      setTimeout(() => setVoiceRulesSaved(false), 3000)
+      // Reload history
+      setVoiceData(null)
+      await loadVoiceData()
+    } catch {
+      setVoiceRulesError("Network error. Please try again.")
+    } finally {
+      setVoiceRulesSaving(false)
     }
   }
 
@@ -622,7 +817,7 @@ export function BrandEditor({ brand }: Props) {
 
         {/* ── Voice ── */}
         {tab === "voice" && (
-          <div className="space-y-4">
+          <div className="space-y-6">
             {/* Tone learning suggestion */}
             {brand.tone_suggestion && (
               <ToneSuggestionCard
@@ -631,222 +826,600 @@ export function BrandEditor({ brand }: Props) {
                 brandId={brand.id}
               />
             )}
-            {/* Screenshot upload */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label>Upload screenshots</Label>
-                <span className="text-xs text-[hsl(var(--muted-foreground))]">
-                  {images.length}/5 — add more one by one or in a batch
-                </span>
-              </div>
 
-              {/* Drop zone — always visible so they can keep adding */}
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={images.length >= 5}
-                className={cn(
-                  "w-full rounded-xl border-2 border-dashed p-6 flex flex-col items-center gap-2 transition-colors",
-                  images.length >= 5
-                    ? "border-[hsl(var(--border))] opacity-40 cursor-not-allowed"
-                    : "border-[hsl(var(--border))] hover:border-indigo-300 cursor-pointer"
-                )}
-              >
-                <ImagePlus className="h-6 w-6 text-[hsl(var(--muted-foreground))]" />
-                <p className="text-sm text-[hsl(var(--muted-foreground))]">
-                  {images.length >= 5 ? "Maximum 5 reached" : "Click to add screenshots"}
-                </p>
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                multiple
-                className="hidden"
-                onChange={handleFilePick}
-              />
-
-              {/* Thumbnails */}
-              {images.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {images.map((img, i) => (
-                    <div key={i} className="relative">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={img.url} alt={`Screenshot ${i + 1}`} className="h-20 w-auto rounded-lg border object-cover" />
-                      <button
-                        type="button"
-                        onClick={() => removeImage(i)}
-                        className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-[hsl(var(--destructive))] text-white flex items-center justify-center"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {extractError && (
-                <p className="text-xs text-[hsl(var(--destructive))]">{extractError}</p>
-              )}
-
-              {images.length > 0 && (
-                <Button
-                  variant="outline"
-                  onClick={handleExtract}
-                  disabled={extracting}
-                  className="gap-2"
-                >
-                  {extracting
-                    ? <><Loader2 className="h-4 w-4 animate-spin" />Extracting…</>
-                    : `Extract text from ${images.length} screenshot${images.length > 1 ? "s" : ""} →`
-                  }
-                </Button>
-              )}
-
-              {extracted && (
-                <p className="text-xs text-green-600 dark:text-green-400">
-                  ✓ Text extracted and added below
-                </p>
-              )}
-            </div>
-
-            {/* Document upload */}
-            <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <div className="flex-1 border-t" />
-                <span className="text-xs text-[hsl(var(--muted-foreground))]">or upload a ToV document</span>
-                <div className="flex-1 border-t" />
-              </div>
-
-              <p className="text-xs text-[hsl(var(--muted-foreground))]">
-                Brand guide, style document, or any file with writing examples.
-                Supports PDF, Word (.docx), and plain text.
-              </p>
-
-              {/* Drop zone */}
-              <button
-                type="button"
-                onClick={() => docInputRef.current?.click()}
-                className="w-full rounded-xl border-2 border-dashed border-[hsl(var(--border))] hover:border-indigo-300 p-5 flex flex-col items-center gap-2 transition-colors"
-              >
-                <FileText className="h-6 w-6 text-[hsl(var(--muted-foreground))]" />
-                <p className="text-sm text-[hsl(var(--muted-foreground))]">Click to upload a document</p>
-                <p className="text-xs text-[hsl(var(--muted-foreground))]">PDF, DOCX, or TXT · max 10 MB</p>
-              </button>
-              <input
-                ref={docInputRef}
-                type="file"
-                accept=".pdf,.docx,.doc,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown"
-                className="hidden"
-                onChange={e => {
-                  const f = e.target.files?.[0] ?? null
-                  setDocFile(f)
-                  setDocExtracted(false)
-                  setDocExtractError(null)
-                  e.target.value = ""
-                }}
-              />
-
-              {docFile && (
-                <div className="flex items-center justify-between rounded-lg border px-3 py-2.5 bg-[hsl(var(--muted))]/40">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <FileText className="h-4 w-4 shrink-0 text-indigo-500" />
-                    <span className="text-sm truncate">{docFile.name}</span>
-                    <span className="text-xs text-[hsl(var(--muted-foreground))] shrink-0">
-                      {(docFile.size / 1024).toFixed(0)} KB
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => { setDocFile(null); setDocExtracted(false) }}
-                    className="ml-2 shrink-0 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-              )}
-
-              {docExtractError && (
-                <p className="text-xs text-[hsl(var(--destructive))]">{docExtractError}</p>
-              )}
-
-              {docFile && !docExtracted && (
-                <Button
-                  variant="outline"
-                  onClick={handleDocExtract}
-                  disabled={docExtracting}
-                  className="gap-2"
-                >
-                  {docExtracting
-                    ? <><Loader2 className="h-4 w-4 animate-spin" />Extracting voice examples…</>
-                    : `Extract voice examples from ${docFile.name} →`
-                  }
-                </Button>
-              )}
-
-              {docExtracted && (
-                <p className="text-xs text-green-600 dark:text-green-400">
-                  ✓ Voice examples extracted and added below
-                </p>
-              )}
-            </div>
-
-            {/* Emoji policy */}
-            <div className="space-y-2">
-              <Label>Emoji usage in posts</Label>
-              <div className="grid grid-cols-3 gap-2">
-                {([
-                  { value: "never",     label: "Never",      desc: "No emojis at all",           icon: "🚫" },
-                  { value: "sparingly", label: "Sparingly",  desc: "1–2 max, only when natural",  icon: "🟡" },
-                  { value: "often",     label: "Often",      desc: "Use freely throughout",       icon: "✅" },
-                ] as const).map(opt => (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => setEmojiPolicy(opt.value)}
-                    className={cn(
-                      "text-left rounded-xl border-2 p-3 transition-colors",
-                      emojiPolicy === opt.value
-                        ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-950/40"
-                        : "border-[hsl(var(--border))] hover:border-indigo-300"
-                    )}
-                  >
-                    <div className="text-lg mb-1">{opt.icon}</div>
-                    <p className={cn("text-sm font-medium", emojiPolicy === opt.value && "text-indigo-700 dark:text-indigo-300")}>
-                      {opt.label}
-                    </p>
-                    <p className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">{opt.desc}</p>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Favourite emojis — only shown for sparingly */}
-            {emojiPolicy === "sparingly" && (
-              <div className="space-y-1.5">
-                <Label>Your go-to emojis <span className="font-normal text-[hsl(var(--muted-foreground))]">(optional)</span></Label>
-                <EmojiInput value={emojiFavorites} onChange={setEmojiFavorites} />
-                <p className="text-xs text-[hsl(var(--muted-foreground))]">
-                  AI will only use these — no random emojis.
-                </p>
+            {/* Loading state */}
+            {voiceLoading && (
+              <div className="flex items-center gap-2 text-sm text-[hsl(var(--muted-foreground))] py-4">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading voice profile…
               </div>
             )}
 
-            {/* Text area — always editable, images append to it */}
-            <Field label="Example posts (editable)">
-              <textarea
-                rows={10}
-                className="flex w-full rounded-md border border-[hsl(var(--input))] bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-[hsl(var(--muted-foreground))] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[hsl(var(--ring))]"
-                placeholder={"Paste posts directly, or extract them from screenshots above.\n\nSeparate multiple posts with --- on its own line."}
-                value={voiceExamples}
-                onChange={(e) => setVoiceExamples(e.target.value)}
-              />
-              <p className="text-xs text-[hsl(var(--muted-foreground))] mt-1">
-                Saving here updates stored examples.{" "}
-                <a href="/onboarding" className="text-indigo-500 underline">Re-run onboarding</a>{" "}
-                to regenerate your AI tone profile.
-              </p>
-            </Field>
+            {voiceLoadError && (
+              <div className="rounded-lg border border-[hsl(var(--destructive))]/30 bg-[hsl(var(--destructive))]/10 px-4 py-3">
+                <p className="text-sm text-[hsl(var(--destructive))]">{voiceLoadError}</p>
+                <button
+                  type="button"
+                  onClick={() => { setVoiceData(null); loadVoiceData() }}
+                  className="text-xs underline mt-1 text-[hsl(var(--destructive))]"
+                >
+                  Retry
+                </button>
+              </div>
+            )}
+
+            {/* Section A — AI Voice Profile */}
+            {voiceData && (
+              <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--muted))]/20 p-4 space-y-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold">AI Voice Profile</p>
+                    <p className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">
+                      {voiceData.voice.voice_updated_at
+                        ? `Updated ${relativeDate(voiceData.voice.voice_updated_at)}`
+                        : "Not yet generated"}
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 shrink-0"
+                    onClick={refreshVoiceProfile}
+                    disabled={voiceRefreshing}
+                  >
+                    {voiceRefreshing
+                      ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />Refreshing…</>
+                      : <><RefreshCw className="h-3.5 w-3.5" />Refresh AI analysis</>
+                    }
+                  </Button>
+                </div>
+
+                {voiceRefreshError && (
+                  <p className="text-xs text-[hsl(var(--destructive))]">{voiceRefreshError}</p>
+                )}
+
+                {voiceData.voice.tone_profile ? (
+                  <div className="space-y-3">
+                    {/* Tone level */}
+                    {voiceData.voice.tone_profile.tone_level != null && (
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-medium">Tone level</span>
+                          <span className="text-[hsl(var(--muted-foreground))]">
+                            {voiceData.voice.tone_profile.tone_level}/10 —{" "}
+                            {TONE_LEVEL_LABELS[voiceData.voice.tone_profile.tone_level] ?? "Balanced"}
+                          </span>
+                        </div>
+                        <div className="w-full bg-[hsl(var(--border))] rounded-full h-2">
+                          <div
+                            className="h-2 rounded-full bg-indigo-500"
+                            style={{ width: `${((voiceData.voice.tone_profile.tone_level - 1) / 9) * 100}%` }}
+                          />
+                        </div>
+                        <div className="flex justify-between text-[10px] text-[hsl(var(--muted-foreground))]">
+                          <span>Very formal</span>
+                          <span>Balanced</span>
+                          <span>Very casual</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Personality traits */}
+                    {(voiceData.voice.tone_profile.personality_traits?.length ?? 0) > 0 && (
+                      <div className="space-y-1.5">
+                        <p className="text-xs font-medium">Personality traits</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {voiceData.voice.tone_profile.personality_traits!.map((trait) => (
+                            <span
+                              key={trait}
+                              className="inline-flex items-center rounded-full bg-indigo-100 dark:bg-indigo-950/50 px-2.5 py-0.5 text-xs font-medium text-indigo-800 dark:text-indigo-300"
+                            >
+                              {trait}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Expertise level */}
+                    {voiceData.voice.tone_profile.expertise_level && (
+                      <div className="flex items-center gap-2 text-xs">
+                        <span className="font-medium text-[hsl(var(--muted-foreground))]">Expertise level:</span>
+                        <span>{voiceData.voice.tone_profile.expertise_level}</span>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-sm text-[hsl(var(--muted-foreground))]">
+                    No AI profile yet. Add example posts below and click{" "}
+                    <span className="font-medium">Refresh AI analysis</span> to generate one.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Section B — What AI uses (editable tags) */}
+            {voiceData && (
+              <div className="space-y-4">
+                <div>
+                  <p className="text-sm font-semibold">What AI uses</p>
+                  <p className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">
+                    These lists guide every caption and post AI generates for you.
+                  </p>
+                </div>
+
+                {/* DO use */}
+                <div className="space-y-2">
+                  <Label className="text-xs font-medium text-green-700 dark:text-green-400">DO use</Label>
+                  <div className="flex flex-wrap gap-1.5 min-h-[2rem]">
+                    {doUse.map((item) => (
+                      <span
+                        key={item}
+                        className="inline-flex items-center gap-1 rounded-full bg-green-100 dark:bg-green-950/40 px-2.5 py-0.5 text-xs font-medium text-green-800 dark:text-green-300"
+                      >
+                        {item}
+                        <button
+                          type="button"
+                          onClick={() => setDoUse((prev) => prev.filter((v) => v !== item))}
+                          className="hover:text-green-600 dark:hover:text-green-200"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      value={doUseInput}
+                      onChange={(e) => setDoUseInput(e.target.value)}
+                      placeholder="Add a word or phrase…"
+                      className="text-sm h-8"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && doUseInput.trim()) {
+                          e.preventDefault()
+                          const val = doUseInput.trim()
+                          if (!doUse.includes(val)) setDoUse((prev) => [...prev, val])
+                          setDoUseInput("")
+                        }
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 px-2 shrink-0"
+                      onClick={() => {
+                        const val = doUseInput.trim()
+                        if (val && !doUse.includes(val)) { setDoUse((prev) => [...prev, val]); setDoUseInput("") }
+                      }}
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+
+                {/* DON'T use */}
+                <div className="space-y-2">
+                  <Label className="text-xs font-medium text-red-700 dark:text-red-400">DON&apos;T use</Label>
+                  <div className="flex flex-wrap gap-1.5 min-h-[2rem]">
+                    {doNotUse.map((item) => (
+                      <span
+                        key={item}
+                        className="inline-flex items-center gap-1 rounded-full bg-red-100 dark:bg-red-950/40 px-2.5 py-0.5 text-xs font-medium text-red-800 dark:text-red-300"
+                      >
+                        {item}
+                        <button
+                          type="button"
+                          onClick={() => setDoNotUse((prev) => prev.filter((v) => v !== item))}
+                          className="hover:text-red-600 dark:hover:text-red-200"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      value={doNotUseInput}
+                      onChange={(e) => setDoNotUseInput(e.target.value)}
+                      placeholder="Add a word or phrase…"
+                      className="text-sm h-8"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && doNotUseInput.trim()) {
+                          e.preventDefault()
+                          const val = doNotUseInput.trim()
+                          if (!doNotUse.includes(val)) setDoNotUse((prev) => [...prev, val])
+                          setDoNotUseInput("")
+                        }
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 px-2 shrink-0"
+                      onClick={() => {
+                        const val = doNotUseInput.trim()
+                        if (val && !doNotUse.includes(val)) { setDoNotUse((prev) => [...prev, val]); setDoNotUseInput("") }
+                      }}
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Signature phrases */}
+                <div className="space-y-2">
+                  <Label className="text-xs font-medium">Signature phrases</Label>
+                  <div className="flex flex-wrap gap-1.5 min-h-[2rem]">
+                    {signaturePhrases.map((item) => (
+                      <span
+                        key={item}
+                        className="inline-flex items-center gap-1 rounded-full bg-indigo-100 dark:bg-indigo-950/40 px-2.5 py-0.5 text-xs font-medium text-indigo-800 dark:text-indigo-300"
+                      >
+                        {item}
+                        <button
+                          type="button"
+                          onClick={() => setSignaturePhrases((prev) => prev.filter((v) => v !== item))}
+                          className="hover:text-indigo-600 dark:hover:text-indigo-200"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      value={signatureInput}
+                      onChange={(e) => setSignatureInput(e.target.value)}
+                      placeholder="Add a signature phrase…"
+                      className="text-sm h-8"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && signatureInput.trim()) {
+                          e.preventDefault()
+                          const val = signatureInput.trim()
+                          if (!signaturePhrases.includes(val)) setSignaturePhrases((prev) => [...prev, val])
+                          setSignatureInput("")
+                        }
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 px-2 shrink-0"
+                      onClick={() => {
+                        const val = signatureInput.trim()
+                        if (val && !signaturePhrases.includes(val)) { setSignaturePhrases((prev) => [...prev, val]); setSignatureInput("") }
+                      }}
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <Button size="sm" onClick={saveVoiceTags} disabled={voiceTagsSaving}>
+                    {voiceTagsSaving ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Saving…</> : "Save changes"}
+                  </Button>
+                  {voiceTagsSaved && <span className="text-sm text-green-600 dark:text-green-400">Saved!</span>}
+                  {voiceTagsError && <span className="text-sm text-[hsl(var(--destructive))]">{voiceTagsError}</span>}
+                </div>
+              </div>
+            )}
+
+            {/* Section C — Custom brand rules */}
+            {voiceData && (
+              <div className="space-y-4">
+                <div>
+                  <p className="text-sm font-semibold">Custom brand rules</p>
+                  <p className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">
+                    Hard rules that override everything else — the AI always follows these exactly.
+                  </p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-green-700 dark:text-green-400 font-medium">Things AI must ALWAYS do</Label>
+                  <textarea
+                    rows={4}
+                    className="flex w-full rounded-md border border-[hsl(var(--input))] bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-[hsl(var(--muted-foreground))] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[hsl(var(--ring))]"
+                    placeholder={"e.g. Always end with a question to the reader\nAlways mention the location if relevant"}
+                    value={customDoRules}
+                    onChange={(e) => setCustomDoRules(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-red-700 dark:text-red-400 font-medium">Things AI must NEVER do</Label>
+                  <textarea
+                    rows={4}
+                    className="flex w-full rounded-md border border-[hsl(var(--input))] bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-[hsl(var(--muted-foreground))] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[hsl(var(--ring))]"
+                    placeholder={"e.g. Never use the word 'unlock'\nNever make medical claims"}
+                    value={customDontRules}
+                    onChange={(e) => setCustomDontRules(e.target.value)}
+                  />
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <Button size="sm" onClick={saveVoiceRules} disabled={voiceRulesSaving}>
+                    {voiceRulesSaving ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Saving…</> : "Save rules"}
+                  </Button>
+                  {voiceRulesSaved && <span className="text-sm text-green-600 dark:text-green-400">Saved!</span>}
+                  {voiceRulesError && <span className="text-sm text-[hsl(var(--destructive))]">{voiceRulesError}</span>}
+                </div>
+              </div>
+            )}
+
+            {/* Section D — Example posts (existing content) */}
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm font-semibold">Example posts</p>
+                <p className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">
+                  Upload screenshots or a document, or paste examples directly. AI uses these to learn your writing style.
+                </p>
+              </div>
+
+              {/* Screenshot upload */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label>Upload screenshots</Label>
+                  <span className="text-xs text-[hsl(var(--muted-foreground))]">
+                    {images.length}/5 — add more one by one or in a batch
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={images.length >= 5}
+                  className={cn(
+                    "w-full rounded-xl border-2 border-dashed p-6 flex flex-col items-center gap-2 transition-colors",
+                    images.length >= 5
+                      ? "border-[hsl(var(--border))] opacity-40 cursor-not-allowed"
+                      : "border-[hsl(var(--border))] hover:border-indigo-300 cursor-pointer"
+                  )}
+                >
+                  <ImagePlus className="h-6 w-6 text-[hsl(var(--muted-foreground))]" />
+                  <p className="text-sm text-[hsl(var(--muted-foreground))]">
+                    {images.length >= 5 ? "Maximum 5 reached" : "Click to add screenshots"}
+                  </p>
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={handleFilePick}
+                />
+
+                {images.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {images.map((img, i) => (
+                      <div key={i} className="relative">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={img.url} alt={`Screenshot ${i + 1}`} className="h-20 w-auto rounded-lg border object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => removeImage(i)}
+                          className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-[hsl(var(--destructive))] text-white flex items-center justify-center"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {extractError && (
+                  <p className="text-xs text-[hsl(var(--destructive))]">{extractError}</p>
+                )}
+
+                {images.length > 0 && (
+                  <Button
+                    variant="outline"
+                    onClick={handleExtract}
+                    disabled={extracting}
+                    className="gap-2"
+                  >
+                    {extracting
+                      ? <><Loader2 className="h-4 w-4 animate-spin" />Extracting…</>
+                      : `Extract text from ${images.length} screenshot${images.length > 1 ? "s" : ""} →`
+                    }
+                  </Button>
+                )}
+
+                {extracted && (
+                  <p className="text-xs text-green-600 dark:text-green-400">
+                    ✓ Text extracted and added below
+                  </p>
+                )}
+              </div>
+
+              {/* Document upload */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 border-t" />
+                  <span className="text-xs text-[hsl(var(--muted-foreground))]">or upload a ToV document</span>
+                  <div className="flex-1 border-t" />
+                </div>
+
+                <p className="text-xs text-[hsl(var(--muted-foreground))]">
+                  Brand guide, style document, or any file with writing examples.
+                  Supports PDF, Word (.docx), and plain text.
+                </p>
+
+                <button
+                  type="button"
+                  onClick={() => docInputRef.current?.click()}
+                  className="w-full rounded-xl border-2 border-dashed border-[hsl(var(--border))] hover:border-indigo-300 p-5 flex flex-col items-center gap-2 transition-colors"
+                >
+                  <FileText className="h-6 w-6 text-[hsl(var(--muted-foreground))]" />
+                  <p className="text-sm text-[hsl(var(--muted-foreground))]">Click to upload a document</p>
+                  <p className="text-xs text-[hsl(var(--muted-foreground))]">PDF, DOCX, or TXT · max 10 MB</p>
+                </button>
+                <input
+                  ref={docInputRef}
+                  type="file"
+                  accept=".pdf,.docx,.doc,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown"
+                  className="hidden"
+                  onChange={e => {
+                    const f = e.target.files?.[0] ?? null
+                    setDocFile(f)
+                    setDocExtracted(false)
+                    setDocExtractError(null)
+                    e.target.value = ""
+                  }}
+                />
+
+                {docFile && (
+                  <div className="flex items-center justify-between rounded-lg border px-3 py-2.5 bg-[hsl(var(--muted))]/40">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <FileText className="h-4 w-4 shrink-0 text-indigo-500" />
+                      <span className="text-sm truncate">{docFile.name}</span>
+                      <span className="text-xs text-[hsl(var(--muted-foreground))] shrink-0">
+                        {(docFile.size / 1024).toFixed(0)} KB
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => { setDocFile(null); setDocExtracted(false) }}
+                      className="ml-2 shrink-0 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                )}
+
+                {docExtractError && (
+                  <p className="text-xs text-[hsl(var(--destructive))]">{docExtractError}</p>
+                )}
+
+                {docFile && !docExtracted && (
+                  <Button
+                    variant="outline"
+                    onClick={handleDocExtract}
+                    disabled={docExtracting}
+                    className="gap-2"
+                  >
+                    {docExtracting
+                      ? <><Loader2 className="h-4 w-4 animate-spin" />Extracting voice examples…</>
+                      : `Extract voice examples from ${docFile.name} →`
+                    }
+                  </Button>
+                )}
+
+                {docExtracted && (
+                  <p className="text-xs text-green-600 dark:text-green-400">
+                    ✓ Voice examples extracted and added below
+                  </p>
+                )}
+              </div>
+
+              {/* Emoji policy */}
+              <div className="space-y-2">
+                <Label>Emoji usage in posts</Label>
+                <div className="grid grid-cols-3 gap-2">
+                  {([
+                    { value: "never",     label: "Never",      desc: "No emojis at all",           icon: "🚫" },
+                    { value: "sparingly", label: "Sparingly",  desc: "1–2 max, only when natural",  icon: "🟡" },
+                    { value: "often",     label: "Often",      desc: "Use freely throughout",       icon: "✅" },
+                  ] as const).map(opt => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setEmojiPolicy(opt.value)}
+                      className={cn(
+                        "text-left rounded-xl border-2 p-3 transition-colors",
+                        emojiPolicy === opt.value
+                          ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-950/40"
+                          : "border-[hsl(var(--border))] hover:border-indigo-300"
+                      )}
+                    >
+                      <div className="text-lg mb-1">{opt.icon}</div>
+                      <p className={cn("text-sm font-medium", emojiPolicy === opt.value && "text-indigo-700 dark:text-indigo-300")}>
+                        {opt.label}
+                      </p>
+                      <p className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">{opt.desc}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {emojiPolicy === "sparingly" && (
+                <div className="space-y-1.5">
+                  <Label>Your go-to emojis <span className="font-normal text-[hsl(var(--muted-foreground))]">(optional)</span></Label>
+                  <EmojiInput value={emojiFavorites} onChange={setEmojiFavorites} />
+                  <p className="text-xs text-[hsl(var(--muted-foreground))]">
+                    AI will only use these — no random emojis.
+                  </p>
+                </div>
+              )}
+
+              <Field label="Example posts (editable)">
+                <textarea
+                  rows={10}
+                  className="flex w-full rounded-md border border-[hsl(var(--input))] bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-[hsl(var(--muted-foreground))] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[hsl(var(--ring))]"
+                  placeholder={"Paste posts directly, or extract them from screenshots above.\n\nSeparate multiple posts with --- on its own line."}
+                  value={voiceExamples}
+                  onChange={(e) => setVoiceExamples(e.target.value)}
+                />
+                <p className="text-xs text-[hsl(var(--muted-foreground))] mt-1">
+                  Saving here updates stored examples.{" "}
+                  <a href="/onboarding" className="text-indigo-500 underline">Re-run onboarding</a>{" "}
+                  to regenerate your AI tone profile.
+                </p>
+              </Field>
+
+              <div className="flex items-center gap-3 pt-1">
+                <Button size="sm" onClick={handleSave} disabled={saving}>
+                  {saving ? "Saving…" : "Save examples"}
+                </Button>
+                {saved && <span className="text-sm text-green-600 dark:text-green-400">Saved!</span>}
+                {error && <span className="text-sm text-[hsl(var(--destructive))]">{error}</span>}
+              </div>
+            </div>
+
+            {/* Section E — AI Update History */}
+            {voiceData && (
+              <div className="space-y-3">
+                <p className="text-sm font-semibold">AI Update History</p>
+                {voiceData.history.length === 0 ? (
+                  <p className="text-xs text-[hsl(var(--muted-foreground))]">
+                    No updates yet — history appears after first save.
+                  </p>
+                ) : (
+                  <div className="space-y-0 border rounded-lg divide-y divide-[hsl(var(--border))] overflow-hidden">
+                    {voiceData.history.map((entry) => {
+                      const meta = entry.metadata as { changed_fields?: string[]; fields?: string[] } | null
+                      const changedFields = meta?.changed_fields ?? meta?.fields ?? []
+                      const signalLabel = SIGNAL_TYPE_LABELS[entry.signal_type] ?? entry.signal_type
+                      const tokenLabel  = TOKEN_KEY_LABELS[entry.token_key] ?? entry.token_key
+                      return (
+                        <div key={entry.id} className="px-4 py-3 flex items-start gap-3">
+                          <div className="mt-0.5 h-2 w-2 rounded-full shrink-0 bg-indigo-400 dark:bg-indigo-500 mt-1.5" />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-xs font-medium">{signalLabel}</span>
+                              <span className="text-xs text-[hsl(var(--muted-foreground))]">·</span>
+                              <span className="text-xs text-[hsl(var(--muted-foreground))]">{tokenLabel}</span>
+                            </div>
+                            {changedFields.length > 0 && (
+                              <p className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">
+                                Updated: {changedFields.map((f) => TOKEN_KEY_LABELS[f] ?? f).join(", ")}
+                              </p>
+                            )}
+                            <p className="text-[10px] text-[hsl(var(--muted-foreground))]/70 mt-0.5">
+                              {relativeDate(entry.created_at)}
+                            </p>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -1128,7 +1701,7 @@ export function BrandEditor({ brand }: Props) {
         )}
 
         {/* Save bar — only shown for tabs that use the shared handleSave */}
-        {tab !== "ai" && tab !== "sharing" && (
+        {tab !== "ai" && tab !== "sharing" && tab !== "voice" && (
         <div className="flex items-center gap-3 pt-2">
           <Button onClick={handleSave} disabled={saving}>
             {saving ? "Saving…" : "Save changes"}

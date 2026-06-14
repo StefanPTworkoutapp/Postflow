@@ -1,0 +1,34 @@
+<svg viewBox="0 0 580 180" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;800&amp;display=swap');
+    </style>
+  </defs>
+
+  <!-- Line 1: PostFlow -->
+  <text
+    x="290"
+    y="108"
+    text-anchor="middle"
+    font-family="'Inter', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif"
+    font-weight="800"
+    font-size="100"
+    letter-spacing="-3">
+    <tspan fill="#1B2B4B">Post</tspan><tspan fill="#0DA5A5">Flow</tspan>
+  </text>
+
+  <!-- Line 2: triangle + socials -->
+  <!-- Total width: ~17px triangle + 8px gap + ~130px text = ~155px, start at 290-77=213 -->
+  <g transform="translate(207, 124)">
+    <path d="M 0,0 L 0,22 L 19,11 Z" fill="#0DA5A5"/>
+    <text
+      x="28"
+      y="20"
+      font-family="'Inter', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif"
+      font-weight="400"
+      font-size="26"
+      letter-spacing="7"
+      fill="#8FA8B0">socials</text>
+  </g>
+
+</svg>
