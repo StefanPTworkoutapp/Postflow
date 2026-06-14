@@ -260,21 +260,29 @@ NEVER use these AI-writing tells (they will get rejected instantly):
 - Overly symmetrical lists of exactly 3 points that feel AI-generated
 Match the vocabulary level, informality, and rhythm shown in the real post examples above.`
 
-  const prompt = `You are a social media copywriter for ${brand_name}, a ${industry} brand.${langInstruction}
+  // ── Prompt caching: split stable brand context from variable task ─────────
+  // The brand context (tone, rules, examples, anti-AI block) is stable across
+  // many calls for the same brand. Cache it with `cache_control: ephemeral` to
+  // reduce latency and token cost on repeated generation for the same brand.
+  //
+  // Boundary: everything up to and including the custom rules / anti-AI block
+  // is stable. The topic/template/platform/performance/trends section varies.
+  const brandContextBlock = `You are a social media copywriter for ${brand_name}, a ${industry} brand.${langInstruction}
 ${antiAiBlock}
 
-Write a ${platform} post using the "${template.name}" format.
-
-Topic: ${topic}
-${audience ? `Target audience: ${audience}` : ""}
-${goalsDesc}
 ${toneDesc}
 ${fewShotBlock}
 ${customRulesBlock}
 Emoji rule (STRICT — override everything else): ${emojiRule}
 ${dnm}
+${goalsDesc}
+${perfContext}`
+
+  const taskBlock = `Write a ${platform} post using the "${template.name}" format.
+
+Topic: ${topic}
+${audience ? `Target audience: ${audience}` : ""}
 ${feedbackLine}
-${perfContext}
 ${trendContext}
 
 Template guidance: ${template.prompt_hint}
@@ -294,11 +302,20 @@ Rules:
 - Do not add any explanation outside the JSON`
 
   const usedModel = input.model ?? getModels("standard").caption
-  const message = await client.messages.create({
-    model: usedModel,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const message = await (client as any).messages.create({
+    model:      usedModel,
     max_tokens: 1024,
-    messages: [{ role: "user", content: prompt }],
-  })
+    messages: [{
+      role:    "user",
+      content: [
+        // Stable brand context — cached across calls for the same brand
+        { type: "text", text: brandContextBlock, cache_control: { type: "ephemeral" } } as const,
+        // Variable task — not cached (changes every call)
+        { type: "text", text: taskBlock } as const,
+      ],
+    }],
+  }, { headers: { "anthropic-beta": "prompt-caching-2024-07-31" } })
   logAiUsage({ brandId: input.brand_id, model: usedModel, feature: "caption", usage: message.usage })
 
   const text = message.content[0].type === "text" ? message.content[0].text : ""

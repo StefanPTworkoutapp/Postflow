@@ -25,6 +25,7 @@ import { getBrand }                    from "@/lib/server/brand/getBrand"
 import { assembleBrandedRender }       from "@/lib/server/render/brand-assembler"
 import { submitRender }                from "@/lib/server/render/shotstack"
 import { transcribeClips }             from "@/lib/server/clip-forge/whisper-captions"
+import { getRenderCreditBalance, deductRenderCredit } from "@/lib/server/billing/renderCredits"
 import type { BrandKit, ClipInput, AssembleSpec } from "@/lib/server/render/brand-assembler"
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -52,6 +53,16 @@ export async function POST(
 
     const brand = await getBrand()
     if (!brand) return NextResponse.json({ error: "No brand found" }, { status: 400 })
+
+    // ── Credit check ──────────────────────────────────────────────────────────
+    const balance = await getRenderCreditBalance(user.id)
+    if (balance <= 0) {
+      return NextResponse.json({
+        error:       "insufficient_credits",
+        balance:     0,
+        upgradeHint: "Purchase render credits in Settings → Billing to generate videos.",
+      }, { status: 402 })
+    }
 
     // ── Load the job ──────────────────────────────────────────────────────────
     const { data: job, error: jobError } = await (nt(supabase))
@@ -152,7 +163,7 @@ export async function POST(
     // ── Submit to Shotstack ───────────────────────────────────────────────────
     const renderResult = await submitRender(renderSpec)
 
-    // ── Update job ────────────────────────────────────────────────────────────
+    // ── Update job + deduct credit (atomically in order) ─────────────────────
     await (nt(supabase))
       .from("clip_forge_jobs")
       .update({
@@ -162,7 +173,10 @@ export async function POST(
       })
       .eq("id", jobId)
 
-    return NextResponse.json({ ok: true, renderId: renderResult.renderId })
+    // Deduct 1 render credit now that the render has been submitted
+    await deductRenderCredit({ accountId: user.id, jobId })
+
+    return NextResponse.json({ ok: true, renderId: renderResult.renderId, creditsRemaining: balance - 1 })
 
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error"

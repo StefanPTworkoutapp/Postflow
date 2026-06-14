@@ -16,6 +16,8 @@ import { cn } from "@/lib/utils"
 import { CheckCircle2, CreditCard, FileText, HardDrive, Plus, Zap } from "lucide-react"
 import { BillingActions } from "./BillingActions"
 import { StorageAddonSection } from "./StorageAddonSection"
+import { RenderCreditSection }  from "./RenderCreditSection"
+import { getRenderCreditBalance } from "@/lib/server/billing/renderCredits"
 
 export default async function BillingPage() {
   const supabase = await createClient()
@@ -78,8 +80,9 @@ export default async function BillingPage() {
     ? new Date(account.trial_ends_at).toLocaleDateString("en-GB", { day: "numeric", month: "long" })
     : null
 
-  const hasStripe = !!account?.stripe_customer_id
-  const hasMollie = !!account?.mollie_customer_id
+  const hasStripe       = !!account?.stripe_customer_id
+  const hasMollie       = !!account?.mollie_customer_id
+  const renderBalance   = await getRenderCreditBalance(user.id)
 
   return (
     <div className="max-w-3xl mx-auto space-y-8">
@@ -185,6 +188,9 @@ export default async function BillingPage() {
           currentAddonGb={storageAddonGb}
         />
       )}
+
+      {/* Render credits */}
+      <RenderCreditSection balance={renderBalance} />
 
       {/* Pricing cards */}
       <div>

@@ -12,6 +12,7 @@
 
 import Stripe from "stripe"
 import { PLANS, TRIAL_DAYS, type PlanTier, type BillingInterval } from "./plans"
+import { addRenderCredits, getCreditPackById } from "./renderCredits"
 
 let _stripe: Stripe | null = null
 
@@ -149,6 +150,47 @@ export async function handleStripeWebhook(
 
     case "checkout.session.completed": {
       const session = event.data.object as Stripe.Checkout.Session
+
+      // ── One-time payment: render credit pack ─────────────────────────────
+      if (session.mode === "payment") {
+        const pi = typeof session.payment_intent === "string"
+          ? session.payment_intent
+          : session.payment_intent?.id ?? null
+
+        // Metadata is on the payment_intent (set in checkout route)
+        let accountId:  string | null = null
+        let packId:     string | null = null
+        let credits:    number        = 0
+
+        if (pi) {
+          try {
+            const stripe = getStripe()
+            const intent = await stripe.paymentIntents.retrieve(pi)
+            accountId = intent.metadata?.postflow_account_id ?? null
+            packId    = intent.metadata?.credit_pack_id ?? null
+            credits   = parseInt(intent.metadata?.credits ?? "0", 10)
+          } catch {
+            // Ignore retrieval failure — log and return null
+            console.error("[stripe-webhook] Failed to retrieve PaymentIntent for credits")
+          }
+        }
+
+        if (!accountId || !packId || credits <= 0) return null
+
+        const pack = getCreditPackById(packId)
+        if (!pack) return null
+
+        await addRenderCredits({
+          accountId,
+          amount:   credits,
+          reason:   packId,
+          stripePi: pi ?? undefined,
+        })
+
+        console.log(`[stripe-webhook] Added ${credits} render credits to account ${accountId}`)
+        return { accountId, tier: "current", status: "credits_added" }
+      }
+
       if (session.mode !== "subscription") return null
 
       const accountId = session.metadata?.postflow_account_id

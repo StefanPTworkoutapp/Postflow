@@ -1257,6 +1257,36 @@ export type Database = {
           },
         ]
       }
+      render_credit_transactions: {
+        Row: {
+          account_id: string
+          amount: number
+          created_at: string
+          id: string
+          job_id: string | null
+          reason: string
+          stripe_pi: string | null
+        }
+        Insert: {
+          account_id: string
+          amount: number
+          created_at?: string
+          id?: string
+          job_id?: string | null
+          reason: string
+          stripe_pi?: string | null
+        }
+        Update: {
+          account_id?: string
+          amount?: number
+          created_at?: string
+          id?: string
+          job_id?: string | null
+          reason?: string
+          stripe_pi?: string | null
+        }
+        Relationships: []
+      }
       research_runs: {
         Row: {
           id: string
