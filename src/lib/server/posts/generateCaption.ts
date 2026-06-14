@@ -49,6 +49,11 @@ export interface CaptionInput {
    * will be generated in this language instead of the brand's default.
    */
   target_language?: string
+  /**
+   * Raw example posts from onboarding — used as 1–2 few-shot samples to calibrate voice.
+   * Select longest examples (most signal). Truncated to 400 chars each in the prompt.
+   */
+  tone_examples?: string[] | null
 }
 
 export interface GeneratedCaption {
@@ -113,6 +118,7 @@ export async function generateCaption(input: CaptionInput): Promise<GeneratedCap
     performance,
     trends,
     target_language,
+    tone_examples,
   } = input
 
   const EMOJI_RULES: Record<string, string> = {
@@ -126,15 +132,30 @@ export async function generateCaption(input: CaptionInput): Promise<GeneratedCap
 
   const toneDesc = tone_profile
     ? `
-Tone profile:
+TONE PROFILE:
 - Personality: ${tone_profile.personality_traits.join(", ")}
 - Tone level: ${tone_profile.tone_level}/10 (1=very formal, 10=very casual)
 - Expertise: ${tone_profile.expertise_level}
 - Sentences: ${tone_profile.writing_style.sentence_length}, ${tone_profile.writing_style.vocabulary} vocabulary
 - CTA style: ${tone_profile.cta_style}
-${tone_profile.signature_phrases.length ? `- Signature phrases to use naturally: ${tone_profile.signature_phrases.join(", ")}` : ""}
-${tone_profile.do_not_use.length ? `- Never use: ${tone_profile.do_not_use.join(", ")}` : ""}`
+${tone_profile.do_use.length ? `\nWRITING PATTERNS TO ACTIVELY USE (apply these throughout the post):\n${tone_profile.do_use.map(p => `- ${p}`).join("\n")}` : ""}
+${tone_profile.do_not_use.length ? `\nNEVER USE (absolute — these will make the brand cringe):\n${tone_profile.do_not_use.map(p => `- ${p}`).join("\n")}` : ""}
+${tone_profile.signature_phrases.length ? `\nSIGNATURE PHRASES — use EXACTLY ONE per post, woven in naturally. Do not force multiple:\n${tone_profile.signature_phrases.map(p => `- "${p}"`).join("\n")}` : ""}`
     : ""
+
+  // Few-shot examples: pick up to 2 longest examples (most linguistic signal)
+  const fewShotBlock = (() => {
+    const examples = (tone_examples ?? [])
+      .filter(e => e?.trim().length > 30)
+      .sort((a, b) => b.length - a.length)
+      .slice(0, 2)
+      .map(e => e.trim().slice(0, 400))
+    if (!examples.length) return ""
+    return `
+REAL POSTS FROM THIS BRAND — study these to calibrate the exact voice and writing style:
+${examples.map((e, i) => `[Example ${i + 1}]: "${e}"`).join("\n\n")}
+Do NOT copy or paraphrase these posts. Use them only to match the authentic voice, rhythm, and personality.`
+  })()
 
   const GOAL_LABELS: Record<string, string> = {
     lead_generation: "Get more clients",
@@ -202,7 +223,21 @@ ${trends.slice(0, 5).map(t => `- ${t.topic}${t.headline ? ` ("${t.headline}")` :
     ? `\nIMPORTANT: Write the entire post in ${langLabel}. Never switch languages.`
     : ""
 
+  const antiAiBlock = `
+WRITE AS A HUMAN, NOT AN AI:
+This is a real person/brand with their own voice. Write exactly as they would.
+NEVER use these AI-writing tells (they will get rejected instantly):
+- "In today's [adjective] world..." or any variation of that opener
+- "Game-changer", "dive in", "elevate your", "unlock your potential", "harness the power"
+- Excessive em-dashes (maximum 1 per post — only if the brand already uses them)
+- Hollow filler phrases: "It's worth noting", "Moreover", "Furthermore", "It goes without saying"
+- Summarising what you're about to say instead of just saying it
+- Generic hollow closers: "What do you think? Drop a comment!" (unless the brand's do_use list includes this)
+- Overly symmetrical lists of exactly 3 points that feel AI-generated
+Match the vocabulary level, informality, and rhythm shown in the real post examples above.`
+
   const prompt = `You are a social media copywriter for ${brand_name}, a ${industry} brand.${langInstruction}
+${antiAiBlock}
 
 Write a ${platform} post using the "${template.name}" format.
 
@@ -210,6 +245,7 @@ Topic: ${topic}
 ${audience ? `Target audience: ${audience}` : ""}
 ${goalsDesc}
 ${toneDesc}
+${fewShotBlock}
 Emoji rule (STRICT — override everything else): ${emojiRule}
 ${dnm}
 ${feedbackLine}

@@ -39,6 +39,8 @@ export interface BrandContext {
   trends:          TrendContext[]
   /** Raw intelligence tokens for callers that need direct access */
   intelligence_tokens: Record<string, { value: unknown; confidence: number }>
+  /** Raw example posts used for tone extraction — injected as few-shot samples at generation time */
+  tone_examples: string[] | null
 
   // ── Pre-formatted prompt block for simple prompt injection ────
   /** Drop this string directly into any Claude prompt. Always fetch live. */
@@ -377,6 +379,7 @@ export async function getBrandContext(
     performance,
     trends,
     intelligence_tokens: tokens,
+    tone_examples:       (b.tone_examples as string[] | null) ?? null,
     promptBlock,
   }
 }

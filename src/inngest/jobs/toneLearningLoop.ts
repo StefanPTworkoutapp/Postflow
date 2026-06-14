@@ -136,7 +136,8 @@ export const toneLearningLoop = inngest.createFunction(
     })
 
     const results = await Promise.all(
-      brands.map((brand: { id: string; name: string; tone_examples: string[] | null; tone_profile: unknown }) =>
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      brands.map((brand: any) =>
         step.run(`tone-loop-${brand.id}`, async () => {
           // Load unapplied feedback for this brand
           const { data: feedbacks } = await supabase
@@ -166,8 +167,15 @@ export const toneLearningLoop = inngest.createFunction(
 
           const [feedbackType, feedbackIds] = triggered[0]
 
-          // Build a plain-text summary of the brand's current tone notes
-          const currentTone = brand.tone_examples?.join("; ") ?? null
+          // Build a structured tone summary from tone_profile (NOT tone_examples which are raw posts)
+          const tp = brand.tone_profile
+          const currentTone = tp
+            ? [
+                tp.personality_traits?.length ? `Personality: ${tp.personality_traits.join(", ")}` : null,
+                tp.tone_level != null ? `Tone level: ${tp.tone_level}/10` : null,
+                tp.expertise_level ? `Expertise: ${tp.expertise_level}` : null,
+              ].filter(Boolean).join(" · ")
+            : null
 
           const suggestion = await generateToneSuggestion({
             brandId:      brand.id,
