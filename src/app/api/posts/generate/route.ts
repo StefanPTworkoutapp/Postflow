@@ -46,6 +46,7 @@ export async function POST(request: Request) {
       emoji_favorites:   ctx.emoji_favorites,
       performance:       ctx.performance,
       trends:            ctx.trends,
+      tone_examples:     ctx.tone_examples,
       model:             models.caption,
       brand_id:          brand.id,
       // Language override — when set and different from brand's content_language,
