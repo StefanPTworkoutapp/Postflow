@@ -9,6 +9,12 @@ export interface BrandVars {
   logoUrl:         string | null
   primaryColor:    string   // hex e.g. "#6366f1"
   secondaryColor:  string   // hex
+  /**
+   * Brand accent color — distinct from primary/secondary. Used for highlights,
+   * CTA elements, and decorative accents in templates.
+   * Set in the brand editor; defaults to secondaryColor when absent.
+   */
+  accentColor:     string
   fontHeading:     string   // family name, will be matched to system font
   fontBody:        string
   /** 0 = clean/minimal  50 = balanced  100 = bold/expressive. Default: 50 */

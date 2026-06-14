@@ -28,6 +28,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "filename and contentType required" }, { status: 400 })
     }
 
+    // MIME type allowlist — accept images, videos, and PDFs only.
+    // Rejects executables, scripts, and other unsafe types.
+    const ALLOWED_MIME_PREFIXES = ["image/", "video/", "application/pdf"]
+    if (!ALLOWED_MIME_PREFIXES.some(prefix => contentType.startsWith(prefix))) {
+      return NextResponse.json(
+        { error: `File type "${contentType}" is not allowed. Upload images, videos, or PDFs only.` },
+        { status: 400 },
+      )
+    }
+
     // Max 50 MB via Supabase Storage
     if (size > 50 * 1024 * 1024) {
       return NextResponse.json({ error: "File too large (max 50 MB)" }, { status: 400 })

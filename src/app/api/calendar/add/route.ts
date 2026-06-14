@@ -21,9 +21,12 @@ export async function GET(request: Request) {
   }
 
   // Verify JWT
-  const secret = new TextEncoder().encode(
-    process.env.CALENDAR_LINK_SECRET ?? "fallback-secret-change-in-production"
-  )
+  const rawSecret = process.env.CALENDAR_LINK_SECRET
+  if (!rawSecret) {
+    console.error("[calendar/add] CALENDAR_LINK_SECRET env var is not set — refusing to verify token with empty secret")
+    return NextResponse.json({ error: "Server misconfiguration" }, { status: 500 })
+  }
+  const secret = new TextEncoder().encode(rawSecret)
 
   let brandId: string
   let topic: string

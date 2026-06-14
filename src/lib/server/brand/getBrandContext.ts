@@ -17,12 +17,20 @@ import type { PerformanceContext, TrendContext } from "@/lib/server/posts/genera
 
 export interface BrandContext {
   // ── Structured fields for generateCaption() ──────────────────
-  brand_id:        string
-  brand_name:      string
-  industry:        string
-  niche:           string | null
-  audience:        string | null
-  goals:           string[] | null
+  brand_id:            string
+  brand_name:          string
+  industry:            string
+  niche:               string | null
+  audience:            string | null
+  goals:               string[] | null
+  /** Brand tagline — short statement injected into caption prompts to anchor brand voice */
+  tagline:             string | null
+  /** Brand website URL — included in CTA guidance when available */
+  website_url:         string | null
+  /** Target age range (e.g. "25–40") — informs tone and vocabulary in captions */
+  target_age_range:    string | null
+  /** Geographic location focus — informs localisation and regional references */
+  geographic_location: string | null
   tone_profile:    ToneProfile | null
   /**
    * Short human-readable summary derived from tone_profile fields.
@@ -97,6 +105,10 @@ function buildPromptBlock(opts: {
     name: string; industry?: string; niche?: string; primary_goal?: string
     goals?: string[]; do_not_mention?: string[]
     target_audience_description?: string
+    tagline?: string | null
+    website_url?: string | null
+    target_age_range?: string | null
+    geographic_location?: string | null
   }
 
   const GOAL_LABELS: Record<string, string> = {
@@ -217,9 +229,13 @@ function buildPromptBlock(opts: {
 
   return [
     `BRAND: ${b.name}`,
-    b.industry   ? `Industry: ${b.industry}` : "",
-    b.niche      ? `Niche: ${b.niche}` : "",
+    b.tagline              ? `Tagline: "${b.tagline}"` : "",
+    b.industry             ? `Industry: ${b.industry}` : "",
+    b.niche                ? `Niche: ${b.niche}` : "",
     b.target_audience_description ? `Audience: ${b.target_audience_description}` : "",
+    b.target_age_range     ? `Target age range: ${b.target_age_range}` : "",
+    b.geographic_location  ? `Geographic focus: ${b.geographic_location}` : "",
+    b.website_url          ? `Website: ${b.website_url} (you may reference it in CTAs when relevant)` : "",
     goalsLine,
     toneSummary ? `Tone: ${toneSummary}` : "",
     contentLanguage ? `Content language: ${contentLanguage} — ALL generated text must be in ${contentLanguage}.` : "",
@@ -262,6 +278,10 @@ export async function getBrandContext(
     tone_profile?: ToneProfile | null
     do_not_mention?: string[]
     target_audience_description?: string
+    tagline?: string | null
+    website_url?: string | null
+    target_age_range?: string | null
+    geographic_location?: string | null
     emoji_policy?: string; emoji_favorites?: string
     intelligence_tokens?: Record<string, { value: unknown; confidence: number }>
   }
@@ -374,6 +394,10 @@ export async function getBrandContext(
     industry:            (b.industry as string) ?? "",
     niche:               (b.niche as string | null) ?? null,
     audience:            (b.target_audience_description as string | null) ?? null,
+    tagline:             (b.tagline as string | null) ?? null,
+    website_url:         (b.website_url as string | null) ?? null,
+    target_age_range:    (b.target_age_range as string | null) ?? null,
+    geographic_location: (b.geographic_location as string | null) ?? null,
     goals,
     tone_profile:        toneProfile,
     tone_summary:        toneSummary,

@@ -65,6 +65,11 @@ export interface RenderInput {
   logoUrl:        string | null
   primaryColor:   string
   secondaryColor: string
+  /**
+   * Brand accent color — used by templates for highlights, CTA buttons, and decorative accents.
+   * Defaults to secondaryColor when not provided.
+   */
+  accentColor?:   string
   fontHeading:    string
   fontBody:       string
   /** Template slug from postflow.templates. If omitted, uses legacy card renderer. */
@@ -189,6 +194,7 @@ function buildTemplateData(
     logoUrl:        input.logoUrl ?? null,
     primaryColor:   input.primaryColor,
     secondaryColor: input.secondaryColor,
+    accentColor:    input.accentColor ?? input.secondaryColor,
     fontHeading:    input.fontHeading,
     fontBody:       input.fontBody,
     templateStyle:  input.templateStyle ?? 50,

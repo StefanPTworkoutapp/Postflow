@@ -77,6 +77,7 @@ export async function POST(
     logo_url?:        string | null
     primary_color?:   string | null
     secondary_color?: string | null
+    accent_color?:    string | null
     font_heading?:    string | null
     font_body?:       string | null
     template_style?:  number | null
@@ -105,6 +106,7 @@ export async function POST(
     logoUrl:        b.logo_url ?? null,
     primaryColor:   b.primary_color   ?? "#6366f1",
     secondaryColor: b.secondary_color ?? "#a5b4fc",
+    accentColor:    b.accent_color    ?? b.secondary_color ?? "#a5b4fc",
     fontHeading:    b.font_heading    ?? "Montserrat",
     fontBody:       b.font_body       ?? "Inter",
     templateStyle:  b.template_style  ?? 50,
