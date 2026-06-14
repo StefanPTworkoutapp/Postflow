@@ -31,6 +31,25 @@ const ALL_TEMPLATES: TemplateMeta[] = [
   { slug: "story-teaser",   name: "Story Teaser",            description: "Vertical story with swipe-up CTA",            type: "story"        },
 ]
 
+/**
+ * Maps a render template slug → caption template id + post_type.
+ * This bridges the two template systems:
+ *   - render templates (slugs) control how the image looks
+ *   - caption templates (ids) control how the caption is generated
+ * Both need to be passed to /api/posts/generate for correct output.
+ */
+const RENDER_TO_CAPTION: Record<string, { captionId: string; postType: string }> = {
+  "photo-overlay":  { captionId: "edu-tips",       postType: "single_image" },
+  "edu-bold":       { captionId: "edu-tips",       postType: "single_image" },
+  "quote-card":     { captionId: "quote-insight",  postType: "single_image" },
+  "dark-statement": { captionId: "myth-bust",      postType: "single_image" },
+  "tip-numbered":   { captionId: "edu-tips",       postType: "single_image" },
+  "carousel-edu":   { captionId: "carousel-edu",   postType: "carousel"     },
+  "carousel-myth":  { captionId: "carousel-edu",   postType: "carousel"     },
+  "reel-cover":     { captionId: "reel-hook",      postType: "reel"         },
+  "story-teaser":   { captionId: "story-hook",     postType: "story"        },
+}
+
 const TYPE_BADGE: Record<TemplateMeta["type"], string> = {
   single_image: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
   carousel:     "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300",
@@ -73,6 +92,7 @@ interface SlideContentItem {
 interface Post {
   id:                     string
   platform:               string
+  post_type:              string | null
   caption:                string
   hashtags:               string[]
   cta:                    string | null
@@ -189,12 +209,16 @@ export function PostEditor({ post, brandName, industry, contentLanguage = "en", 
   useEffect(() => {
     if (post.caption || !post.content_calendar?.topic) return
     const topic = post.content_calendar.topic
+    // Resolve caption template + post_type from the render template selected at creation time
+    const initSlug   = post.template_slug ?? "photo-overlay"
+    const initMap    = RENDER_TO_CAPTION[initSlug] ?? { captionId: "edu-tips", postType: post.post_type ?? "single_image" }
     setAutoGenerating(true)
     fetch("/api/posts/generate", {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        template_id:     "edu-tips",
+        template_id:     initMap.captionId,
+        post_type:       initMap.postType,
         platform:        post.platform,
         topic,
         target_language: contentLanguage,
@@ -312,12 +336,15 @@ export function PostEditor({ post, brandName, industry, contentLanguage = "en", 
     setRegen(true)
     setError(null)
     try {
+      // Use the currently selected render template to drive both caption style + post type
+      const currentSlug = selectedTemplate ?? post.template_slug ?? "photo-overlay"
+      const regenMap    = RENDER_TO_CAPTION[currentSlug] ?? { captionId: "edu-tips", postType: post.post_type ?? "single_image" }
       const res = await fetch("/api/posts/generate", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          // Re-use the stored topic; platform; no template (already drafted)
-          template_id:       "edu-tips", // fallback — caption will override tone
+          template_id:       regenMap.captionId,
+          post_type:         regenMap.postType,
           platform:          post.platform,
           topic:             topic || post.content_calendar?.topic || "general content",
           previous_feedback: feedback || undefined,

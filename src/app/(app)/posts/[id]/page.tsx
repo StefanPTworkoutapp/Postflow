@@ -61,6 +61,7 @@ export default async function PostPage({ params }: Props) {
         post={{
           id:               post.id,
           platform:         post.platform,
+          post_type:        (post as unknown as { post_type?: string | null }).post_type ?? null,
           caption:          post.caption ?? "",
           hashtags:         (post.hashtags as string[]) ?? [],
           cta:              post.cta ?? null,

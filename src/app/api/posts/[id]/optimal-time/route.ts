@@ -42,22 +42,33 @@ export async function GET(
     const brand = await getBrand()
     if (!brand) return NextResponse.json({ error: "No active brand" }, { status: 400 })
 
-    // Load post to get platform
+    // Load post to get platform + post_type
     const { data: post } = await supabase
       .from("posts")
-      .select("platform")
+      .select("platform, post_type")
       .eq("id", postId)
       .eq("brand_id", brand.id)
       .single()
 
-    const platform = post?.platform ?? "instagram"
+    const platform = post?.platform  ?? "instagram"
+    const postType = post?.post_type ?? "single_image"
+
+    // Post-type specific default times when there's no analytics data yet.
+    // Reels and Stories have different peak times than feed posts on the same platform.
+    const POST_TYPE_DEFAULTS: Record<string, Record<string, { dayOfWeek: number; hour: number }>> = {
+      reel:    { instagram: { dayOfWeek: 5, hour: 20 }, tiktok:    { dayOfWeek: 5, hour: 19 } },
+      story:   { instagram: { dayOfWeek: 1, hour: 9  } },  // Monday morning — start of week
+      carousel:{ instagram: { dayOfWeek: 2, hour: 12 }, linkedin: { dayOfWeek: 3, hour: 11 } },
+    }
 
     // Try analytics-based optimal time first
     const optimal = await getOptimalScheduleTime(brand.id, platform)
 
-    // If fallback, apply platform-specific defaults instead of the global Tuesday 09:00
+    // If fallback, apply post-type-aware defaults (more specific than platform-only)
     if (optimal.confidence === "fallback") {
-      const def = PLATFORM_DEFAULTS[platform] ?? { dayOfWeek: 2, hour: 18 }
+      const typeDefault = POST_TYPE_DEFAULTS[postType]?.[platform]
+      const platformDefault = PLATFORM_DEFAULTS[platform] ?? { dayOfWeek: 2, hour: 18 }
+      const def = typeDefault ?? platformDefault
       optimal.dayOfWeek = def.dayOfWeek
       optimal.hour      = def.hour
     }
@@ -70,6 +81,7 @@ export async function GET(
       label,
       confidence: optimal.confidence,
       platform,
+      postType,
     })
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error"

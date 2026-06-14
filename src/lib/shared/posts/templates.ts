@@ -115,6 +115,30 @@ export const DEFAULT_TEMPLATES: PostTemplate[] = [
     hashtag_count: { min: 5, max: 10 },
     prompt_hint: "Write a promotional post for a service or offer. Lead with the transformation/outcome, describe who it's for, end with a clear CTA.",
   },
+  {
+    id: "reel-hook",
+    name: "Reel / Short Video",
+    description: "Hook caption for a Reel or short-form video post.",
+    post_type: "reel",
+    best_for: ["instagram", "tiktok"],
+    content_pillars: ["education", "behind_the_scenes", "motivation"],
+    media_count: 1,
+    caption_style: "Hard hook in the first 3 words. Watch-time language ('Watch until the end', 'POV:'). Short, punchy caption — the video carries the content.",
+    hashtag_count: { min: 5, max: 10 },
+    prompt_hint: "Write a Reel caption. First 2–3 words must be a hard hook that stops the scroll. Use watch-time language. Keep the caption SHORT — the video tells the story. Include 5–10 hashtags.",
+  },
+  {
+    id: "story-hook",
+    name: "Story",
+    description: "Ultra-short caption or question for a 24-hour Instagram Story.",
+    post_type: "story",
+    best_for: ["instagram"],
+    content_pillars: ["community", "behind_the_scenes", "promotional"],
+    media_count: 1,
+    caption_style: "One punchy sentence or a direct question. Very short. Conversational and immediate.",
+    hashtag_count: { min: 0, max: 3 },
+    prompt_hint: "Write an Instagram Story caption — extremely short (1 sentence max). Either a bold statement, a direct question ('Would you try this?'), or a CTA ('Save this!'). Zero hashtags or max 3.",
+  },
 ]
 
 export function getTemplate(id: string): PostTemplate | undefined {

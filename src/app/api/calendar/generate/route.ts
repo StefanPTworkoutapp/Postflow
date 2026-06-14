@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk"
 import { createClient } from "@/lib/supabase/server"
 import { getBrand } from "@/lib/server/brand/getBrand"
 import { getBrandContext } from "@/lib/server/brand/getBrandContext"
+import { selectTemplate } from "@/lib/server/render/selectTemplate"
 import type { Json } from "@/types/database.types"
 import { getModels, brandTier } from "@/lib/ai/models"
 import { logAiUsage } from "@/lib/ai/logUsage"
@@ -261,24 +262,42 @@ Required media types: photo | video | carousel | stock | none`
       return NextResponse.json({ error: "AI returned no suggestions" }, { status: 500 })
     }
 
-    // Filter out occupied dates + insert
-    const toInsert = suggestions
-      .filter(s => !occupiedDates.has(s.date) && s.date >= from && s.date <= to)
-      .map(s => ({
-        brand_id:            brand.id,
-        scheduled_date:      s.date,
-        platforms:           [s.platform],
-        topic:               s.topic,
-        content_pillar:      s.content_pillar,
-        goal:                s.goal,
-        post_type:           s.post_type            ?? null,
-        required_media_type: s.required_media_type  ?? null,
-        media_brief:         s.media_brief          ?? null,
-        required_media_count: s.slide_count         ?? (s.required_media_type === "carousel" ? 5 : 1),
-        template_slug:       s.template_slug        ?? null,
-        slide_content:       (s.slide_content        ?? null) as Json | null,
-        status:              "planned",
-      }))
+    // Filter out occupied dates, then resolve template slugs using brand preferences
+    const filtered = suggestions.filter(s => !occupiedDates.has(s.date) && s.date >= from && s.date <= to)
+
+    // For each suggestion, let the brand's saved template slots override the AI's choice.
+    // selectTemplate() uses the brand's round-robin rotation (Pro feature) so high-performing
+    // templates get used on the right post types. Falls back to AI suggestion if no slots saved.
+    // We pass a per-type running index as the postCount so round-robin advances per type.
+    const typeCounters: Record<string, number> = {}
+    const resolvedTemplates: Record<number, string | null> = {}
+    for (let i = 0; i < filtered.length; i++) {
+      const s = filtered[i]
+      const postType = s.post_type ?? "single_image"
+      typeCounters[postType] = (typeCounters[postType] ?? 0) + 1
+      try {
+        const chosen = await selectTemplate(brand.id, postType, typeCounters[postType])
+        resolvedTemplates[i] = chosen ?? s.template_slug ?? null
+      } catch {
+        resolvedTemplates[i] = s.template_slug ?? null
+      }
+    }
+
+    const toInsert = filtered.map((s, i) => ({
+      brand_id:            brand.id,
+      scheduled_date:      s.date,
+      platforms:           [s.platform],
+      topic:               s.topic,
+      content_pillar:      s.content_pillar,
+      goal:                s.goal,
+      post_type:           s.post_type            ?? null,
+      required_media_type: s.required_media_type  ?? null,
+      media_brief:         s.media_brief          ?? null,
+      required_media_count: s.slide_count         ?? (s.required_media_type === "carousel" ? 5 : 1),
+      template_slug:       resolvedTemplates[i]   ?? null,
+      slide_content:       (s.slide_content        ?? null) as Json | null,
+      status:              "planned",
+    }))
 
     const { data: inserted, error: insertErr } = await supabase
       .from("content_calendar")

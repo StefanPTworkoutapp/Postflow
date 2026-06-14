@@ -52,13 +52,17 @@ export async function POST(
   // Pick the first platform from the entry (fall back to "instagram")
   const platform = (entry.platforms as string[] | null)?.[0] ?? "instagram"
 
-  // Create the post — copy slide_content + template_slug from calendar entry
+  // Derive post_type from the calendar entry. Defaults to "single_image" when absent.
+  const calPostType = (entry.post_type as string | null) ?? "single_image"
+
+  // Create the post — copy slide_content + template_slug + post_type from calendar entry
   const { data: post, error: postErr } = await supabase
     .from("posts")
     .insert({
       brand_id:          brand.id,
       calendar_entry_id: entry.id,
       platform,
+      post_type:         calPostType,
       caption:           null,
       hashtags:          [],
       status:            "draft",

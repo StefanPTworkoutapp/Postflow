@@ -24,6 +24,7 @@ export async function POST(request: Request) {
     const body = await request.json()
     const {
       platform,
+      post_type,
       template_id,
       caption,
       hashtags,
@@ -58,17 +59,16 @@ export async function POST(request: Request) {
     const { data: post, error: postError } = await supabase
       .from("posts")
       .insert({
-        brand_id: brand.id,
-        calendar_entry_id: calEntry.id,
+        brand_id:            brand.id,
+        calendar_entry_id:   calEntry.id,
         platform,
-        // template_id is a UUID FK — code-defined slugs (e.g. "behind-scenes") can't be
-        // stored here until we create a templates DB table. Omit for now.
+        post_type:           post_type ?? "single_image",
         caption,
         hashtags:            hashtags  ?? [],
         cta:                 cta       ?? null,
         ai_caption_original: ai_caption_original ?? caption,
         media_ids:           media_ids ?? [],
-        status: "draft",
+        status:              "draft",
       })
       .select()
       .single()

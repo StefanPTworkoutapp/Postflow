@@ -16,13 +16,16 @@ export async function POST(request: Request) {
     if (!brand) return NextResponse.json({ error: "No brand found" }, { status: 400 })
 
     const body = await request.json()
-    const { template_id, platform, topic, previous_feedback, target_language } = body
+    const { template_id, platform, topic, previous_feedback, target_language, post_type } = body
 
     if (!template_id || !platform || !topic?.trim()) {
       return NextResponse.json({ error: "template_id, platform, and topic are required" }, { status: 400 })
     }
 
-    const template = getTemplate(template_id)
+    // Look up the caption template. For reel/story types that have no dedicated
+    // caption template, fall back to the best-matching alternative so the type guidance
+    // still gets applied via the post_type field below.
+    const template = getTemplate(template_id) ?? getTemplate("edu-tips")!
     if (!template) return NextResponse.json({ error: "Unknown template" }, { status: 400 })
 
     // Single source of truth for brand context — includes performance + trends
@@ -54,6 +57,8 @@ export async function POST(request: Request) {
       // Language override — when set and different from brand's content_language,
       // the caption will be generated in the requested language
       target_language:   typeof target_language === "string" ? target_language : undefined,
+      // Content-type guidance — triggers reel/story/carousel-specific prompt blocks
+      post_type:         typeof post_type === "string" ? post_type : undefined,
     })
 
     return NextResponse.json(result)

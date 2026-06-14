@@ -1176,6 +1176,7 @@ export type Database = {
           predicted_performance: Json | null
           scheduled_for: string | null
           slide_content: Json | null
+          source_post_id: string | null
           status: string
           template_id: string | null
           template_slug: string | null
@@ -1207,6 +1208,7 @@ export type Database = {
           predicted_performance?: Json | null
           scheduled_for?: string | null
           slide_content?: Json | null
+          source_post_id?: string | null
           status?: string
           template_id?: string | null
           template_slug?: string | null
@@ -1238,6 +1240,7 @@ export type Database = {
           predicted_performance?: Json | null
           scheduled_for?: string | null
           slide_content?: Json | null
+          source_post_id?: string | null
           status?: string
           template_id?: string | null
           template_slug?: string | null
@@ -1256,6 +1259,13 @@ export type Database = {
             columns: ["calendar_entry_id"]
             isOneToOne: false
             referencedRelation: "content_calendar"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "posts_source_post_id_fkey"
+            columns: ["source_post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
             referencedColumns: ["id"]
           },
         ]
