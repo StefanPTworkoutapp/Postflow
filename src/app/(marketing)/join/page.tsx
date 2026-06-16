@@ -1,6 +1,6 @@
 import Link from "next/link"
 import type { Metadata } from "next"
-import { PLANS, TRIAL_DAYS, ANNUAL_DISCOUNT_PERCENT, formatPrice } from "@/lib/config/pricing"
+import { PricingSection } from "./PricingSection"
 
 export const metadata: Metadata = {
   title: "PostFlow — Your expertise, finally on social.",
@@ -108,46 +108,6 @@ const PLATFORMS = [
   },
 ]
 
-// ── Pricing display data (derived from config) ────────────────────────────
-
-const DISPLAY_PLANS = [
-  {
-    ...PLANS.free,
-    cta:         "Start free",
-    highlighted: false,
-    items: [
-      `${PLANS.free.limits.postsPerMonth} posts per month`,
-      "1 brand",
-      "Instagram, LinkedIn & Facebook",
-      "Basic analytics",
-    ],
-  },
-  {
-    ...PLANS.starter,
-    cta:         `Try free for ${TRIAL_DAYS} days`,
-    highlighted: true,
-    items: [
-      "Unlimited posts",
-      "Reels & Stories",
-      "Brand voice",
-      "Buffer integration",
-      "Standard analytics",
-    ],
-  },
-  {
-    ...PLANS.pro,
-    cta:         `Try free for ${TRIAL_DAYS} days`,
-    highlighted: false,
-    items: [
-      "Everything in Starter",
-      "3 brands",
-      "Advanced analytics",
-      "3 team members",
-      "Unlimited templates",
-    ],
-  },
-] as const
-
 // ── Page ──────────────────────────────────────────────────────────────────
 
 export default function JoinPage() {
@@ -222,7 +182,7 @@ export default function JoinPage() {
           </div>
 
           <p className="text-white/20 text-sm">
-            {TRIAL_DAYS}-day free trial on paid plans. No card required to start.
+            14-day free trial on paid plans. No card required to start.
           </p>
         </div>
       </section>
@@ -366,76 +326,7 @@ export default function JoinPage() {
       </section>
 
       {/* ══ PRICING ══════════════════════════════════════════════════════ */}
-      <section id="pricing" className="border-t border-white/[0.06] py-24 px-6 bg-[#0d1321]">
-        <div className="max-w-5xl mx-auto">
-
-          <div className="mb-14">
-            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-3">
-              Simple pricing. No surprises.
-            </h2>
-            <p className="text-white/40">
-              All paid plans include a {TRIAL_DAYS}-day free trial — no card required.
-              Annual billing saves {ANNUAL_DISCOUNT_PERCENT}%.
-            </p>
-          </div>
-
-          <div className="grid sm:grid-cols-3 gap-4">
-            {DISPLAY_PLANS.map(({ name, monthly, annual, cta, highlighted, items }) => (
-              <div
-                key={name}
-                className={`rounded-2xl p-6 flex flex-col relative ${
-                  highlighted
-                    ? "bg-[#0DA5A5]/[0.08] border border-[#0DA5A5]/30"
-                    : "bg-[#141929] border border-white/[0.07]"
-                }`}
-              >
-                {highlighted && (
-                  <p className="absolute top-4 right-4 text-[10px] text-[#0DA5A5] font-bold tracking-widest uppercase">
-                    Popular
-                  </p>
-                )}
-
-                <p className="text-sm font-medium text-white/40 mb-1">{name}</p>
-                <div className="flex items-baseline gap-1 mb-6">
-                  <span className="text-4xl font-bold">{formatPrice(monthly)}</span>
-                  {monthly > 0 && (
-                    <span className="text-white/30 text-sm">
-                      /mo · {formatPrice(annual)}/mo annual
-                    </span>
-                  )}
-                </div>
-
-                <ul className="space-y-2.5 flex-1 mb-7">
-                  {items.map(item => (
-                    <li key={item} className="flex items-start gap-2.5 text-sm text-white/55">
-                      <svg className="w-4 h-4 text-[#0DA5A5] shrink-0 mt-0.5" viewBox="0 0 16 16" fill="none">
-                        <path d="M3 8l3.5 3.5L13 5" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-
-                <Link
-                  href="/signup"
-                  className={`w-full text-center py-2.5 rounded-xl text-sm font-semibold transition-colors ${
-                    highlighted
-                      ? "bg-[#0DA5A5] hover:bg-[#0b9494] text-white"
-                      : "border border-white/10 hover:border-white/20 text-white/50 hover:text-white/80"
-                  }`}
-                >
-                  {cta}
-                </Link>
-              </div>
-            ))}
-          </div>
-
-          <p className="text-white/20 text-xs mt-6">
-            Prices exclude VAT where applicable. EU VAT handled automatically.
-            Pause or cancel any time.
-          </p>
-        </div>
-      </section>
+      <PricingSection />
 
       {/* ══ CLOSING ══════════════════════════════════════════════════════ */}
       <section className="border-t border-white/[0.06] py-28 px-6 relative overflow-hidden">
