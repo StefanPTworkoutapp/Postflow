@@ -62,10 +62,12 @@ export async function GET(req: Request) {
     sameSite: "lax",
   })
 
-  // user.info.basic — always available (profile info)
-  // video.publish — required for direct publishing via Content Posting API
-  //   (needs TikTok production app approval; will fail gracefully in sandbox)
-  const scopes = "user.info.basic,video.publish"
+  // user.info.basic — profile info and analytics identity
+  //
+  // video.publish was removed: TikTok denied the production app submission.
+  // Re-add "video.publish" once approved and ask existing TikTok users to reconnect.
+  // See tasks/todo.md → "TikTok resubmission" for required steps.
+  const scopes = "user.info.basic"
 
   const oauthUrl = new URL("https://www.tiktok.com/v2/auth/authorize/")
   oauthUrl.searchParams.set("client_key",             clientKey)

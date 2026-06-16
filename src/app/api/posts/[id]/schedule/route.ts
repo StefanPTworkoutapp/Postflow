@@ -65,12 +65,18 @@ export async function POST(
       )
     }
 
-    // Check platform is supported for direct publishing
-    if (!isDirectPublishPlatform(post.platform)) {
+    // Check platform is supported for direct publishing.
+    // TikTok is listed as a direct platform but publishing is currently disabled
+    // (production app denied) — treat it the same as an unsupported platform.
+    if (!isDirectPublishPlatform(post.platform) || post.platform === "tiktok") {
+      const isTikTok = post.platform === "tiktok"
       return NextResponse.json(
         {
-          error: `${post.platform} does not support direct publishing yet. Connect Buffer to schedule this post.`,
+          error: isTikTok
+            ? "TikTok direct publishing is pending approval from TikTok. Connect Buffer in Settings to publish TikTok posts in the meantime."
+            : `${post.platform} does not support direct publishing yet. Connect Buffer to schedule this post.`,
           needsBuffer: true,
+          platform:    post.platform,
         },
         { status: 422 },
       )

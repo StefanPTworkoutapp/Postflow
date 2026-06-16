@@ -1,20 +1,23 @@
 /**
  * Publishes a video to TikTok via the TikTok Content Posting API v2.
  *
- * TikTok only supports video content through this API — there is no text-only or
- * image-only post endpoint for non-Creator-Marketplace accounts.
+ * ⚠️  PUBLISHING TEMPORARILY DISABLED
  *
- * The PULL_FROM_URL source method is used: TikTok fetches the video directly from
- * the provided public URL. The URL must be publicly accessible and return a valid
- * video file (MP4 recommended).
+ * TikTok denied PostFlow's production app submission for the video.publish scope.
+ * Until the app is re-approved, this function throws a clear user-facing error
+ * rather than making an API call that would fail silently.
  *
- * IMPORTANT — Scope requirement:
- *   The stored token currently only has user.info.basic scope.
- *   Publishing requires the video.publish scope AND production app approval from TikTok.
- *   API calls will fail with an auth error until the app is approved and the token
- *   is re-issued with the video.publish scope. This is expected and documented behaviour.
+ * STATUS: publishToTikTok throws TIKTOK_PUBLISHING_PENDING immediately.
+ * The schedule route catches this and returns a 422 with needsBuffer: true,
+ * so users are directed to connect Buffer for TikTok publishing in the meantime.
  *
- * API reference:
+ * TO RE-ENABLE:
+ *   1. Re-submit TikTok production app with video demo + privacy policy URL
+ *   2. Once approved, update /api/auth/tiktok/route.ts scopes to include "video.publish"
+ *   3. Ask existing TikTok-connected users to reconnect
+ *   4. Remove the early-throw in this file
+ *
+ * API reference (for when re-enabled):
  *   https://developers.tiktok.com/doc/content-posting-api-reference-direct-post
  *
  * Auth: TikTok OAuth 2.0 access token stored in postflow.social_accounts.platform_access_token.
@@ -26,86 +29,16 @@ import type { PublishInput, PublishResult } from "./types"
 const TIKTOK_POST_INIT_URL = "https://open.tiktokapis.com/v2/post/publish/video/init/"
 const MAX_TITLE_LENGTH = 150
 
-export async function publishToTikTok(input: PublishInput): Promise<PublishResult> {
-  const db = createServiceClient()
+/** Sentinel error code the schedule route checks to surface a user-friendly message. */
+export const TIKTOK_PUBLISHING_PENDING = "TIKTOK_PUBLISHING_PENDING"
 
-  const { data: account, error: accountError } = await db
-    .from("social_accounts")
-    .select("platform_access_token, platform_account_id")
-    .eq("brand_id", input.brandId)
-    .eq("platform", "tiktok")
-    .eq("is_active", true)
-    .single()
-
-  if (accountError || !account) {
-    throw new Error(
-      "TikTok account not connected for this brand. Please connect your TikTok account in Settings."
-    )
-  }
-
-  if (!account.platform_access_token) {
-    throw new Error(
-      "TikTok not connected. Please connect your TikTok account in Settings."
-    )
-  }
-
-  if (input.mediaUrls.length === 0) {
-    throw new Error(
-      "TikTok requires a video file. Please attach a video to this post before publishing to TikTok."
-    )
-  }
-
-  const title = input.caption.length > MAX_TITLE_LENGTH
-    ? input.caption.slice(0, MAX_TITLE_LENGTH - 1) + "…"
-    : input.caption
-
-  const requestBody = {
-    post_info: {
-      title,
-      privacy_level: "PUBLIC_TO_EVERYONE",
-      disable_duet: false,
-      disable_stitch: false,
-      disable_comment: false,
-    },
-    source_info: {
-      source: "PULL_FROM_URL",
-      video_url: input.mediaUrls[0],
-    },
-  }
-
-  const response = await fetch(TIKTOK_POST_INIT_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${account.platform_access_token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(requestBody),
-  })
-
-  const body = (await response.json()) as {
-    data?: { publish_id?: string }
-    error?: { code?: string | number; message?: string }
-  }
-
-  if (!response.ok || (body.error && body.error.code !== "ok")) {
-    const code = body.error?.code ?? response.status
-    const message = body.error?.message ?? `HTTP ${response.status}`
-    console.error("[publishToTikTok] API error:", code, message)
-    throw new Error(`TikTok post failed (${code}): ${message}`)
-  }
-
-  const publishId = body.data?.publish_id
-
-  if (!publishId) {
-    throw new Error(
-      "TikTok accepted the request but did not return a publish ID. The video may be processing — check your TikTok account."
-    )
-  }
-
-  // TikTok does not return a direct post URL at publish time; the video is processed
-  // asynchronously. A post URL becomes available once TikTok has finished processing.
-  return {
-    publishedId: publishId,
-    postedUrl: undefined,
-  }
+export async function publishToTikTok(_input: PublishInput): Promise<PublishResult> {
+  // TikTok direct publishing is temporarily disabled — production app denied.
+  // Throw a sentinel the caller can catch and route to Buffer instead.
+  const err = new Error(
+    "TikTok direct publishing is pending app approval. " +
+    "Connect Buffer in Settings to publish TikTok posts in the meantime."
+  )
+  ;(err as Error & { code: string }).code = TIKTOK_PUBLISHING_PENDING
+  throw err
 }

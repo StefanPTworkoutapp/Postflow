@@ -64,13 +64,19 @@ const WIZARD_STEPS: Array<{
   },
   {
     key:         "tiktok",
-    description: "Publish videos and pull analytics",
+    description: "Connect for analytics — publishing coming soon",
     time:        "~30 sec",
   },
 ]
 
 /** Platforms supported for direct OAuth */
 const DIRECT_CONNECT_SUPPORTED = new Set(["instagram", "tiktok", "linkedin", "facebook"])
+
+/**
+ * Platforms connected via OAuth but with publishing temporarily disabled
+ * (awaiting app approval). They appear as "Analytics only" in the UI.
+ */
+const PUBLISHING_PENDING_PLATFORMS = new Set(["tiktok"])
 
 /** All platforms shown in connected state grid */
 const ALL_PLATFORMS = ["instagram", "linkedin", "facebook", "tiktok", "x", "threads"]
@@ -360,6 +366,11 @@ function ConnectedGrid({ accounts, onDisconnect, onReconnect, disconnecting, con
                   <span className="text-xs text-[hsl(var(--muted-foreground))]">
                     Last synced {timeAgo(acct.created_at)}
                   </span>
+                  {PUBLISHING_PENDING_PLATFORMS.has(platform) && (
+                    <span className="text-xs text-amber-600 dark:text-amber-400 font-medium">
+                      Analytics only · Publishing pending TikTok approval
+                    </span>
+                  )}
                   {isExpired && (
                     <span className="text-xs text-red-600 dark:text-red-400 font-medium">
                       Token expired — reconnect now
