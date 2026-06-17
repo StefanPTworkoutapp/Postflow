@@ -43,7 +43,11 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/api/webhooks/") ||        // Stripe/Mollie/Buffer webhooks
     pathname.startsWith("/api/billing/") ||         // Billing redirects (Stripe/Mollie)
     pathname.startsWith("/api/calendar/add") ||     // Magic link from trend email
-    pathname.startsWith("/join")                    // Public marketing landing page
+    pathname.startsWith("/api/contact") ||          // Public contact form endpoint
+    pathname.startsWith("/join") ||                 // Public marketing landing page
+    pathname.startsWith("/contact") ||              // Public contact page
+    pathname.startsWith("/privacy") ||              // Public legal pages
+    pathname.startsWith("/terms")
 
   if (!user && !isPublicRoute) {
     const url = request.nextUrl.clone()

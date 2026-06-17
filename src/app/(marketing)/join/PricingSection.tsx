@@ -1,7 +1,7 @@
 "use client"
 
-import { useState } from "react"
-import Link from "next/link"
+import { useState }  from "react"
+import Link           from "next/link"
 import { PLANS, TRIAL_DAYS, ANNUAL_DISCOUNT_PERCENT } from "@/lib/config/pricing"
 
 // ── Plan display data ──────────────────────────────────────────────────────
@@ -189,15 +189,15 @@ export function PricingSection() {
               Volume pricing, white-label options, and dedicated support.
             </p>
           </div>
-          <a
-            href="mailto:hello@postflowsocials.app?subject=Agency%20plan%20enquiry"
+          <Link
+            href="/contact"
             className="shrink-0 inline-flex items-center gap-2 border border-white/15 hover:border-[#0DA5A5]/50 hover:text-[#0DA5A5] text-white/60 text-sm font-medium px-5 py-2.5 rounded-xl transition-colors whitespace-nowrap"
           >
             Talk to us
             <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
               <path d="M3 8h10M9 4l4 4-4 4"/>
             </svg>
-          </a>
+          </Link>
         </div>
 
       </div>

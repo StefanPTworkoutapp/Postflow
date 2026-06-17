@@ -3,16 +3,35 @@ import type { Metadata } from "next"
 import { PricingSection } from "./PricingSection"
 
 export const metadata: Metadata = {
-  title: "PostFlow — Your expertise, finally on social.",
+  title: "PostFlow — Social Media Scheduling for Coaches, PTs & Service Businesses",
   description:
-    "PostFlow turns your knowledge into scheduled content across Instagram, LinkedIn, Facebook, TikTok, X, and Threads. Built for service businesses who have actual clients to serve.",
+    "PostFlow plans, writes, and schedules your social media content across Instagram, LinkedIn, Facebook, TikTok, X, and Threads. Built for personal trainers, coaches, and service businesses. 20 minutes a week.",
+  keywords: [
+    "social media scheduling",
+    "social media tool for coaches",
+    "Instagram scheduling",
+    "LinkedIn scheduling",
+    "content calendar",
+    "social media for personal trainers",
+    "social media for service businesses",
+    "AI social media",
+    "schedule Instagram posts",
+  ],
+  alternates: {
+    canonical: "https://postflowsocials.app/join",
+  },
   openGraph: {
-    title: "PostFlow — Your expertise, finally on social.",
+    title: "PostFlow — Social Media Scheduling for Coaches, PTs & Service Businesses",
     description:
-      "Upload a clip. Get a week of posts. Scheduled across 6 platforms, written in your voice, in under 20 minutes.",
+      "Upload a clip. Get a week of posts. Scheduled across Instagram, LinkedIn, Facebook, TikTok, X, and Threads — written in your voice. 20 minutes a week.",
     url: "https://postflowsocials.app/join",
     siteName: "PostFlow",
     type: "website",
+  },
+  twitter: {
+    card:        "summary_large_image",
+    title:       "PostFlow — Social Media Scheduling for Service Businesses",
+    description: "Upload a clip. Get a week of posts. Scheduled across 6 platforms in 20 minutes.",
   },
 }
 
@@ -113,6 +132,35 @@ const PLATFORMS = [
 export default function JoinPage() {
   return (
     <div className="min-h-screen bg-[#0A0F1E] text-white font-[family-name:var(--font-geist-sans)] antialiased selection:bg-[#0DA5A5]/30">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "SoftwareApplication",
+          name: "PostFlow",
+          applicationCategory: "BusinessApplication",
+          operatingSystem: "Web",
+          description: "Social media scheduling and content planning for personal trainers, coaches, and service businesses. Plans, writes, and publishes to Instagram, LinkedIn, Facebook, TikTok, X, and Threads.",
+          url: "https://postflowsocials.app",
+          offers: [
+            { "@type": "Offer", price: "0",  priceCurrency: "EUR", name: "Free" },
+            { "@type": "Offer", price: "49", priceCurrency: "EUR", name: "Starter", priceSpecification: { "@type": "UnitPriceSpecification", price: "49", priceCurrency: "EUR", unitText: "MONTH" } },
+            { "@type": "Offer", price: "99", priceCurrency: "EUR", name: "Pro",     priceSpecification: { "@type": "UnitPriceSpecification", price: "99", priceCurrency: "EUR", unitText: "MONTH" } },
+          ],
+          featureList: [
+            "Instagram scheduling (Posts, Reels, Stories)",
+            "LinkedIn scheduling",
+            "Facebook scheduling",
+            "TikTok scheduling via Buffer",
+            "X / Twitter scheduling via Buffer",
+            "Threads scheduling via Buffer",
+            "AI caption generation",
+            "Brand voice training",
+            "Content calendar",
+            "Template health analytics",
+          ],
+        }) }}
+      />
 
       {/* ══ NAV ══════════════════════════════════════════════════════════ */}
       <nav className="fixed top-0 inset-x-0 z-50 border-b border-white/[0.05] bg-[#0A0F1E]/80 backdrop-blur-lg">
