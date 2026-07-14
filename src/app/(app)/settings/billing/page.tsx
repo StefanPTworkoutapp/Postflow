@@ -19,6 +19,7 @@ import { StorageAddonSection } from "./StorageAddonSection"
 import { RenderCreditSection }  from "./RenderCreditSection"
 import { getRenderCreditBalance } from "@/lib/server/billing/renderCredits"
 import { checkAiBudget } from "@/lib/server/billing/aiBudget"
+import { getCompTierForEmail } from "@/lib/server/billing/compAccounts"
 
 export default async function BillingPage() {
   const supabase = await createClient()
@@ -28,7 +29,7 @@ export default async function BillingPage() {
   const [{ data: account }, { data: invoices }, { data: userBrands }, { data: subRow }] = await Promise.all([
     supabase
       .from("accounts")
-      .select("subscription_tier, subscription_status, trial_ends_at, stripe_customer_id, mollie_customer_id")
+      .select("subscription_tier, subscription_status, trial_ends_at, stripe_customer_id, mollie_customer_id, email")
       .eq("id", user.id)
       .single(),
 
@@ -83,6 +84,9 @@ export default async function BillingPage() {
 
   const hasStripe       = !!account?.stripe_customer_id
   const hasMollie       = !!account?.mollie_customer_id
+  // Comp accounts (compAccounts.ts) hold a paid tier with no real subscription behind it —
+  // detectable here as "on the comp list for this exact tier, with no Stripe/Mollie customer".
+  const isCompAccount   = !hasStripe && !hasMollie && getCompTierForEmail(account?.email) === tier && tier !== "free"
   const renderBalance   = await getRenderCreditBalance(user.id)
   const aiBudget        = await checkAiBudget(user.id, tier)
 
@@ -131,7 +135,9 @@ export default async function BillingPage() {
           <div className="flex items-center justify-between">
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-xl font-bold">{plan.name}</span>
+                <span className="text-xl font-bold">
+                  {plan.name}{isCompAccount ? " (complimentary)" : ""}
+                </span>
                 <StatusBadge status={status} />
               </div>
               <p className="text-sm text-muted-foreground mt-0.5">

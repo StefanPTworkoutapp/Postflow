@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
+import { applyCompTierGrant } from "@/lib/server/billing/applyCompTierGrant"
 
 /**
  * Ensures a postflow.accounts row exists for the authenticated user.
@@ -21,7 +22,7 @@ export async function getOrCreateAccount() {
     .eq("id", user.id)
     .single()
 
-  if (existing) return existing
+  if (existing) return applyCompTierGrant(supabase, existing)
 
   // Create new account row
   const { data: created, error } = await supabase
@@ -36,5 +37,5 @@ export async function getOrCreateAccount() {
 
   if (error) throw new Error(`Failed to create account: ${error.message}`)
 
-  return created
+  return applyCompTierGrant(supabase, created)
 }
