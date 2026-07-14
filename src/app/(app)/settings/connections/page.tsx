@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import { createClient } from "@/lib/supabase/server"
 import { getActiveBrand } from "@/lib/server/brand/getActiveBrand"
 import { getBufferChannels, bufferServiceToPlatform } from "@/lib/server/buffer/client"
+import { isTikTokDirectPublishEnabled } from "@/lib/server/publish/publishToTikTok"
 import { ConnectionsClient } from "./ConnectionsClient"
 
 export const metadata: Metadata = { title: "PostFlow · Connect" }
@@ -112,6 +113,7 @@ export default async function ConnectionsPage({
         brandId={brand.id}
         oauthConnected={typeof params.connected === "string" ? params.connected : null}
         oauthError={typeof params.error === "string" ? params.error : null}
+        tikTokDirectPublishEnabled={isTikTokDirectPublishEnabled()}
       />
     </div>
   )

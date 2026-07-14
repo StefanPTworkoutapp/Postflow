@@ -212,9 +212,11 @@ Run through this on `postflowsocials.app` after Steps 2–4:
 ## BACKLOG
 
 - [ ] **Verify direct publishing on localhost** — connect platform accounts in Settings → create post → schedule from Calendar → confirm Inngest job fires → confirm post status → "posted"
-- [ ] **LinkedIn image publishing Phase 2** — 3-step server-side upload (registerUpload → upload binary → include asset URN in post)
-- [ ] **TikTok users must reconnect** — new `video.publish` scope requires re-auth; show notice in Settings → Connections for existing TikTok users
-- [ ] **X (Twitter) and Threads** — future direct publish when needed; Buffer stays as fallback path
+- [x] **LinkedIn image publishing Phase 2** — DONE (was already shipped in commit 4334313, predates this backlog entry going stale) — 3-step upload (initializeUpload → PUT binary → post with image URN) is live in `publishToLinkedIn.ts`
+- [x] **Threads direct publish** — P2a (2026-07-14): `publishToThreads.ts` (text/image/video/carousel via graph.threads.net) + `/api/auth/threads` OAuth pair + wizard/UI wiring in ConnectionsClient. Analytics fetcher deferred (see below).
+- [ ] **Threads analytics fetcher** — deferred out of P2a as non-trivial (would need its own metrics-mapping + retry logic like fetchLinkedInAnalytics.ts); build as its own item, don't half-ship
+- [x] **TikTok re-enable switch** — P2a (2026-07-14): real publish flow restored behind `TIKTOK_DIRECT_PUBLISH_ENABLED` env flag (`publishToTikTok.ts`); OAuth scope + schedule-route 422 gate + Settings UI copy all read the same flag. Still requires: TikTok production app re-approval, then flip the env var, then ask existing TikTok users to reconnect (video.publish is a new scope on their existing token).
+- [ ] **X (Twitter) direct publish** — explicitly NOT built per Stefan's no-new-recurring-cost call (2026-07-14); X stays on the Buffer fallback path only
 - [ ] **Buffer cleanup** — once direct publishing is confirmed stable in production, remove Buffer API calls from PostEditor and `/api/buffer/schedule/route.ts` (not yet — keep as safety net)
 - [ ] **Brand setup (PostFlow)** — user provides ToV files → create PostFlow brand → set colors, logo, tone
 - [ ] **Post rendering audit** — render all 9 templates → screenshot for quality reference

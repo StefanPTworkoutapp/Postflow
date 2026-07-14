@@ -1,9 +1,12 @@
 /**
  * Publish dispatcher — routes a PublishInput to the correct platform publisher.
  *
- * All four supported platforms (LinkedIn, Facebook, Instagram, TikTok) are handled
+ * Five platforms (LinkedIn, Facebook, Instagram, TikTok, Threads) are handled
  * here with native API calls and no third-party SDK. Any platform not listed in
  * DIRECT_PUBLISH_PLATFORMS should be routed through Buffer instead.
+ *
+ * Note: TikTok is listed here but publishToTikTok internally gates on
+ * TIKTOK_DIRECT_PUBLISH_ENABLED — see publishToTikTok.ts header for re-enable steps.
  *
  * Usage:
  *   import { dispatchPublish } from "@/lib/server/publish/dispatcher"
@@ -15,6 +18,7 @@ import { publishToLinkedIn }  from "./publishToLinkedIn"
 import { publishToFacebook }  from "./publishToFacebook"
 import { publishToInstagram } from "./publishToInstagram"
 import { publishToTikTok }    from "./publishToTikTok"
+import { publishToThreads }   from "./publishToThreads"
 
 export async function dispatchPublish(input: PublishInput): Promise<PublishResult> {
   switch (input.platform) {
@@ -22,6 +26,7 @@ export async function dispatchPublish(input: PublishInput): Promise<PublishResul
     case "facebook":  return publishToFacebook(input)
     case "instagram": return publishToInstagram(input)
     case "tiktok":    return publishToTikTok(input)
+    case "threads":   return publishToThreads(input)
     default:
       throw new Error(
         `No direct publisher for platform: ${input.platform}. Use Buffer for this platform.`
@@ -29,7 +34,7 @@ export async function dispatchPublish(input: PublishInput): Promise<PublishResul
   }
 }
 
-export const DIRECT_PUBLISH_PLATFORMS = ["linkedin", "facebook", "instagram", "tiktok"] as const
+export const DIRECT_PUBLISH_PLATFORMS = ["linkedin", "facebook", "instagram", "tiktok", "threads"] as const
 export type DirectPublishPlatform = typeof DIRECT_PUBLISH_PLATFORMS[number]
 
 /** Type guard — returns true if PostFlow can publish to this platform directly */

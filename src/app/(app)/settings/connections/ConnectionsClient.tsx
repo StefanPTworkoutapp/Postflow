@@ -30,6 +30,12 @@ interface Props {
   /** OAuth callback params forwarded from the Server Component page */
   oauthConnected?: string | null
   oauthError?:     string | null
+  /**
+   * Mirrors the server-side TIKTOK_DIRECT_PUBLISH_ENABLED flag (read by the
+   * Server Component page — client components can't read process.env directly).
+   * When false (default), TikTok shows as "Analytics only" in the connections UI.
+   */
+  tikTokDirectPublishEnabled?: boolean
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -67,16 +73,23 @@ const WIZARD_STEPS: Array<{
     description: "Connect for analytics — publishing coming soon",
     time:        "~30 sec",
   },
+  {
+    key:         "threads",
+    description: "Publish text, image, and video posts",
+    time:        "~30 sec",
+  },
 ]
 
 /** Platforms supported for direct OAuth */
-const DIRECT_CONNECT_SUPPORTED = new Set(["instagram", "tiktok", "linkedin", "facebook"])
+const DIRECT_CONNECT_SUPPORTED = new Set(["instagram", "tiktok", "linkedin", "facebook", "threads"])
 
 /**
  * Platforms connected via OAuth but with publishing temporarily disabled
  * (awaiting app approval). They appear as "Analytics only" in the UI.
+ * TikTok drops out of this set once tikTokDirectPublishEnabled is true —
+ * see the tikTokDirectPublishEnabled prop and its use in ConnectionsInner.
  */
-const PUBLISHING_PENDING_PLATFORMS = new Set(["tiktok"])
+const PUBLISHING_PENDING_PLATFORMS_DEFAULT = new Set(["tiktok"])
 
 /** All platforms shown in connected state grid */
 const ALL_PLATFORMS = ["instagram", "linkedin", "facebook", "tiktok", "x", "threads"]
@@ -150,6 +163,13 @@ const HELP_CONTENT: Record<string, React.ReactNode> = {
         </a>
       </div>
     </>
+  ),
+  threads: (
+    <ol className="list-decimal list-inside space-y-1.5">
+      <li>Click Connect below</li>
+      <li>Log in with your Threads / Instagram account</li>
+      <li>Approve the permissions</li>
+    </ol>
   ),
 }
 
@@ -324,9 +344,11 @@ interface ConnectedGridProps {
   onReconnect:   (platform: string) => void
   disconnecting: string | null
   connecting:    string | null
+  /** Platforms currently showing "Analytics only" pending publish approval. */
+  publishingPendingPlatforms: Set<string>
 }
 
-function ConnectedGrid({ accounts, onDisconnect, onReconnect, disconnecting, connecting }: ConnectedGridProps) {
+function ConnectedGrid({ accounts, onDisconnect, onReconnect, disconnecting, connecting, publishingPendingPlatforms }: ConnectedGridProps) {
   const accountMap = new Map(accounts.map(a => [a.platform, a]))
 
   return (
@@ -366,7 +388,7 @@ function ConnectedGrid({ accounts, onDisconnect, onReconnect, disconnecting, con
                   <span className="text-xs text-[hsl(var(--muted-foreground))]">
                     Last synced {timeAgo(acct.created_at)}
                   </span>
-                  {PUBLISHING_PENDING_PLATFORMS.has(platform) && (
+                  {publishingPendingPlatforms.has(platform) && (
                     <span className="text-xs text-amber-600 dark:text-amber-400 font-medium">
                       Analytics only · Publishing pending TikTok approval
                     </span>
@@ -557,8 +579,16 @@ function UrlConnector({ onConnectPlatform }: UrlConnectorProps) {
 // No useSearchParams() here — params are forwarded from the Server Component as
 // props so we never need a Suspense boundary, and the component renders instantly.
 
-function ConnectionsInner({ initialAccounts, brandId, oauthConnected, oauthError }: Props) {
+function ConnectionsInner({ initialAccounts, brandId, oauthConnected, oauthError, tikTokDirectPublishEnabled }: Props) {
   const router        = useRouter()
+  const publishingPendingPlatforms = tikTokDirectPublishEnabled
+    ? new Set(Array.from(PUBLISHING_PENDING_PLATFORMS_DEFAULT).filter(p => p !== "tiktok"))
+    : PUBLISHING_PENDING_PLATFORMS_DEFAULT
+  const wizardSteps = WIZARD_STEPS.map(step =>
+    step.key === "tiktok" && tikTokDirectPublishEnabled
+      ? { ...step, description: "Publish videos and pull analytics" }
+      : step
+  )
   const [accounts,      setAccounts]      = useState<SocialAccount[]>(initialAccounts)
   const [disconnecting, setDisconnecting] = useState<string | null>(null)
   const [error,         setError]         = useState<string | null>(null)
@@ -729,7 +759,7 @@ function ConnectionsInner({ initialAccounts, brandId, oauthConnected, oauthError
             <p className="text-sm text-[hsl(var(--muted-foreground))] mt-0.5">Takes about 3 minutes.</p>
           </div>
 
-          {WIZARD_STEPS.map((step, i) => (
+          {wizardSteps.map((step, i) => (
             <WizardStep
               key={step.key}
               stepNumber={i + 1}
@@ -760,18 +790,19 @@ function ConnectionsInner({ initialAccounts, brandId, oauthConnected, oauthError
             onReconnect={handleConnect}
             disconnecting={disconnecting}
             connecting={connecting}
+            publishingPendingPlatforms={publishingPendingPlatforms}
           />
 
           {/* Buffer inline PAT section */}
           <BufferTokenSection onConnected={handleRefresh} />
 
           {/* Wizard for any remaining unconnected wizard platforms */}
-          {WIZARD_STEPS.some(s => s.isBuffer ? !hasBuffer : !connectedPlatforms.has(s.key)) && (
+          {wizardSteps.some(s => s.isBuffer ? !hasBuffer : !connectedPlatforms.has(s.key)) && (
             <div className="rounded-xl border p-5">
               <p className="text-xs font-medium text-[hsl(var(--muted-foreground))] uppercase tracking-wide mb-3">
                 Still to connect
               </p>
-              {WIZARD_STEPS.filter(s => s.isBuffer ? !hasBuffer : !connectedPlatforms.has(s.key)).map((step, i) => (
+              {wizardSteps.filter(s => s.isBuffer ? !hasBuffer : !connectedPlatforms.has(s.key)).map((step, i) => (
                 <WizardStep
                   key={step.key}
                   stepNumber={i + 1}

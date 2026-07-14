@@ -16,6 +16,7 @@ import { createClient }     from "@/lib/supabase/server"
 import { getBrand }         from "@/lib/server/brand/getBrand"
 import { inngest }          from "@/inngest/client"
 import { isDirectPublishPlatform } from "@/lib/server/publish/dispatcher"
+import { isTikTokDirectPublishEnabled } from "@/lib/server/publish/publishToTikTok"
 
 export async function POST(
   request: Request,
@@ -69,13 +70,14 @@ export async function POST(
     }
 
     // Check platform is supported for direct publishing.
-    // TikTok is listed as a direct platform but publishing is currently disabled
-    // (production app denied) — treat it the same as an unsupported platform.
-    if (!isDirectPublishPlatform(post.platform) || post.platform === "tiktok") {
-      const isTikTok = post.platform === "tiktok"
+    // TikTok is listed as a direct platform but publishing stays gated behind
+    // TIKTOK_DIRECT_PUBLISH_ENABLED (production app denied as of 2026-07) — treat
+    // it the same as an unsupported platform until that flag is flipped on.
+    const tikTokBlocked = post.platform === "tiktok" && !isTikTokDirectPublishEnabled()
+    if (!isDirectPublishPlatform(post.platform) || tikTokBlocked) {
       return NextResponse.json(
         {
-          error: isTikTok
+          error: tikTokBlocked
             ? "TikTok direct publishing is pending approval from TikTok. Connect Buffer in Settings to publish TikTok posts in the meantime."
             : `${post.platform} does not support direct publishing yet. Connect Buffer to schedule this post.`,
           needsBuffer: true,

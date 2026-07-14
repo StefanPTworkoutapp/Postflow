@@ -65,9 +65,15 @@ export async function GET(req: Request) {
   // user.info.basic — profile info and analytics identity
   //
   // video.publish was removed: TikTok denied the production app submission.
-  // Re-add "video.publish" once approved and ask existing TikTok users to reconnect.
-  // See tasks/todo.md → "TikTok resubmission" for required steps.
-  const scopes = "user.info.basic"
+  // It's added back automatically once TIKTOK_DIRECT_PUBLISH_ENABLED=true (the
+  // same flag publishToTikTok.ts gates on) — flipping that one env var re-enables
+  // both the scope request and the publish call together. Existing TikTok users
+  // must still reconnect after the flag flips so their stored token picks up the
+  // new scope. See publishToTikTok.ts header for the full re-enable checklist.
+  const scopes =
+    process.env.TIKTOK_DIRECT_PUBLISH_ENABLED === "true"
+      ? "user.info.basic,video.publish"
+      : "user.info.basic"
 
   const oauthUrl = new URL("https://www.tiktok.com/v2/auth/authorize/")
   oauthUrl.searchParams.set("client_key",             clientKey)
