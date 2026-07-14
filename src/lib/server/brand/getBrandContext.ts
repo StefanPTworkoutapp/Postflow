@@ -89,6 +89,11 @@ interface TemplateSuggestionEntry {
   reason:         string | null
 }
 
+interface NicheBenchmarkEntry {
+  platform:           string
+  top_template_slugs: string[] | null
+}
+
 function buildPromptBlock(opts: {
   brand:                Record<string, unknown>
   tokens:               Record<string, { value: unknown; confidence: number }>
@@ -99,8 +104,9 @@ function buildPromptBlock(opts: {
   contentLanguage:      string | null
   templateHealth?:      TemplateHealthEntry[]
   templateSuggestions?: TemplateSuggestionEntry[]
+  nicheBenchmarks?:     NicheBenchmarkEntry[]
 }): string {
-  const { brand, tokens, patterns, trends, toneSummary, platform, contentLanguage, templateHealth, templateSuggestions } = opts
+  const { brand, tokens, patterns, trends, toneSummary, platform, contentLanguage, templateHealth, templateSuggestions, nicheBenchmarks } = opts
   const b = brand as {
     name: string; industry?: string; niche?: string; primary_goal?: string
     goals?: string[]; do_not_mention?: string[]
@@ -227,6 +233,22 @@ function buildPromptBlock(opts: {
     }
   }
 
+  // ── Niche winning-formats block ───────────────────────────────────────────
+  // niche_benchmarks.top_template_slugs is computed weekly by
+  // refreshNicheBenchmarks() but had zero readers until P1 (2026-07-14).
+  // Surfacing it here closes that gap: Claude sees what's working for other
+  // brands in the same niche, not just this brand's own (often sparse) data.
+  // Silently omitted when the niche has no benchmark rows yet.
+  const relevantBenchmarks = platform
+    ? (nicheBenchmarks ?? []).filter(nb => nb.platform === platform)
+    : (nicheBenchmarks ?? [])
+  const nicheFormatLines = relevantBenchmarks
+    .filter(nb => nb.top_template_slugs?.length)
+    .map(nb => `  ${nb.platform}: ${nb.top_template_slugs!.slice(0, 3).join(", ")}`)
+  const nicheFormatsBlock = nicheFormatLines.length
+    ? `\nFORMATS PERFORMING BEST IN YOUR NICHE:\n${nicheFormatLines.join("\n")}`
+    : ""
+
   return [
     `BRAND: ${b.name}`,
     b.tagline              ? `Tagline: "${b.tagline}"` : "",
@@ -244,6 +266,7 @@ function buildPromptBlock(opts: {
     performanceBlock,
     trendBlock,
     templateBlock,
+    nicheFormatsBlock,
     tokenBlock,
   ].filter(Boolean).join("\n")
 }
@@ -313,7 +336,13 @@ export async function getBrandContext(
     .order("created_at", { ascending: false })
     .limit(1)
 
-  const [patternsResult, trendsResult, templateHealthResult, templateSuggestionsResult] = await Promise.allSettled([
+  const nicheTag = (b.niche as string | null) ?? (b.industry as string | null) ?? "general"
+  const nicheBenchmarksQuery = supabase
+    .from("niche_benchmarks")
+    .select("platform,top_template_slugs")
+    .eq("niche_tag", nicheTag)
+
+  const [patternsResult, trendsResult, templateHealthResult, templateSuggestionsResult, nicheBenchmarksResult] = await Promise.allSettled([
     supabase
       .from("performance_patterns")
       .select("platform,avg_engagement_rate,best_days_of_week,best_hours_of_day,best_content_pillars,best_post_types,top_hashtags,sample_size")
@@ -328,6 +357,7 @@ export async function getBrandContext(
       .limit(10),
     templateHealthQuery,
     templateSuggestionsQuery,
+    nicheBenchmarksQuery,
   ])
 
   const allPatterns = patternsResult.status === "fulfilled"
@@ -345,6 +375,10 @@ export async function getBrandContext(
   const templateSuggestions = (templateSuggestionsResult.status === "fulfilled"
     ? (templateSuggestionsResult.value.data ?? [])
     : []) as TemplateSuggestionEntry[]
+
+  const nicheBenchmarks = (nicheBenchmarksResult.status === "fulfilled"
+    ? (nicheBenchmarksResult.value.data ?? [])
+    : []) as NicheBenchmarkEntry[]
 
   // 3. Build platform-specific performance context (for generateCaption)
   const platformPattern = platform
@@ -386,6 +420,7 @@ export async function getBrandContext(
     contentLanguage:      toneProfile?.content_language ?? null,
     templateHealth:       templateHealth.length ? templateHealth : undefined,
     templateSuggestions:  templateSuggestions.length ? templateSuggestions : undefined,
+    nicheBenchmarks:      nicheBenchmarks.length ? nicheBenchmarks : undefined,
   })
 
   return {

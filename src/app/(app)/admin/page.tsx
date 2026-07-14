@@ -129,6 +129,36 @@ export default async function AdminPage() {
 
   const brandNameMap = new Map((brands ?? []).map(b => [b.id, b.name as string]))
 
+  // ── Feedback learning loop health (P1, 2026-07-14) — Invisible Code Guard ──
+  // Orphan detection: these loops are expected to clear their unprocessed
+  // queues on a weekly (clip-forge) or immediate (tone/trend) cadence. Rows
+  // still sitting unprocessed well past that cadence mean the job silently
+  // stopped running (or, for tone/trend, the fire-and-forget nudge failed).
+  // Wrapped defensively — the columns these rely on ship in a migration that
+  // needs Stefan's approval; until applied, these queries degrade to 0/0
+  // rather than breaking the page.
+  const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString()
+  const oneDayAgo   = new Date(Date.now() - 1  * 24 * 60 * 60 * 1000).toISOString()
+
+  const [
+    { count: clipForgeUnprocessed },
+    { count: clipForgeStale },
+    { count: toneImmediateFailures },
+    { count: trendUnprocessed },
+  ] = await Promise.all([
+    nt(service).from("clip_forge_feedback").select("id", { count: "exact", head: true }).eq("processed", false),
+    nt(service).from("clip_forge_feedback").select("id", { count: "exact", head: true }).eq("processed", false).lt("created_at", tenDaysAgo),
+    nt(service).from("tone_feedback").select("id", { count: "exact", head: true }).eq("immediate_nudge_applied", false).lt("created_at", oneDayAgo).not("feedback_type", "is", null),
+    nt(service).from("trend_feedback").select("id", { count: "exact", head: true }).eq("processed", false).lt("created_at", oneDayAgo),
+  ]).catch(() => [{ count: 0 }, { count: 0 }, { count: 0 }, { count: 0 }])
+
+  const feedbackLoopHealth = {
+    clipForgeUnprocessed:   clipForgeUnprocessed ?? 0,
+    clipForgeStale:         clipForgeStale ?? 0,
+    toneImmediateFailures:  toneImmediateFailures ?? 0,
+    trendUnprocessed:       trendUnprocessed ?? 0,
+  }
+
   return (
     <AdminDashboard
       syncRuns={cast(syncRuns)}
@@ -144,6 +174,7 @@ export default async function AdminPage() {
       aiUsageBrands={aiUsageBrands.map(r => ({ ...r, brandName: brandNameMap.get(r.key) ?? r.key }))}
       aiUsageModels={aiUsageModels}
       aiUsageFeatures={aiUsageFeatures}
+      feedbackLoopHealth={feedbackLoopHealth}
     />
   )
 }

@@ -69,6 +69,13 @@ interface AiTotals {
   month:    string
 }
 
+interface FeedbackLoopHealth {
+  clipForgeUnprocessed:  number
+  clipForgeStale:        number
+  toneImmediateFailures: number
+  trendUnprocessed:      number
+}
+
 interface Props {
   syncRuns:           SyncRun[]
   researchRuns:       ResearchRun[]
@@ -80,6 +87,7 @@ interface Props {
   aiUsageBrands:      AiUsageRow[]
   aiUsageModels:      AiUsageRow[]
   aiUsageFeatures:    AiUsageRow[]
+  feedbackLoopHealth: FeedbackLoopHealth
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -216,6 +224,7 @@ export function AdminDashboard({
   aiUsageBrands,
   aiUsageModels,
   aiUsageFeatures,
+  feedbackLoopHealth,
 }: Props) {
   const brandMap = useMemo(
     () => new Map(brands.map(b => [b.id, b])),
@@ -483,6 +492,44 @@ export function AdminDashboard({
               </div>
             ))}
           </div>
+        </section>
+
+        {/* Feedback Learning Loops (P1, 2026-07-14) — Invisible Code Guard health + orphan detection */}
+        <section className="rounded-xl border p-5 space-y-4">
+          <div className="flex items-center gap-2">
+            <Zap className="h-4 w-4 text-indigo-500" />
+            <h2 className="font-semibold text-sm">Feedback Learning Loops</h2>
+          </div>
+
+          <div className="space-y-2 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-[hsl(var(--muted-foreground))]">Clip-forge feedback unprocessed</span>
+              <span className={cn("font-medium", feedbackLoopHealth.clipForgeStale > 0 ? "text-amber-500" : "text-[hsl(var(--foreground))]")}>
+                {feedbackLoopHealth.clipForgeUnprocessed}
+                {feedbackLoopHealth.clipForgeStale > 0 && ` (${feedbackLoopHealth.clipForgeStale} stale >10d)`}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-[hsl(var(--muted-foreground))]">Tone feedback — immediate nudge never landed (&gt;1d)</span>
+              <span className={cn("font-medium", feedbackLoopHealth.toneImmediateFailures > 0 ? "text-amber-500" : "text-[hsl(var(--foreground))]")}>
+                {feedbackLoopHealth.toneImmediateFailures}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-[hsl(var(--muted-foreground))]">Trend feedback unprocessed (&gt;1d)</span>
+              <span className={cn("font-medium", feedbackLoopHealth.trendUnprocessed > 0 ? "text-amber-500" : "text-[hsl(var(--foreground))]")}>
+                {feedbackLoopHealth.trendUnprocessed}
+              </span>
+            </div>
+          </div>
+
+          {(feedbackLoopHealth.clipForgeStale > 0 || feedbackLoopHealth.toneImmediateFailures > 0 || feedbackLoopHealth.trendUnprocessed > 0) ? (
+            <div className="rounded-lg bg-amber-50 dark:bg-amber-950/20 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+              ⚠ Some feedback rows aren&apos;t converting to token nudges on schedule — check clipForgeLearningLoop / tone+trend nudge fire-and-forget logs.
+            </div>
+          ) : (
+            <p className="text-xs text-[hsl(var(--muted-foreground))]">All feedback loops clearing on schedule.</p>
+          )}
         </section>
 
       </div>

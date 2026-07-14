@@ -3,84 +3,44 @@
  *
  * For each brand:
  *   1. Count unapplied tone_feedback rows grouped by feedback_type
- *   2. If any type has 5+ occurrences → generate a suggestion with Claude
+ *   2. If any type has 3+ occurrences → generate a suggestion with Claude
  *   3. Store the suggestion on brands.tone_suggestion (we add this column below)
  *   4. Mark those feedback rows as applied_to_future = true
  *
  * The suggestion surfaces in the Brand > Voice tab as a dismissable card.
+ *
+ * ── P1 changes (2026-07-14) ─────────────────────────────────────────────────
+ * Threshold dropped 5 → 3 (both for the suggestion text AND the token nudge)
+ * so the loop reacts faster. To make a single correction matter even before
+ * hitting the batch threshold, POST /api/posts/[id]/feedback now applies an
+ * immediate HALF-delta nudge per row at write time (see
+ * feedbackTokenMaps.ts::TONE_FEEDBACK_IMMEDIATE_DELTA).
+ *
+ * DOUBLE-COUNTING GUARD: because rows may already carry their own immediate
+ * nudge, this batch job must not blindly re-apply a full delta on top. The
+ * rule: only rows where immediate_nudge_applied = false still need a nudge
+ * from here (their immediate nudge never landed — write-time failure, or the
+ * feature was off when they were created). If EVERY triggered row already
+ * got its immediate nudge, this loop skips the token nudge entirely (the
+ * signal was already applied) but still generates + stores the suggestion
+ * text, since that's independent of the token math. If SOME rows are
+ * unnudged, we apply exactly one catch-up nudge at the immediate (half)
+ * delta — not the full batch delta — since a full delta on top of any
+ * already-applied immediate deltas would over-correct.
  */
 
 import { inngest }             from "../client"
 import { createServiceClient } from "@/lib/supabase/service"
-import { nudgeToken }         from "@/lib/server/brand/nudge-token"
 import Anthropic               from "@anthropic-ai/sdk"
 import { MODELS }              from "@/lib/ai/models"
 import { logAiUsage }          from "@/lib/ai/logUsage"
+import {
+  TONE_FEEDBACK_TOKEN_MAP as FEEDBACK_TOKEN_MAP,
+  TONE_FEEDBACK_IMMEDIATE_DELTA,
+  resolveAndNudge,
+} from "@/lib/server/brand/feedbackTokenMaps"
 
-const FEEDBACK_THRESHOLD = 5
-
-// ── Token adjustment map ───────────────────────────────────────────────────────
-// Maps feedback_type → a token nudge instruction.
-// These are APPLIED IN ADDITION to the suggestion text, directly updating
-// intelligence_tokens so future caption generation is affected immediately.
-//
-// Feedback signal weight: 0.08 (stronger than analytics 0.04, weaker than calibration 0.20)
-// This means: 5 feedbacks = one strong signal; system corrects meaningfully but not abruptly.
-
-const FEEDBACK_DELTA = 0.08
-const FEEDBACK_REJECT_DELTA = -0.08  // negative = weaken confidence
-
-interface FeedbackTokenAction {
-  tokenKey:  string
-  /** Target value — "CURRENT" means keep existing value (only adjust confidence) */
-  targetValue: string | "CURRENT"
-  delta: number
-  /** allowCreate: true = create this token if it doesn't exist yet */
-  allowCreate?: boolean
-}
-
-const FEEDBACK_TOKEN_MAP: Record<string, FeedbackTokenAction> = {
-  // "too_formal" → shift caption_tone toward conversational
-  too_formal: {
-    tokenKey:    "caption_tone",
-    targetValue: "conversational",
-    delta:       FEEDBACK_DELTA,
-  },
-  // "too_casual" → shift caption_tone toward professional
-  too_casual: {
-    tokenKey:    "caption_tone",
-    targetValue: "professional",
-    delta:       FEEDBACK_DELTA,
-  },
-  // "wrong_voice" → reduce confidence on caption_tone (value stays; confidence drops)
-  wrong_voice: {
-    tokenKey:    "caption_tone",
-    targetValue: "CURRENT",
-    delta:       FEEDBACK_REJECT_DELTA,
-  },
-  // "cta_weak" / "weak_cta" → reduce confidence on best_post_goal
-  cta_weak: {
-    tokenKey:    "best_post_goal",
-    targetValue: "CURRENT",
-    delta:       FEEDBACK_REJECT_DELTA,
-  },
-  weak_cta: {
-    tokenKey:    "best_post_goal",
-    targetValue: "CURRENT",
-    delta:       FEEDBACK_REJECT_DELTA,
-  },
-  // "loved_it" / "great" → reinforce current caption_tone (value unchanged, confidence rises)
-  loved_it: {
-    tokenKey:    "caption_tone",
-    targetValue: "CURRENT",
-    delta:       FEEDBACK_DELTA,
-  },
-  great: {
-    tokenKey:    "caption_tone",
-    targetValue: "CURRENT",
-    delta:       FEEDBACK_DELTA,
-  },
-}
+const FEEDBACK_THRESHOLD = 3
 
 function getAnthropic() {
   return new Anthropic({ apiKey: process.env.POSTFLOW_ANTHROPIC_KEY! })
@@ -140,9 +100,10 @@ export const toneLearningLoop = inngest.createFunction(
       brands.map((brand: any) =>
         step.run(`tone-loop-${brand.id}`, async () => {
           // Load unapplied feedback for this brand
-          const { data: feedbacks } = await supabase
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: feedbacks } = await (supabase as any)
             .from("tone_feedback")
-            .select("id, feedback_type")
+            .select("id, feedback_type, immediate_nudge_applied")
             .eq("brand_id", brand.id)
             .eq("applied_to_future", false)
             .not("feedback_type", "is", null)
@@ -150,22 +111,24 @@ export const toneLearningLoop = inngest.createFunction(
           if (!feedbacks?.length) return { brandId: brand.id, skipped: true }
 
           // Count by type (exclude "loved_it" — positive feedback doesn't need action)
-          const counts = new Map<string, string[]>()
-          for (const f of feedbacks) {
+          interface FeedbackRow { id: string; feedback_type: string; immediate_nudge_applied: boolean }
+          const counts = new Map<string, FeedbackRow[]>()
+          for (const f of feedbacks as FeedbackRow[]) {
             if (!f.feedback_type || f.feedback_type === "loved_it") continue
             const arr = counts.get(f.feedback_type) ?? []
-            arr.push(f.id)
+            arr.push(f)
             counts.set(f.feedback_type, arr)
           }
 
           // Find the type that has hit threshold
           const triggered = [...counts.entries()]
-            .filter(([, ids]) => ids.length >= FEEDBACK_THRESHOLD)
+            .filter(([, rows]) => rows.length >= FEEDBACK_THRESHOLD)
             .sort((a, b) => b[1].length - a[1].length)
 
           if (!triggered.length) return { brandId: brand.id, skipped: true, reason: "below threshold" }
 
-          const [feedbackType, feedbackIds] = triggered[0]
+          const [feedbackType, feedbackRows] = triggered[0]
+          const feedbackIds = feedbackRows.map(r => r.id)
 
           // Build a structured tone summary from tone_profile (NOT tone_examples which are raw posts)
           const tp = brand.tone_profile
@@ -190,52 +153,42 @@ export const toneLearningLoop = inngest.createFunction(
           // ── Token nudge — apply feedback as a direct signal to intelligence_tokens ──
           // This closes the feedback → token gap: explicit user feedback now trains
           // the system, not just surfaces a text suggestion for the user to act on.
+          //
+          // Double-counting guard (see file header): rows may already carry their own
+          // immediate half-delta nudge from the feedback route. Only rows where that
+          // never landed (immediate_nudge_applied = false) still need a nudge from here,
+          // and even then we apply the HALF delta (catch-up), never the full batch delta —
+          // applying full on top of any already-applied immediate deltas would double-count.
           let tokenNudged = false
+          let tokenNudgeSkippedReason: string | null = null
           const action = FEEDBACK_TOKEN_MAP[feedbackType]
-          if (action) {
-            // Resolve "CURRENT" to the actual current token value
-            let resolvedValue: string | number | string[] = action.targetValue
-            if (action.targetValue === "CURRENT") {
-              const { data: brandTokens } = await supabase
-                .from("brands")
-                .select("intelligence_tokens")
-                .eq("id", brand.id)
-                .maybeSingle()
-              const tks = (brandTokens?.intelligence_tokens as Record<string, { value: unknown }> | null) ?? {}
-              const currentVal = tks[action.tokenKey]?.value
-              if (currentVal !== undefined) {
-                resolvedValue = currentVal as string | number | string[]
-              } else {
-                // Token doesn't exist — only create for positive signals
-                if (action.delta > 0 && action.allowCreate) {
-                  resolvedValue = "conversational"  // safe default for caption_tone
-                } else {
-                  resolvedValue = "conversational"  // fallback; allowCreate=false prevents write
-                }
-              }
-            }
+          const unnudgedRows = feedbackRows.filter(r => !r.immediate_nudge_applied)
 
-            try {
-              const signalType = action.delta < 0 ? "reject" : "feedback"
-              await nudgeToken(
-                brand.id,
-                action.tokenKey,
-                resolvedValue,
-                action.delta,
-                signalType,
-                `tone_feedback_batch_${feedbackType}`,
-                {
-                  feedback_type:   feedbackType,
-                  feedback_count:  feedbackIds.length,
-                  batch_processed: new Date().toISOString(),
-                },
-                action.allowCreate,
-              )
-              tokenNudged = true
-            } catch (nudgeErr) {
-              console.error(`[tone-learning-loop] nudgeToken failed for brand ${brand.id}:`, nudgeErr)
-              // Non-fatal — suggestion still stored; token nudge is bonus
+          if (action && unnudgedRows.length > 0) {
+            const catchUpAction = { ...action, delta: Math.sign(action.delta) * TONE_FEEDBACK_IMMEDIATE_DELTA }
+            const signalType = action.delta < 0 ? "reject" : "feedback"
+            const ok = await resolveAndNudge(
+              brand.id,
+              catchUpAction,
+              signalType,
+              `tone_feedback_batch_catchup_${feedbackType}`,
+              {
+                feedback_type:  feedbackType,
+                feedback_count: feedbackIds.length,
+                catchup_count:  unnudgedRows.length,
+                batch_processed: new Date().toISOString(),
+              },
+            )
+            tokenNudged = ok
+            if (ok) {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              await (supabase as any)
+                .from("tone_feedback")
+                .update({ immediate_nudge_applied: true })
+                .in("id", unnudgedRows.map(r => r.id))
             }
+          } else if (action) {
+            tokenNudgeSkippedReason = "all rows already carried an immediate nudge — skipping to avoid double-counting"
           }
 
           // Store suggestion and mark feedbacks as applied
@@ -261,6 +214,7 @@ export const toneLearningLoop = inngest.createFunction(
             feedbackType,
             count:       feedbackIds.length,
             tokenNudged,
+            tokenNudgeSkippedReason,
           }
         })
       )

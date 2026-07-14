@@ -51,6 +51,7 @@ function ScoreBadge({ score, label }: { score: number | null; label: string }) {
 export function TemplateSuggestionCard({ suggestion, onRespond, className }: Props) {
   const [responding, setResponding] = useState<"approved" | "dismissed" | null>(null)
   const [done, setDone] = useState(false)
+  const [resultMessage, setResultMessage] = useState<string | null>(null)
 
   const templateLabel = (slug: string) =>
     slug.replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase())
@@ -58,18 +59,51 @@ export function TemplateSuggestionCard({ suggestion, onRespond, className }: Pro
   async function handleAction(action: "approved" | "dismissed") {
     setResponding(action)
     try {
-      await fetch(`/api/templates/suggestions/${suggestion.id}`, {
+      const res = await fetch(`/api/templates/suggestions/${suggestion.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action }),
       })
-      setDone(true)
-      onRespond?.(suggestion.id, action)
+      const data = await res.json().catch(() => ({}))
+
+      if (action === "approved") {
+        // Tell the pro plainly whether the swap actually happened — approving
+        // no longer just flips a status flag, it mutates the brand's live
+        // template rotation (or explains why it couldn't).
+        setResultMessage(
+          data.applied
+            ? `Done — ${templateLabel(suggestion.current_slug)} replaced with ${templateLabel(suggestion.suggested_slug)} for ${suggestion.platform}.`
+            : `Approved, but not applied: ${data.reason ?? "no matching slot to swap."}`
+        )
+        setDone(true)
+      } else {
+        setDone(true)
+        onRespond?.(suggestion.id, action)
+      }
     } catch {
       console.error("Failed to respond to suggestion")
     } finally {
       setResponding(null)
     }
+  }
+
+  if (done && resultMessage) {
+    return (
+      <div className={cn(
+        "rounded-xl border bg-[hsl(var(--card))] p-4 text-xs text-[hsl(var(--muted-foreground))] flex items-start justify-between gap-3",
+        className
+      )}>
+        <span>{resultMessage}</span>
+        <button
+          type="button"
+          onClick={() => onRespond?.(suggestion.id, "approved")}
+          className="shrink-0 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
+          aria-label="Dismiss"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    )
   }
 
   if (done) return null

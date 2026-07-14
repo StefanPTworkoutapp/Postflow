@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getBrand }     from "@/lib/server/brand/getBrand"
+import { applyTemplateSuggestionSwap } from "@/lib/server/render/selectTemplate"
 
 export async function PATCH(
   req:     NextRequest,
@@ -51,15 +52,37 @@ export async function PATCH(
   const now = new Date().toISOString()
 
   if (action === "approved") {
+    // Actually swap the suggested template into the matching UNLOCKED slot(s)
+    // — previously "approved" only flipped status and never touched
+    // brand_template_preferences (getReplacementSlot() was dead code).
+    const swapResult = await applyTemplateSuggestionSwap(
+      brand.id,
+      suggestion.current_slug,
+      suggestion.suggested_slug,
+    )
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error } = await (supabase as any)
       .from("template_suggestions")
-      .update({ status: "approved", responded_at: now })
+      .update({
+        status:          "approved",
+        responded_at:    now,
+        applied:         swapResult.applied,
+        applied_at:      swapResult.applied ? now : null,
+        applied_reason:  swapResult.reason ?? null,
+        swapped_slots:   swapResult.swapped,
+      })
       .eq("id", id)
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-    return NextResponse.json({ ok: true, action: "approved" })
+    return NextResponse.json({
+      ok:      true,
+      action:  "approved",
+      applied: swapResult.applied,
+      reason:  swapResult.reason ?? null,
+      swapped: swapResult.swapped,
+    })
   }
 
   // Dismissed

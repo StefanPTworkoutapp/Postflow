@@ -55,18 +55,68 @@ function ultimateFallbackSlug(postType: string): string {
 }
 
 /**
+ * Fetch the brand's niche top-performing template slugs for a platform, from
+ * the weekly refreshNicheBenchmarks() output. Was computed and stored with
+ * zero readers until P1 (2026-07-14) — see buildWeightedPool() below for how
+ * it's used as a rotation tiebreaker. Returns [] (silent fallback) whenever
+ * there's no platform, no niche, or no benchmark row yet.
+ */
+async function getNicheTopSlugs(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  brandId:  string,
+  platform?: string,
+): Promise<string[]> {
+  if (!platform) return []
+
+  const { data: brand } = await supabase
+    .from("brands")
+    .select("niche, industry")
+    .eq("id", brandId)
+    .maybeSingle()
+  const nicheTag = brand?.niche ?? brand?.industry ?? "general"
+
+  const { data: benchmark } = await supabase
+    .from("niche_benchmarks")
+    .select("top_template_slugs")
+    .eq("niche_tag", nicheTag)
+    .eq("platform", platform)
+    .maybeSingle()
+
+  return (benchmark?.top_template_slugs as string[] | null) ?? []
+}
+
+/**
+ * Weight a rotation pool toward niche top performers by giving each matching
+ * slug double representation. Rotation stays deterministic (postCount %
+ * pool.length) — this only changes the odds each slug gets picked over many
+ * calls, not the reproducibility of any single call. No-op when there's no
+ * niche data (nicheTopSlugs is empty), matching this file's "always falls
+ * back silently" contract.
+ */
+function buildWeightedPool(baseSlugs: string[], nicheTopSlugs: string[]): string[] {
+  if (!nicheTopSlugs.length) return baseSlugs
+  const weighted = baseSlugs.flatMap(slug => nicheTopSlugs.includes(slug) ? [slug, slug] : [slug])
+  return weighted.length ? weighted : baseSlugs
+}
+
+/**
  * Select the next template slug to use for a brand + post_type combination.
  *
  * @param brandId   - brands.id
  * @param postType  - e.g. "single_image" | "carousel" | "reel" | etc.
  * @param postCount - How many posts of this type have already been published
  *                   by this brand. Used for deterministic round-robin.
+ * @param platform  - optional: when provided, the no-saved-slots fallback
+ *                   pool is weighted toward this brand's niche top templates
+ *                   for that platform (niche_benchmarks.top_template_slugs).
  * @returns The template slug to use (falls back to default if no preferences set).
  */
 export async function selectTemplate(
   brandId:   string,
   postType:  string,
   postCount: number,
+  platform?: string,
 ): Promise<string> {
   const supabase = createServiceClient()
 
@@ -85,7 +135,10 @@ export async function selectTemplate(
     return slot.template_slug
   }
 
-  // 2. Fallback: rotate through the render templates valid for this post_type.
+  // 2. Fallback: rotate through the render templates valid for this post_type,
+  // weighted toward niche top performers when we have that data (all pool
+  // entries here are inherently "unlocked" — there's no saved/locked slot to
+  // defer to in this branch).
   // (Must return a render slug, not a caption-template id — see
   // RENDER_SLUGS_BY_POST_TYPE above.)
   const renderSlugs = RENDER_SLUGS_BY_POST_TYPE[postType]
@@ -94,7 +147,10 @@ export async function selectTemplate(
     // best-fit render slug so callers always get something valid.
     return ultimateFallbackSlug(postType)
   }
-  return renderSlugs[postCount % renderSlugs.length]
+
+  const nicheTopSlugs = await getNicheTopSlugs(supabase, brandId, platform)
+  const weightedPool  = buildWeightedPool(renderSlugs, nicheTopSlugs)
+  return weightedPool[postCount % weightedPool.length]
 }
 
 /**
@@ -194,4 +250,80 @@ export async function getReplacementSlot(
  */
 export function getTemplateBySlug(slug: string): PostTemplate | undefined {
   return DEFAULT_TEMPLATES.find(t => t.id === slug)
+}
+
+export interface TemplateSwapResult {
+  applied: boolean
+  reason?: string
+  swapped: Array<{ post_type: string; slot_index: number }>
+}
+
+/**
+ * Apply an approved template_suggestion by swapping suggestedSlug into every
+ * UNLOCKED brand_template_preferences slot currently running currentSlug.
+ * locked_by_user slots (the plan-lock mechanism) are never touched.
+ *
+ * This is what makes template_suggestions approval actually DO something —
+ * previously PATCH /api/templates/suggestions/[id] only flipped
+ * status='approved' and getReplacementSlot() below was dead code that
+ * nothing called.
+ *
+ * We match purely on template_slug (not post_type/platform) because
+ * template_suggestions only carries `platform`, not `post_type`, and a slug
+ * uniquely identifies which slots are running it — querying by
+ * (brand_id, template_slug) sidesteps needing a slug→post_type reverse
+ * lookup (which would be ambiguous anyway: e.g. "quote-card" is valid for
+ * both the "quote" and "single_image" post types).
+ */
+export async function applyTemplateSuggestionSwap(
+  brandId:       string,
+  currentSlug:   string,
+  suggestedSlug: string,
+): Promise<TemplateSwapResult> {
+  const supabase = createServiceClient()
+
+  const { data: rows } = await supabase
+    .from("brand_template_preferences")
+    .select("post_type, slot_index, locked")
+    .eq("brand_id", brandId)
+    .eq("template_slug", currentSlug)
+
+  const matches = (rows ?? []) as Array<{ post_type: string; slot_index: number; locked: boolean }>
+
+  if (!matches.length) {
+    return {
+      applied: false,
+      reason:  "Brand has no saved template slot using this template — nothing to swap (using default rotation).",
+      swapped: [],
+    }
+  }
+
+  const unlocked = matches.filter(m => !m.locked)
+  const locked   = matches.filter(m => m.locked)
+
+  if (!unlocked.length) {
+    return {
+      applied: false,
+      reason:  `All ${matches.length} matching slot${matches.length > 1 ? "s are" : " is"} locked by the user — approved but not applied.`,
+      swapped: [],
+    }
+  }
+
+  const now = new Date().toISOString()
+  await Promise.all(
+    unlocked.map(m =>
+      supabase
+        .from("brand_template_preferences")
+        .update({ template_slug: suggestedSlug, updated_at: now })
+        .eq("brand_id", brandId)
+        .eq("post_type", m.post_type)
+        .eq("slot_index", m.slot_index)
+    )
+  )
+
+  return {
+    applied: true,
+    reason:  locked.length ? `${locked.length} matching slot${locked.length > 1 ? "s" : ""} left untouched (locked).` : undefined,
+    swapped: unlocked.map(m => ({ post_type: m.post_type, slot_index: m.slot_index })),
+  }
 }

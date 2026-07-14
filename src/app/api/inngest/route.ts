@@ -15,6 +15,7 @@ import { recalibrationCheck }        from "@/inngest/jobs/recalibrationCheck"
 import { publishScheduledPost }      from "@/inngest/jobs/publishScheduledPost"
 import { evergreenRepurpose }        from "@/inngest/jobs/evergreenRepurpose"
 import { postPublishedAnalytics }    from "@/inngest/jobs/postPublishedAnalytics"
+import { clipForgeLearningLoop }     from "@/inngest/jobs/clipForgeLearningLoop"
 
 export const { GET, POST, PUT } = serve({
   client:    inngest,
@@ -34,5 +35,6 @@ export const { GET, POST, PUT } = serve({
     publishScheduledPost,
     evergreenRepurpose,
     postPublishedAnalytics,
+    clipForgeLearningLoop,
   ],
 })

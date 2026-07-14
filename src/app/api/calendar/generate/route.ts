@@ -276,7 +276,7 @@ Required media types: photo | video | carousel | stock | none`
       const postType = s.post_type ?? "single_image"
       typeCounters[postType] = (typeCounters[postType] ?? 0) + 1
       try {
-        const chosen = await selectTemplate(brand.id, postType, typeCounters[postType])
+        const chosen = await selectTemplate(brand.id, postType, typeCounters[postType], s.platform)
         resolvedTemplates[i] = chosen ?? s.template_slug ?? null
       } catch {
         resolvedTemplates[i] = s.template_slug ?? null
