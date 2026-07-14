@@ -8,6 +8,7 @@
  */
 
 import { inngest } from "../client"
+import { EMAIL_FROM } from "@/lib/server/email/emailBrand"
 import { Resend } from "resend"
 import { getMarginReport } from "@/lib/server/admin/marginReport"
 import { buildMarginReportEmailHtml } from "@/lib/server/email/marginReportEmailTemplate"
@@ -31,7 +32,7 @@ export const monthlyMarginEmail = inngest.createFunction(
     const result: { sent: boolean; error?: string } = await step.run("send-email", async () => {
       const html = buildMarginReportEmailHtml(report)
       const { error } = await getResend().emails.send({
-        from:    "PostFlow <onboarding@resend.dev>",
+        from:    EMAIL_FROM,
         to:      ADMIN_EMAIL,
         subject: `PostFlow monthly cost & margin — ${report.month}`,
         html,

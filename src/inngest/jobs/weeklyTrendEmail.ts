@@ -3,6 +3,7 @@
  */
 
 import { inngest } from "../client"
+import { EMAIL_FROM } from "@/lib/server/email/emailBrand"
 import { createServiceClient } from "@/lib/supabase/service"
 import { Resend } from "resend"
 import Anthropic from "@anthropic-ai/sdk"
@@ -171,7 +172,7 @@ export const weeklyTrendEmail = inngest.createFunction(
           })
 
           const { error } = await getResend().emails.send({
-            from:    "PostFlow <onboarding@resend.dev>",
+            from:    EMAIL_FROM,
             to:      brand.email!,
             subject: `📊 Your weekly trend brief — ${weekStart}`,
             html,

@@ -7,7 +7,7 @@
 import { inngest } from "../client"
 import { createServiceClient } from "@/lib/supabase/service"
 import { Resend } from "resend"
-import { buildEmailBrandHeader, buildEmailFooter } from "@/lib/server/email/emailBrand"
+import { buildEmailBrandHeader, buildEmailFooter, EMAIL_FROM } from "@/lib/server/email/emailBrand"
 
 // Lazy init — avoids throwing at build time when env vars are absent
 function getResend() { return new Resend(process.env.RESEND_API_KEY!) }
@@ -125,7 +125,7 @@ export const schedulePostReminders = inngest.createFunction(
       await step.sleepUntil("sleep-24h", new Date(ms24h))
       await step.run("send-24h-reminder", () =>
         getResend().emails.send({
-          from:    "PostFlow <hello@postflow.app>",
+          from:    EMAIL_FROM,
           to:      postData.email!,
           subject: `${platform === "tiktok" ? "🎵" : "📸"} Heads up — ${platform} post tomorrow`,
           html:    buildReminderHtml({ ...baseData, hoursUntil: 24 }),
@@ -137,7 +137,7 @@ export const schedulePostReminders = inngest.createFunction(
       await step.sleepUntil("sleep-1h", new Date(ms1h))
       await step.run("send-1h-reminder", () =>
         getResend().emails.send({
-          from:    "PostFlow <hello@postflow.app>",
+          from:    EMAIL_FROM,
           to:      postData.email!,
           subject: `${platform === "tiktok" ? "🎵" : "📸"} Posting in 1 hour`,
           html:    buildReminderHtml({ ...baseData, hoursUntil: 1 }),

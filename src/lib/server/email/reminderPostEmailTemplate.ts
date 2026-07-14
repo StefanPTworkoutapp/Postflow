@@ -11,7 +11,7 @@
  */
 
 import { Resend } from "resend"
-import { buildEmailBrandHeader, buildEmailFooter } from "./emailBrand"
+import { buildEmailBrandHeader, buildEmailFooter, EMAIL_FROM } from "./emailBrand"
 
 // Lazy init — avoids throwing at build time when env vars are absent (same
 // pattern as postReminders.ts / weeklyTrendEmail.ts).
@@ -131,7 +131,7 @@ export function buildReminderPostEmailHtml(d: ReminderPostEmailData): string {
 export async function sendReminderPostEmail(d: ReminderPostEmailData): Promise<void> {
   const platformLabel = d.platform.charAt(0).toUpperCase() + d.platform.slice(1)
   await getResend().emails.send({
-    from:    "PostFlow <hello@postflow.app>",
+    from:    EMAIL_FROM,
     to:      d.recipientEmail,
     subject: `⏰ Time to post on ${platformLabel} — your package is ready`,
     html:    buildReminderPostEmailHtml(d),

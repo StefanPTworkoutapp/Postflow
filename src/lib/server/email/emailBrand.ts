@@ -13,6 +13,16 @@
 /** Absolute base URL for hosted email assets — email clients cannot resolve relative paths. */
 export const EMAIL_ASSETS_BASE_URL = "https://postflowsocials.app"
 
+/**
+ * Single sender identity for ALL transactional email.
+ * The Resend sending domain must be VERIFIED or delivery silently fails —
+ * postflowsocials.app is registered in Resend but pending DNS verification,
+ * so POSTFLOW_EMAIL_FROM (Vercel env) points at a verified domain until then.
+ * Once postflowsocials.app verifies in Resend, remove the env var and this
+ * default takes over. Never hardcode a from address at a call site.
+ */
+export const EMAIL_FROM = process.env.POSTFLOW_EMAIL_FROM ?? "PostFlow <hello@postflowsocials.app>"
+
 export const EMAIL_LOGO_ICON_URL = `${EMAIL_ASSETS_BASE_URL}/postflow-logo-icon.png`
 
 /**
