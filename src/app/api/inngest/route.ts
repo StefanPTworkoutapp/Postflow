@@ -22,6 +22,7 @@ import { weeklyCalendarReoptimize }  from "@/inngest/jobs/weeklyCalendarReoptimi
 import { generateCalendarJob }       from "@/inngest/jobs/generateCalendarJob"
 import { renderCarouselJob }         from "@/inngest/jobs/renderCarouselJob"
 import { renderVariantsJob }         from "@/inngest/jobs/renderVariantsJob"
+import { monthlyMarginEmail }        from "@/inngest/jobs/monthlyMarginEmail"
 
 // Carousel/variant renders do real Puppeteer work synchronously inside an
 // Inngest step, invoked through this route — same maxDuration the old
@@ -54,5 +55,6 @@ export const { GET, POST, PUT } = serve({
     generateCalendarJob,
     renderCarouselJob,
     renderVariantsJob,
+    monthlyMarginEmail,
   ],
 })

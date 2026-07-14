@@ -18,6 +18,7 @@ import { BillingActions } from "./BillingActions"
 import { StorageAddonSection } from "./StorageAddonSection"
 import { RenderCreditSection }  from "./RenderCreditSection"
 import { getRenderCreditBalance } from "@/lib/server/billing/renderCredits"
+import { checkAiBudget } from "@/lib/server/billing/aiBudget"
 
 export default async function BillingPage() {
   const supabase = await createClient()
@@ -83,6 +84,7 @@ export default async function BillingPage() {
   const hasStripe       = !!account?.stripe_customer_id
   const hasMollie       = !!account?.mollie_customer_id
   const renderBalance   = await getRenderCreditBalance(user.id)
+  const aiBudget        = await checkAiBudget(user.id, tier)
 
   return (
     <div className="max-w-3xl mx-auto space-y-8">
@@ -104,6 +106,16 @@ export default async function BillingPage() {
       {isTrialing && trialEndsAt && (
         <div className="rounded-lg bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 px-4 py-3 text-sm text-indigo-700 dark:text-indigo-400">
           You're on a free trial. Your trial ends on <strong>{trialEndsAt}</strong>. No charge until then.
+        </div>
+      )}
+      {aiBudget.verdict === "economy" && (
+        <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
+          <strong>AI budget for this month reached</strong> — running in economy mode. Captions and calendar generation still work, using faster/cheaper models for the rest of this billing month.
+        </div>
+      )}
+      {aiBudget.verdict === "blocked" && (
+        <div className="rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 px-4 py-3 text-sm text-red-700 dark:text-red-400">
+          <strong>AI budget for this month reached (2×)</strong> — Inspiration Analyze and niche research are paused until next month. Captions and calendar generation still work in economy mode.
         </div>
       )}
 

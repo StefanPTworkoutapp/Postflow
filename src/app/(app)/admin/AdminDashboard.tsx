@@ -83,6 +83,37 @@ interface ImportedFeedHealth {
   lastImportAt:        string | null
 }
 
+interface CompanyMarginRow {
+  accountId:  string
+  name:       string
+  plan:       string
+  thisMonth: {
+    revenueEur:             number
+    aiCostUsd:              number
+    aiCostEur:              number
+    renderCreditRevenueEur: number
+    marginEur:              number
+  }
+  lifetime: {
+    revenueEur: number
+    aiCostUsd:  number
+    aiCostEur:  number
+    marginEur:  number
+  }
+  storageAddonGb: number
+  overBudget:     "normal" | "economy" | "blocked"
+}
+
+interface MarginReport {
+  generatedAt: string
+  month:       string
+  totals: {
+    thisMonth: { revenueEur: number; aiCostEur: number; marginEur: number }
+    lifetime:  { revenueEur: number; aiCostEur: number; marginEur: number }
+  }
+  companies: CompanyMarginRow[]
+}
+
 interface Props {
   syncRuns:           SyncRun[]
   researchRuns:       ResearchRun[]
@@ -96,6 +127,12 @@ interface Props {
   aiUsageFeatures:    AiUsageRow[]
   feedbackLoopHealth: FeedbackLoopHealth
   importedFeedHealth: ImportedFeedHealth[]
+  marginReport:       MarginReport | null
+}
+
+function formatEur(n: number): string {
+  const sign = n < 0 ? "-" : ""
+  return `${sign}€${Math.abs(n).toFixed(2)}`
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -234,6 +271,7 @@ export function AdminDashboard({
   aiUsageFeatures,
   feedbackLoopHealth,
   importedFeedHealth,
+  marginReport,
 }: Props) {
   const brandMap = useMemo(
     () => new Map(brands.map(b => [b.id, b])),
@@ -740,6 +778,116 @@ export function AdminDashboard({
                 ))}
             </div>
           </div>
+        )}
+      </section>
+
+      {/* ── Company Margins (P5) ─────────────────────────────────────────────── */}
+      <section className="rounded-xl border p-5 space-y-4">
+        <div className="flex items-center gap-2">
+          <DollarSign className="h-4 w-4 text-emerald-500" />
+          <h2 className="font-semibold text-sm">
+            Company Margins{marginReport ? ` — ${marginReport.month}` : ""}
+          </h2>
+        </div>
+
+        {!marginReport && (
+          <p className="text-xs text-[hsl(var(--muted-foreground))]">
+            Margin report unavailable — check server logs.
+          </p>
+        )}
+
+        {marginReport && (
+          <>
+            <p className="text-[11px] text-[hsl(var(--muted-foreground))]">
+              Revenue in EUR (Stripe/Mollie). AI cost converted from USD at a fixed approximate
+              rate — not a live FX feed. Storage add-on revenue is already included in each
+              account&apos;s subscription total (not double-counted).
+            </p>
+
+            {/* Totals row */}
+            <div className="grid grid-cols-3 gap-3 text-center">
+              <div className="rounded-lg bg-[hsl(var(--muted))]/50 px-3 py-2">
+                <p className="text-lg font-semibold tabular-nums">{formatEur(marginReport.totals.thisMonth.revenueEur)}</p>
+                <p className="text-xs text-[hsl(var(--muted-foreground))]">MRR (this month)</p>
+              </div>
+              <div className="rounded-lg bg-[hsl(var(--muted))]/50 px-3 py-2">
+                <p className="text-lg font-semibold tabular-nums">{formatEur(marginReport.totals.thisMonth.aiCostEur)}</p>
+                <p className="text-xs text-[hsl(var(--muted-foreground))]">AI cost (this month)</p>
+              </div>
+              <div className="rounded-lg bg-[hsl(var(--muted))]/50 px-3 py-2">
+                <p className={cn(
+                  "text-lg font-semibold tabular-nums",
+                  marginReport.totals.thisMonth.marginEur < 0 ? "text-red-500" : "text-emerald-600 dark:text-emerald-400"
+                )}>
+                  {formatEur(marginReport.totals.thisMonth.marginEur)}
+                </p>
+                <p className="text-xs text-[hsl(var(--muted-foreground))]">Overall margin</p>
+              </div>
+            </div>
+
+            {marginReport.companies.length === 0 ? (
+              <p className="text-xs text-[hsl(var(--muted-foreground))] text-center py-2">
+                No billed or AI-usage activity yet.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b text-[hsl(var(--muted-foreground))]">
+                      <th className="text-left py-2 pr-3 font-medium">Company</th>
+                      <th className="text-left py-2 pr-3 font-medium">Plan</th>
+                      <th className="text-right py-2 pr-3 font-medium">Revenue (mo)</th>
+                      <th className="text-right py-2 pr-3 font-medium">AI cost (mo)</th>
+                      <th className="text-right py-2 pr-3 font-medium">Margin (mo)</th>
+                      <th className="text-right py-2 pr-3 font-medium">Paid (lifetime)</th>
+                      <th className="text-right py-2 pr-3 font-medium">AI cost (lifetime)</th>
+                      <th className="text-right py-2 pr-3 font-medium">Margin (lifetime)</th>
+                      <th className="text-center py-2 font-medium">Budget</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {marginReport.companies.map(c => (
+                      <tr key={c.accountId} className="border-b last:border-0">
+                        <td className="py-2 pr-3 truncate max-w-40 font-medium">{c.name}</td>
+                        <td className="py-2 pr-3 capitalize">{c.plan}</td>
+                        <td className="py-2 pr-3 text-right tabular-nums">{formatEur(c.thisMonth.revenueEur)}</td>
+                        <td className="py-2 pr-3 text-right tabular-nums text-violet-600 dark:text-violet-400">{formatEur(c.thisMonth.aiCostEur)}</td>
+                        <td className={cn(
+                          "py-2 pr-3 text-right tabular-nums font-medium",
+                          c.thisMonth.marginEur < 0 ? "text-red-500" : "text-emerald-600 dark:text-emerald-400"
+                        )}>
+                          {formatEur(c.thisMonth.marginEur)}
+                        </td>
+                        <td className="py-2 pr-3 text-right tabular-nums">{formatEur(c.lifetime.revenueEur)}</td>
+                        <td className="py-2 pr-3 text-right tabular-nums text-violet-600 dark:text-violet-400">{formatEur(c.lifetime.aiCostEur)}</td>
+                        <td className={cn(
+                          "py-2 pr-3 text-right tabular-nums font-medium",
+                          c.lifetime.marginEur < 0 ? "text-red-500" : "text-emerald-600 dark:text-emerald-400"
+                        )}>
+                          {formatEur(c.lifetime.marginEur)}
+                        </td>
+                        <td className="py-2 text-center">
+                          {c.overBudget === "blocked" && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 px-2 py-0.5">
+                              <XCircle className="h-3 w-3" /> 2x over
+                            </span>
+                          )}
+                          {c.overBudget === "economy" && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 px-2 py-0.5">
+                              <AlertTriangle className="h-3 w-3" /> over cap
+                            </span>
+                          )}
+                          {c.overBudget === "normal" && (
+                            <span className="text-[hsl(var(--muted-foreground))]">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
         )}
       </section>
 

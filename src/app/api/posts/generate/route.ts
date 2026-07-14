@@ -4,7 +4,9 @@ import { getBrand } from "@/lib/server/brand/getBrand"
 import { getBrandContext } from "@/lib/server/brand/getBrandContext"
 import { generateCaption } from "@/lib/server/posts/generateCaption"
 import { getTemplate } from "@/lib/shared/posts/templates"
-import { getModels, brandTier } from "@/lib/ai/models"
+import { brandTier } from "@/lib/ai/models"
+import { getBudgetAwareModels } from "@/lib/server/billing/aiBudget"
+import { createServiceClient } from "@/lib/supabase/service"
 
 export async function POST(request: Request) {
   try {
@@ -32,7 +34,21 @@ export async function POST(request: Request) {
     const ctx = await getBrandContext(brand.id, platform)
     if (!ctx) return NextResponse.json({ error: "Brand context unavailable" }, { status: 500 })
 
-    const models = getModels(brandTier(brand as { ai_tier?: string | null }))
+    // Budget-aware model selection (P5): forces economy models once the
+    // brand's account has crossed its monthly AI spend cap — never blocks
+    // user-facing generation outright. See src/lib/server/billing/aiBudget.ts.
+    const service = createServiceClient()
+    const { data: account } = await service
+      .from("accounts")
+      .select("subscription_tier")
+      .eq("id", (brand as { account_id: string }).account_id)
+      .maybeSingle()
+
+    const { models } = await getBudgetAwareModels({
+      accountId:   (brand as { account_id: string }).account_id,
+      plan:        account?.subscription_tier ?? "free",
+      brandAiTier: brandTier(brand as { ai_tier?: string | null }),
+    })
 
     const result = await generateCaption({
       brand_name:        ctx.brand_name,

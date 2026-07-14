@@ -2,6 +2,7 @@ import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { createServiceClient } from "@/lib/supabase/service"
 import { AdminDashboard } from "./AdminDashboard"
+import { getMarginReport } from "@/lib/server/admin/marginReport"
 
 /**
  * Type-bypass helper for tables not yet in the generated database.types.ts.
@@ -190,6 +191,15 @@ export default async function AdminPage() {
     trendUnprocessed:       trendUnprocessed ?? 0,
   }
 
+  // ── Company margins (P5, 2026-07-14) ──────────────────────────────────────
+  // Degrades gracefully: getMarginReport() only depends on tables that
+  // already exist (accounts, subscriptions, invoices, render_credit_transactions,
+  // ai_usage_logs, brands) — no pending migration required for this section.
+  const marginReport = await getMarginReport().catch((err) => {
+    console.error("[admin] margin report failed:", err)
+    return null
+  })
+
   return (
     <AdminDashboard
       syncRuns={cast(syncRuns)}
@@ -207,6 +217,7 @@ export default async function AdminPage() {
       aiUsageFeatures={aiUsageFeatures}
       feedbackLoopHealth={feedbackLoopHealth}
       importedFeedHealth={importedFeedHealth}
+      marginReport={marginReport}
     />
   )
 }

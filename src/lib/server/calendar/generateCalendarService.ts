@@ -18,8 +18,9 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import type { Database, Json } from "@/types/database.types"
 import { getBrandContext } from "@/lib/server/brand/getBrandContext"
 import { selectTemplate } from "@/lib/server/render/selectTemplate"
-import { getModels, brandTier } from "@/lib/ai/models"
+import { brandTier } from "@/lib/ai/models"
 import { logAiUsage } from "@/lib/ai/logUsage"
+import { getBudgetAwareModels } from "@/lib/server/billing/aiBudget"
 
 const client = new Anthropic({ apiKey: process.env.POSTFLOW_ANTHROPIC_KEY })
 
@@ -93,7 +94,7 @@ function defaultFrequency(platform: string): number {
  */
 export async function generateCalendarForBrand(
   supabase: SupabaseClient<Database>,
-  brand:    { id: string; ai_tier?: string | null },
+  brand:    { id: string; ai_tier?: string | null; account_id: string },
   input:    GenerateCalendarInput,
 ): Promise<GenerateCalendarResult> {
   const { year, month, platforms, pillars, frequencyOverrides = {}, shootingFrequency = "weekly" } = input
@@ -277,7 +278,20 @@ Goals: engagement | conversion | brand_awareness | lead_generation
 Post types: carousel | single_image | reel | story | text_only
 Required media types: photo | video | carousel | stock | none`
 
-  const models = getModels(brandTier(brand as { ai_tier?: string | null }))
+  // Budget-aware model selection (P5): forces economy models once the
+  // brand's account has crossed its monthly AI spend cap. Never blocks —
+  // calendar generation is user-facing. See src/lib/server/billing/aiBudget.ts.
+  const { data: account } = await supabase
+    .from("accounts")
+    .select("subscription_tier")
+    .eq("id", brand.account_id)
+    .maybeSingle()
+
+  const { models } = await getBudgetAwareModels({
+    accountId:   brand.account_id,
+    plan:        account?.subscription_tier ?? "free",
+    brandAiTier: brandTier(brand as { ai_tier?: string | null }),
+  })
   const message = await client.messages.create({
     model:      models.calendar,
     max_tokens: 4096,

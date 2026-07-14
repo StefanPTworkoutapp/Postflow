@@ -52,11 +52,11 @@ export const generateCalendarJob = inngest.createFunction(
     const brand = await step.run("load-brand", async () => {
       const { data, error } = await supabase
         .from("brands")
-        .select("id, ai_tier")
+        .select("id, ai_tier, account_id")
         .eq("id", job.brand_id)
         .maybeSingle()
       if (error || !data) throw new Error(`brand ${job.brand_id} not found`)
-      return data as { id: string; ai_tier?: string | null }
+      return data as { id: string; ai_tier?: string | null; account_id: string }
     })
 
     try {

@@ -22,16 +22,20 @@ export type AiTier = "standard" | "economy"
 
 export const MODELS = {
   // One-time onboarding — quality matters, infrequent
-  toneExtraction:  "claude-sonnet-4-6",
-  samplePost:      "claude-sonnet-4-6",
-  calibration:     "claude-sonnet-4-6",
-  imageExtraction: "claude-sonnet-4-6",
-  docExtraction:   "claude-sonnet-4-6",
+  toneExtraction:  "claude-sonnet-5",
+  samplePost:      "claude-sonnet-5",
+  calibration:     "claude-sonnet-5",
+  imageExtraction: "claude-sonnet-5",
+  docExtraction:   "claude-sonnet-5",
 
   // Background Inngest jobs — already individually tuned
   clipAnalyzer:    "claude-haiku-4-5",
-  inspireAnalyze:  "claude-opus-4-5",
-  nicheResearch:   "claude-opus-4-5",
+  // P5 right-sizing (2026-07-14): Opus 4.5 → Sonnet 5. These are structured
+  // extraction/research tasks, not open-ended reasoning — Sonnet 5 holds
+  // quality while cutting cost 5x ($15/$75 → $3/$15 per MTok input/output).
+  // This is the single biggest line item in the AI cost budget.
+  inspireAnalyze:  "claude-sonnet-5",
+  nicheResearch:   "claude-sonnet-5",
   toneLoop:        "claude-haiku-4-5",
   trendEmail:      "claude-haiku-4-5",
   trendFilter:     "claude-haiku-4-5",
@@ -49,8 +53,8 @@ export const MODELS = {
 
 const TIERED: Record<AiTier, { caption: string; calendar: string }> = {
   standard: {
-    caption:  "claude-sonnet-4-6",
-    calendar: "claude-sonnet-4-6",
+    caption:  "claude-sonnet-5",
+    calendar: "claude-sonnet-5",
   },
   economy: {
     // Haiku 4.5 is capable for focused tasks — captions are prompt-guided
@@ -58,7 +62,7 @@ const TIERED: Record<AiTier, { caption: string; calendar: string }> = {
     caption:  "claude-haiku-4-5",
     // Calendar generation uses a complex multi-rule prompt + JSON schema.
     // Use Sonnet to keep output quality even in economy mode.
-    calendar: "claude-sonnet-4-6",
+    calendar: "claude-sonnet-5",
   },
 }
 

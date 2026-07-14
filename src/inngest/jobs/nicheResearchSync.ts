@@ -17,6 +17,7 @@ import { createServiceClient } from "@/lib/supabase/service"
 import Anthropic               from "@anthropic-ai/sdk"
 import { MODELS }              from "@/lib/ai/models"
 import { logAiUsage }          from "@/lib/ai/logUsage"
+import { checkAiBudget }       from "@/lib/server/billing/aiBudget"
 
 /**
  * Type-bypass helper for tables not yet in the generated database.types.ts.
@@ -155,6 +156,43 @@ export const nicheResearchSync = inngest.createFunction(
     const results = await Promise.all(
       nichePairs.map(({ niche, platform }) =>
         step.run(`research-${niche}-${platform}`, async () => {
+          // ── AI budget gate (P5) ────────────────────────────────────────────
+          // Niche research cost is shared across every brand in this niche
+          // (logged brandId: null below), so it can't be attributed to one
+          // account. Instead: skip this pair only when EVERY brand sharing
+          // the niche is 2x over its own account's monthly cap — i.e. nobody
+          // who'd benefit from this run can actually afford more AI spend
+          // this month. See src/lib/server/billing/aiBudget.ts.
+          const { data: brandsForBudget } = await supabase
+            .from("brands")
+            .select("niche, industry, account_id")
+          const nicheBrandAccountIds = Array.from(new Set(
+            (brandsForBudget ?? [])
+              .filter(b => (b.niche ?? b.industry) === niche)
+              .map(b => b.account_id)
+          ))
+
+          if (nicheBrandAccountIds.length) {
+            const { data: accountRows } = await supabase
+              .from("accounts")
+              .select("id, subscription_tier")
+              .in("id", nicheBrandAccountIds)
+
+            const verdicts = await Promise.all(
+              (accountRows ?? []).map(a => checkAiBudget(a.id, a.subscription_tier ?? "free"))
+            )
+            const allBlocked = verdicts.length > 0 && verdicts.every(v => v.verdict === "blocked")
+
+            if (allBlocked) {
+              await newTables(supabase).from("research_runs").insert({
+                niche,
+                platform,
+                signals_found: 0,
+              })
+              return { niche, platform, signalsFound: 0, skipped: "all_brands_over_budget" }
+            }
+          }
+
           const signals = await researchNicheTrends(niche, platform)
 
           if (!signals.length) {

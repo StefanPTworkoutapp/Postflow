@@ -6,7 +6,7 @@
  *
  * PRICING TABLE — update when Anthropic changes prices.
  * All values are USD per 1 000 000 tokens.
- * Source: https://www.anthropic.com/pricing (last verified 2026-05-18)
+ * Source: https://www.anthropic.com/pricing (last verified 2026-07-14)
  */
 
 import { createServiceClient } from "@/lib/supabase/service"
@@ -21,9 +21,13 @@ interface ModelPricing {
 }
 
 const PRICING: Record<string, ModelPricing> = {
+  // Historical models — kept so old ai_usage_logs rows (and any stray calls
+  // still referencing them) compute a real cost instead of silently zeroing.
   "claude-opus-4-5":   { input: 15.00, output: 75.00, cache_read: 1.50,  cache_write: 18.75 },
   "claude-sonnet-4-6": { input: 3.00,  output: 15.00, cache_read: 0.30,  cache_write: 3.75  },
-  "claude-haiku-4-5":  { input: 0.80,  output: 4.00,  cache_read: 0.08,  cache_write: 1.00  },
+  // Current models (P5 right-sizing, 2026-07-14)
+  "claude-sonnet-5":   { input: 3.00,  output: 15.00, cache_read: 0.30,  cache_write: 3.75  },
+  "claude-haiku-4-5":  { input: 1.00,  output: 5.00,  cache_read: 0.10,  cache_write: 1.25  },
 }
 
 function computeCost(model: string, usage: UsagePayload): number {

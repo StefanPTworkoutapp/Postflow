@@ -22,6 +22,7 @@ import { validateInspirationUrl }    from "@/lib/server/inspiration/url-validato
 import { analyseInspirationPost, InspirationFetchError } from "@/lib/server/inspiration/analyse-post"
 import { generateInspirationExplanation } from "@/lib/server/inspiration/explanation-generator"
 import { createServiceClient }       from "@/lib/supabase/service"
+import { checkAiBudget }             from "@/lib/server/billing/aiBudget"
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const nt = (x: unknown) => x as any
@@ -35,6 +36,32 @@ export async function POST(req: NextRequest) {
 
     const brand = await getBrand()
     if (!brand) return NextResponse.json({ error: "No brand found" }, { status: 400 })
+
+    // ── AI budget gate (P5) ─────────────────────────────────────────────────────
+    // Inspiration Analyze is non-essential background-style AI work. Once the
+    // brand's account is 2x over its monthly cap, block it until month end —
+    // captions/calendar stay available (they only degrade to economy models).
+    // See src/lib/server/billing/aiBudget.ts.
+    {
+      const service = createServiceClient()
+      const { data: account } = await service
+        .from("accounts")
+        .select("subscription_tier")
+        .eq("id", (brand as { account_id: string }).account_id)
+        .maybeSingle()
+
+      const budget = await checkAiBudget(
+        (brand as { account_id: string }).account_id,
+        account?.subscription_tier ?? "free",
+      )
+
+      if (budget.verdict === "blocked") {
+        return NextResponse.json({
+          error:  "AI budget for this month reached. Inspiration Analyze is paused until next month — captions and calendar generation still work in economy mode.",
+          reason: "ai_budget_exceeded",
+        }, { status: 429 })
+      }
+    }
 
     // ── Body ────────────────────────────────────────────────────────────────────
     let body: { url?: string }
