@@ -4,7 +4,10 @@
  * Client-side video compression via ffmpeg.wasm.
  * Runs entirely in the browser — no server round-trip.
  *
- * Target: 720p / H.264 / CRF 26
+ * Target (P4, 2026-07-14 — media efficiency pass): 1080p / H.264 / CRF 26.
+ * Only applied to files over COMPRESS_THRESHOLD_BYTES (~80MB) — see
+ * shouldCompressVideo() below. Smaller clips upload as-is; the wasm
+ * transcode isn't worth the client-side CPU/time for an already-small file.
  * MOV files are automatically transcoded to MP4.
  * Returns a compressed File ready to upload.
  *
@@ -56,10 +59,10 @@ export async function compressVideo(
   // Write the file into ffmpeg's virtual FS
   await ffmpeg.writeFile(inputName, await fetchFile(file))
 
-  // Compress to 720p H.264 CRF 26, copy audio stream
+  // Compress to 1080p H.264 CRF 26, copy audio stream
   await ffmpeg.exec([
     "-i",        inputName,
-    "-vf",       "scale='min(1280,iw)':'min(720,ih)':force_original_aspect_ratio=decrease",
+    "-vf",       "scale='min(1920,iw)':'min(1080,ih)':force_original_aspect_ratio=decrease",
     "-c:v",      "libx264",
     "-crf",      "26",
     "-preset",   "fast",
@@ -89,14 +92,21 @@ export async function compressVideo(
   return new File([blob], compressedName, { type: "video/mp4" })
 }
 
-/** Returns true if the file should be compressed before upload */
+/** Files over this size get transcoded down to 1080p before upload. */
+export const COMPRESS_THRESHOLD_BYTES = 80 * 1024 * 1024 // ~80MB
+
+/**
+ * Returns true if the file should be compressed before upload.
+ * Gated on size (COMPRESS_THRESHOLD_BYTES) — small clips upload untouched.
+ */
 export function shouldCompressVideo(file: File): boolean {
   const type = file.type.toLowerCase()
-  return (
+  const isVideoType = (
     type === "video/mp4"       ||
     type === "video/quicktime" ||  // MOV
     type === "video/mov"       ||
     type === "video/avi"       ||
     type === "video/webm"
   )
+  return isVideoType && file.size > COMPRESS_THRESHOLD_BYTES
 }

@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState } from "react"
 import { Upload, X, CheckCircle2, AlertCircle, Loader2, Image as ImageIcon, Video, Zap } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { cn, compressionFeedback } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { uploadFile, type UploadStage } from "@/lib/client/upload/upload-manager"
 
@@ -15,6 +15,7 @@ interface UploadFile {
   progress?:  number
   error?:     string
   publicUrl?: string
+  compressionNote?: string | null
 }
 
 // Accept HEIC + increased size limit (compression handles oversized files)
@@ -39,6 +40,7 @@ const STAGE_LABEL: Record<UploadStage, string> = {
 export function MediaUploader({ onUploadComplete }: { onUploadComplete?: () => void }) {
   const [files, setFiles] = useState<UploadFile[]>([])
   const [draggingOver, setDraggingOver] = useState(false)
+  const [keepOriginalQuality, setKeepOriginalQuality] = useState(false) // per-session toggle, nothing persisted
   const inputRef = useRef<HTMLInputElement>(null)
 
   function addFiles(incoming: File[]) {
@@ -71,6 +73,7 @@ export function MediaUploader({ onUploadComplete }: { onUploadComplete?: () => v
 
     try {
       const result = await uploadFile(item.file, {
+        keepOriginalQuality,
         onStageChange: (stage) => {
           setFiles(prev => prev.map(f =>
             f.id === item.id ? { ...f, stage } : f
@@ -82,8 +85,11 @@ export function MediaUploader({ onUploadComplete }: { onUploadComplete?: () => v
           ))
         },
       })
+      const note = compressionFeedback(result.originalBytes, result.uploadedBytes)
       setFiles(prev => prev.map(f =>
-        f.id === item.id ? { ...f, status: "done", stage: "done", progress: 100, publicUrl: result.publicUrl } : f
+        f.id === item.id
+          ? { ...f, status: "done", stage: "done", progress: 100, publicUrl: result.publicUrl, compressionNote: note }
+          : f
       ))
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Upload failed"
@@ -130,6 +136,20 @@ export function MediaUploader({ onUploadComplete }: { onUploadComplete?: () => v
           </p>
         </div>
       </div>
+
+      {/* Compression preference — applies to files added from here on */}
+      <label
+        className="flex items-center justify-end gap-1.5 text-xs text-[hsl(var(--muted-foreground))] cursor-pointer select-none"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <input
+          type="checkbox"
+          checked={keepOriginalQuality}
+          onChange={(e) => setKeepOriginalQuality(e.target.checked)}
+          className="h-3.5 w-3.5"
+        />
+        Keep original quality (skip compression)
+      </label>
       <input
         ref={inputRef}
         type="file"
@@ -220,6 +240,10 @@ export function MediaUploader({ onUploadComplete }: { onUploadComplete?: () => v
                         </div>
                       )}
                     </div>
+                  )}
+
+                  {f.status === "done" && f.compressionNote && (
+                    <p className="text-[10px] text-green-600 dark:text-green-400 leading-tight">{f.compressionNote}</p>
                   )}
 
                   {f.error && <p className="text-xs text-[hsl(var(--destructive))] leading-tight">{f.error}</p>}

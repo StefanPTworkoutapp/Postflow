@@ -496,3 +496,32 @@ Both stay type-distinct on purpose: reel_cover-type templates are selected via `
 **Impact:** Brands with no saved `single_image` template slots for X/LinkedIn/TikTok now render natively for those platforms instead of a resized IG-style card. `docs/architecture` template registry docs (if any get created later) should list all 11 registered slugs, not just the original 8.
 
 **Impact:** When improving the week view, update `GET /api/calendar` to include `posts.scheduled_for` in the join, then use that time to position each entry in the correct hour slot.
+
+---
+
+## [2026-07-14] P4 — calendar generation + carousel/variant renders moved to Inngest background jobs
+
+**Decision:** Three previously-synchronous, slow-Claude/slow-Puppeteer HTTP routes are now enqueue-only, with the real work moved to Inngest functions:
+
+- `POST /api/calendar/generate` — validates + inserts a `calendar_generation_jobs` row (brand_id, year, month, status, input, result, error) + sends `postflow/calendar.generate.requested`. `src/inngest/jobs/generateCalendarJob.ts` runs the actual Claude call + `content_calendar` insert via the extracted `src/lib/server/calendar/generateCalendarService.ts` (same prompt/logic as before, just callable from both a route and a job — never duplicated). `GenerateCalendarModal.tsx` polls `GET /api/calendar/generate/status?jobId=` every 3s and shows "Generating your calendar…"; on failure the user's platform/pillar/frequency selections are untouched in local state so Generate can be retried with zero re-entry.
+- `POST /api/posts/[id]/render-carousel` and `POST /api/posts/[id]/render-variants` — validation (`assertCarouselValid`) stays synchronous in the route (bad input still 400s immediately); the route then inserts a `post_render_jobs` row (brand_id, post_id, job_type: 'carousel'|'variants', input, result, error) + sends the matching Inngest event. `renderCarouselJob.ts` / `renderVariantsJob.ts` call the extracted `carouselRenderService.ts` / `variantsRenderService.ts` (moved Puppeteer render + storage upload + `posts` row update out of the routes). `CarouselBuilder.tsx` and `PostEditor.tsx` now poll `GET /api/render-jobs/[jobId]` every ~2.5s instead of holding the fetch open.
+- `POST /api/posts/[id]/render` (single image) is UNCHANGED and stays synchronous — one Puppeteer page is fast enough for a blocking request (the documented fast-path exception).
+- `regenerate` (single calendar slot, Haiku) also stays synchronous — same fast-path exception.
+
+**Migrations (written, NOT applied — needs Stefan's `supabase db push` approval):**
+- `20260714000011_calendar_generation_jobs.sql`
+- `20260714000012_post_render_jobs.sql`
+
+Both are new tables, not in `database.types.ts` yet — routes/jobs use the same `nt()`/`newTables()` any-cast idiom as `dailyAnalyticsFetch.ts` until Stefan applies the migration and types are regenerated.
+
+**Alternatives considered:** Reusing `clip_forge_jobs`/`trend_builder_jobs` tables directly (rejected — those carry clip-forge/trend-specific columns like `shotstack_render_id`, `render_progress` that don't apply here; a lean job-per-concern table is simpler to reason about and matches the existing one-table-per-job-type pattern already used for those two features).
+
+**Impact:** `/api/inngest/route.ts` now declares `maxDuration = 120` (previously unset) since carousel/variant Puppeteer renders run synchronously inside an Inngest step invoked through that route — same ceiling the old blocking render routes declared.
+
+---
+
+## [2026-07-14] P4 — media compression thresholds tightened + "keep original quality" opt-out
+
+**Decision:** `compress-image.ts` changed from "always resize to 1200px + always re-encode to JPEG" to "only resize when longest side > 2048px; PNGs stay PNG (transparency preserved), never recompressed if already within limits." `compress-video.ts` changed from "always transcode to 720p" to "only transcode (to 1080p now, was 720p) when the file is over ~80MB" (`COMPRESS_THRESHOLD_BYTES`). A new shared `src/lib/client/upload/prepare-media-file.ts` wraps both for components that build their own FormData and POST directly to a route (calendar upload-media, carousel slide-media, stories upload) rather than going through the full `upload-manager.ts` signed-URL pipeline. Every upload surface (`MediaUploader.tsx`, `CalendarView.tsx`, `CarouselBuilder.tsx`, `StoriesClient.tsx`) got a "Keep original quality" checkbox (per-upload, nothing persisted) and a subtle "Compressed X → Y" feedback line (`compressionFeedback()` in `lib/utils.ts`).
+
+**Impact:** Existing callers of `compressImage`/`compressVideo` (MediaUploader, StoriesClient's raw upload) automatically get the new thresholds — no double recompression of already-small assets, no more silent PNG→JPEG transparency loss. Server-side Puppeteer renders (`renderPost.ts`) are exact-dimension PNGs and were never touched by this change, per spec.

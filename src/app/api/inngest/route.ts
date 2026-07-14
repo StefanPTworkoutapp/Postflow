@@ -19,6 +19,15 @@ import { clipForgeLearningLoop }     from "@/inngest/jobs/clipForgeLearningLoop"
 import { feedImportOnConnect }       from "@/inngest/jobs/feedImportOnConnect"
 import { feedImportNightly }         from "@/inngest/jobs/feedImportNightly"
 import { weeklyCalendarReoptimize }  from "@/inngest/jobs/weeklyCalendarReoptimize"
+import { generateCalendarJob }       from "@/inngest/jobs/generateCalendarJob"
+import { renderCarouselJob }         from "@/inngest/jobs/renderCarouselJob"
+import { renderVariantsJob }         from "@/inngest/jobs/renderVariantsJob"
+
+// Carousel/variant renders do real Puppeteer work synchronously inside an
+// Inngest step, invoked through this route — same maxDuration the old
+// blocking render routes declared (render-carousel, render-variants).
+export const maxDuration = 120
+export const runtime     = "nodejs"
 
 export const { GET, POST, PUT } = serve({
   client:    inngest,
@@ -42,5 +51,8 @@ export const { GET, POST, PUT } = serve({
     feedImportOnConnect,
     feedImportNightly,
     weeklyCalendarReoptimize,
+    generateCalendarJob,
+    renderCarouselJob,
+    renderVariantsJob,
   ],
 })

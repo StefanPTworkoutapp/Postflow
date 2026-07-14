@@ -480,6 +480,29 @@ export function PostEditor({ post, brandName, industry, contentLanguage = "en", 
     }
   }
 
+  // Background render (P4, 2026-07-14) — enqueue then poll for the result
+  // rather than holding the request open for 3 sequential Puppeteer renders.
+  async function pollVariantsJob(jobId: string): Promise<{ templateSlug: string; templateName: string; imageUrl: string }[]> {
+    const POLL_MS = 2_500
+    const MAX_POLLS = 48 // ~2 minutes ceiling
+
+    for (let i = 0; i < MAX_POLLS; i++) {
+      await new Promise(r => setTimeout(r, POLL_MS))
+      const res  = await fetch(`/api/render-jobs/${jobId}`)
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? "Failed to check render status")
+
+      if (json.status === "done") {
+        const variants = (json.result?.variants ?? []) as { templateSlug: string; templateName: string; imageUrl: string }[]
+        if (!variants.length) throw new Error("Variant render returned no variants")
+        return variants
+      }
+      if (json.status === "failed") throw new Error(json.error ?? "Variant render failed")
+      // pending/rendering — keep polling
+    }
+    throw new Error("Variant render is taking longer than expected — try again in a moment.")
+  }
+
   async function handleRenderVariants() {
     setRenderingVariants(true)
     setVariantError(null)
@@ -498,13 +521,16 @@ export function PostEditor({ post, brandName, industry, contentLanguage = "en", 
         headers: { "Content-Type": "application/json" },
         body:   JSON.stringify({}),
       })
-      let json: Record<string, unknown> = {}
-      try { json = await res.json() } catch { /* empty body — route may have timed out */ }
-      if (!res.ok || !(json.variants as unknown[])?.length) {
-        setVariantError((json.error as string) ?? "Variant render failed (timeout or crash — try again)")
+      const json = await res.json().catch(() => ({} as Record<string, unknown>))
+      if (!res.ok || !json.jobId) {
+        setVariantError((json.error as string) ?? "Could not start variant render — try again")
         return
       }
-      setVariants(json.variants as { templateSlug: string; templateName: string; imageUrl: string }[])
+
+      const variants = await pollVariantsJob(json.jobId as string)
+      setVariants(variants)
+    } catch (err) {
+      setVariantError(err instanceof Error ? err.message : "Variant render failed — try again")
     } finally {
       setRenderingVariants(false)
     }

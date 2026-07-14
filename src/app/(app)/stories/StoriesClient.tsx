@@ -23,8 +23,9 @@ import { Button }        from "@/components/ui/button"
 import { SelectCard }    from "@/components/clip-forge/SelectCard"
 import { ConnectPrompt } from "@/components/clip-forge/ConnectPrompt"
 import { FeedbackRow, BASE_FEEDBACK_TAGS } from "@/components/shared/FeedbackRow"
-import { cn }            from "@/lib/utils"
+import { cn, compressionFeedback } from "@/lib/utils"
 import { useConnections } from "@/hooks/useConnections"
+import { prepareMediaFile } from "@/lib/client/upload/prepare-media-file"
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -92,6 +93,8 @@ export function StoriesClient() {
   const [uploading,  setUploading]  = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [dragging,   setDragging]   = useState(false)
+  const [keepOriginalQuality, setKeepOriginalQuality] = useState(false) // per-session toggle, nothing persisted
+  const [compressionNote, setCompressionNote] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   // Step 1 — customise
@@ -113,12 +116,13 @@ export function StoriesClient() {
 
   // ── Step 0: Upload handlers ───────────────────────────────────────────────
 
-  const uploadFile = useCallback(async (file: File) => {
+  const uploadFile = useCallback(async (rawFile: File) => {
     setUploadError(null)
     setUploading(true)
+    setCompressionNote(null)
 
-    const isPhoto = ACCEPTED_PHOTO.includes(file.type)
-    const isVideo = ACCEPTED_VIDEO.includes(file.type)
+    const isPhoto = ACCEPTED_PHOTO.includes(rawFile.type)
+    const isVideo = ACCEPTED_VIDEO.includes(rawFile.type)
 
     if (!isPhoto && !isVideo) {
       setUploadError("Unsupported file type. Please upload a photo (JPEG/PNG/WEBP) or short video (MP4/MOV/WEBM).")
@@ -127,13 +131,18 @@ export function StoriesClient() {
     }
 
     const maxBytes = isPhoto ? MAX_PHOTO_BYTES : MAX_VIDEO_BYTES
-    if (file.size > maxBytes) {
+    if (rawFile.size > maxBytes) {
       setUploadError(`File too large. Max size: ${isPhoto ? "25 MB" : "200 MB"}.`)
       setUploading(false)
       return
     }
 
     try {
+      // Downscale client-side before upload (image > 2048px, video > 80MB) —
+      // unless the user opted to keep original quality for this upload.
+      const prepared = await prepareMediaFile(rawFile, { keepOriginalQuality })
+      const file = prepared.file
+
       // Get signed upload URL
       const urlRes = await fetch("/api/stories/upload-url", {
         method:  "POST",
@@ -172,6 +181,9 @@ export function StoriesClient() {
         previewUrl,
       })
 
+      const note = compressionFeedback(prepared.originalBytes, prepared.uploadedBytes)
+      if (note) setCompressionNote(note)
+
       // Auto-select template based on media type
       setTemplate(isPhoto ? "story-teaser" : "reel-cover")
 
@@ -181,7 +193,7 @@ export function StoriesClient() {
     } finally {
       setUploading(false)
     }
-  }, [])
+  }, [keepOriginalQuality])
 
   const onDrop = useCallback((e: DragEvent<HTMLDivElement>) => {
     e.preventDefault()
@@ -361,6 +373,16 @@ export function StoriesClient() {
             Photo uploads use the <strong>story-teaser</strong> template.
             Videos use the <strong>reel-cover</strong> template.
           </p>
+
+          <label className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={keepOriginalQuality}
+              onChange={(e) => setKeepOriginalQuality(e.target.checked)}
+              className="h-3.5 w-3.5"
+            />
+            Keep original quality (skip compression)
+          </label>
         </section>
       )}
 
@@ -377,6 +399,9 @@ export function StoriesClient() {
                 <video src={media.previewUrl} className="w-full h-full object-cover" muted playsInline />
               )}
             </div>
+            {compressionNote && (
+              <p className="text-[11px] text-green-600 dark:text-green-400 self-center">{compressionNote}</p>
+            )}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1">
                 {media.mediaType === "photo"

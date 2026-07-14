@@ -4,9 +4,10 @@ import { useState, useCallback, useRef, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { ChevronLeft, ChevronRight, PlusCircle, Sparkles, LayoutGrid, List, Loader2, ArrowRight, Upload, X, Camera, Video, Palette, Trash2, RefreshCw, CalendarDays, Columns3, Clock, Send } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { cn, compressionFeedback } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { GenerateCalendarModal } from "./GenerateCalendarModal"
+import { prepareMediaFile } from "@/lib/client/upload/prepare-media-file"
 
 // ── Schedule sign-off panel state ─────────────────────────────────────────────
 interface SchedulePanelState {
@@ -147,6 +148,8 @@ export function CalendarView({ initialEntries, initialYear, initialMonth, brandM
   const [kanbanDragOver, setKanbanDragOver] = useState<string | null>(null)
   const [creatingPost,    setCreatingPost]    = useState<string | null>(null)  // entryId being created
   const [uploadingFor,    setUploadingFor]    = useState<string | null>(null)  // entryId being uploaded
+  const [keepOriginalQuality, setKeepOriginalQuality] = useState(false)        // per-session upload toggle, nothing persisted
+  const [compressionNote, setCompressionNote] = useState<string | null>(null)  // transient "compressed X → Y" feedback
   const [deletingEntry,   setDeletingEntry]   = useState<string | null>(null)  // entryId being deleted
   const [regeneratingEntry, setRegeneratingEntry] = useState<string | null>(null) // entryId being regenerated
   const [schedulePanel,   setSchedulePanel]   = useState<SchedulePanelState | null>(null)
@@ -277,10 +280,12 @@ export function CalendarView({ initialEntries, initialYear, initialMonth, brandM
       ? `${entryId}:${uploadSlotIndex.current}`
       : entryId
     setUploadingFor(slotKey)
+    setCompressionNote(null)
 
     try {
+      const prepared = await prepareMediaFile(file, { keepOriginalQuality })
       const form = new FormData()
-      form.append("file", file)
+      form.append("file", prepared.file)
       if (uploadSlotIndex.current !== null) {
         form.append("slotIndex", String(uploadSlotIndex.current))
       }
@@ -293,6 +298,11 @@ export function CalendarView({ initialEntries, initialYear, initialMonth, brandM
           ? { ...e, media_urls: json.mediaUrls, status: "media_pending" }
           : e
       ))
+      const note = compressionFeedback(prepared.originalBytes, prepared.uploadedBytes)
+      if (note) {
+        setCompressionNote(note)
+        setTimeout(() => setCompressionNote(null), 5000)
+      }
     } finally {
       setUploadingFor(null)
       uploadSlotIndex.current = null
@@ -556,6 +566,22 @@ export function CalendarView({ initialEntries, initialYear, initialMonth, brandM
             </Link>
           </Button>
         </div>
+      </div>
+
+      {/* Media upload preferences — applies to every upload-media click below */}
+      <div className="flex items-center justify-end gap-2 -mt-1">
+        {compressionNote && (
+          <p className="text-[11px] text-[hsl(var(--muted-foreground))]">{compressionNote}</p>
+        )}
+        <label className="flex items-center gap-1.5 text-[11px] text-[hsl(var(--muted-foreground))] cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={keepOriginalQuality}
+            onChange={(e) => setKeepOriginalQuality(e.target.checked)}
+            className="h-3 w-3"
+          />
+          Keep original quality
+        </label>
       </div>
 
       {/* Hidden file input — shared across all list-view upload buttons */}

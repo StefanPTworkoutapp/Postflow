@@ -43,6 +43,7 @@ export function GenerateCalendarModal({ year, month, onClose, onDone }: Props) {
   )
   const [shootingFrequency, setShootingFrequency] = useState<"weekly" | "monthly">("weekly")
   const [generating, setGenerating] = useState(false)
+  const [jobPhase,   setJobPhase]   = useState<"enqueueing" | "generating" | null>(null)
   const [result,     setResult]     = useState<{ count: number; summary: Record<string, number> } | null>(null)
   const [error,      setError]      = useState<string | null>(null)
 
@@ -65,10 +66,45 @@ export function GenerateCalendarModal({ year, month, onClose, onDone }: Props) {
     }))
   }
 
+  // Job-status poll — background generation can take 20-60s (Claude call over
+  // a whole month). The modal stays open showing an honest "Generating…"
+  // state; user's platform/pillar/frequency choices stay in local state the
+  // whole time, so a failure never loses what they picked (Retry re-enqueues
+  // with the same selections).
+  async function pollJob(jobId: string) {
+    setJobPhase("generating")
+    const POLL_MS = 3_000
+    const MAX_POLLS = 60 // ~3 minutes ceiling
+
+    for (let i = 0; i < MAX_POLLS; i++) {
+      await new Promise(r => setTimeout(r, POLL_MS))
+      try {
+        const res  = await fetch(`/api/calendar/generate/status?jobId=${jobId}`)
+        const json = await res.json()
+        if (!res.ok) { setError(json.error ?? "Failed to check generation status"); return }
+
+        if (json.status === "done") {
+          setResult({ count: json.result?.count ?? 0, summary: json.result?.summary ?? {} })
+          return
+        }
+        if (json.status === "failed") {
+          setError(json.error ?? "Generation failed — try again.")
+          return
+        }
+        // still pending/running — keep polling
+      } catch {
+        // transient network hiccup — keep polling, don't give up on one failed check
+      }
+    }
+
+    setError("Generation is taking longer than expected. It may still finish in the background — check back shortly, or try again.")
+  }
+
   async function generate() {
     if (!selectedPlatforms.length) { setError("Select at least one platform."); return }
     if (!selectedPillars.length)   { setError("Select at least one content pillar."); return }
     setGenerating(true)
+    setJobPhase("enqueueing")
     setError(null)
     try {
       const res  = await fetch("/api/calendar/generate", {
@@ -85,10 +121,11 @@ export function GenerateCalendarModal({ year, month, onClose, onDone }: Props) {
         }),
       })
       const json = await res.json()
-      if (!res.ok) { setError(json.error ?? "Generation failed"); return }
-      setResult({ count: json.count, summary: json.summary ?? {} })
+      if (!res.ok || !json.jobId) { setError(json.error ?? "Failed to start generation"); return }
+      await pollJob(json.jobId)
     } finally {
       setGenerating(false)
+      setJobPhase(null)
     }
   }
 
@@ -293,7 +330,14 @@ export function GenerateCalendarModal({ year, month, onClose, onDone }: Props) {
               </div>
             </div>
 
-            {error && <p className="text-sm text-[hsl(var(--destructive))]">{error}</p>}
+            {error && (
+              <div className="rounded-lg border border-[hsl(var(--destructive))]/30 bg-[hsl(var(--destructive))]/5 px-3 py-2.5 space-y-1.5">
+                <p className="text-sm text-[hsl(var(--destructive))]">{error}</p>
+                <p className="text-xs text-[hsl(var(--muted-foreground))]">
+                  Your platform, pillar, and frequency choices above are unchanged — hit Generate again to retry.
+                </p>
+              </div>
+            )}
           </div>
         )}
 
@@ -305,9 +349,9 @@ export function GenerateCalendarModal({ year, month, onClose, onDone }: Props) {
             </p>
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={onClose} disabled={generating}>Cancel</Button>
-              <Button size="sm" onClick={generate} disabled={generating} className="gap-1.5 min-w-[120px]">
+              <Button size="sm" onClick={generate} disabled={generating} className="gap-1.5 min-w-[160px]">
                 {generating
-                  ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />Planning…</>
+                  ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />{jobPhase === "generating" ? "Generating your calendar…" : "Starting…"}</>
                   : <><Sparkles className="h-3.5 w-3.5" />Generate</>
                 }
               </Button>

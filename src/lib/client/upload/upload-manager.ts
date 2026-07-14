@@ -39,8 +39,18 @@ export interface UploadResult {
 
 export interface UploadOptions {
   brandId?:       string
+  /** Per-upload opt-out of client-side compression/downscaling. Nothing is persisted — the user re-chooses every time. */
+  keepOriginalQuality?: boolean
   onStageChange?: (stage: UploadStage) => void
   onProgress?:    (pct: number) => void
+}
+
+export interface UploadResultWithSizes extends UploadResult {
+  /** Original file size in bytes, before any client-side compression. */
+  originalBytes:   number
+  /** Size actually uploaded, in bytes (== originalBytes when uncompressed or keepOriginalQuality was set). */
+  uploadedBytes:   number
+  compressed:      boolean
 }
 
 // ── Main function ─────────────────────────────────────────────────────────────
@@ -48,29 +58,32 @@ export interface UploadOptions {
 export async function uploadFile(
   file:    File,
   options: UploadOptions = {},
-): Promise<UploadResult> {
-  const { brandId, onStageChange, onProgress } = options
+): Promise<UploadResultWithSizes> {
+  const { brandId, keepOriginalQuality, onStageChange, onProgress } = options
 
   const setStage = (s: UploadStage) => onStageChange?.(s)
   const setProgress = (p: number) => onProgress?.(p)
 
   // ── Step 1: Compress ───────────────────────────────────────────────────────
   let fileToUpload = file
+  let compressed = false
 
-  if (shouldCompressVideo(file)) {
+  if (!keepOriginalQuality && shouldCompressVideo(file)) {
     setStage("compressing")
     setProgress(0)
     try {
       fileToUpload = await compressVideo(file, pct => setProgress(Math.round(pct * 0.6)))
+      compressed = true
     } catch (err) {
       console.warn("[upload-manager] Video compression failed, uploading original:", err)
       fileToUpload = file
     }
-  } else if (shouldCompressImage(file)) {
+  } else if (!keepOriginalQuality && shouldCompressImage(file)) {
     setStage("compressing")
     setProgress(0)
     try {
       fileToUpload = await compressImage(file)
+      compressed = fileToUpload !== file && fileToUpload.size !== file.size
     } catch (err) {
       console.warn("[upload-manager] Image compression failed, uploading original:", err)
       fileToUpload = file
@@ -145,6 +158,9 @@ export async function uploadFile(
   return {
     path,
     publicUrl,
-    mediaId: confirmData.mediaId ?? "",
+    mediaId:       confirmData.mediaId ?? "",
+    originalBytes: file.size,
+    uploadedBytes: fileToUpload.size,
+    compressed,
   }
 }

@@ -15,7 +15,8 @@
 import { useState, useRef } from "react"
 import { Loader2, ChevronUp, ChevronDown, Plus, Trash2, ImageIcon, X, Play } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
+import { cn, compressionFeedback } from "@/lib/utils"
+import { prepareMediaFile } from "@/lib/client/upload/prepare-media-file"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -263,6 +264,8 @@ export function CarouselBuilder({ templateSlug, postId, captionFirstLine, ctaVal
   const [renderedUrls, setRenderedUrls] = useState<string[]>([])
   const [error,      setError]      = useState<string | null>(null)
   const [uploading,  setUploading]  = useState<number | null>(null) // slide index being uploaded
+  const [keepOriginalQuality, setKeepOriginalQuality] = useState(false) // per-session toggle, nothing persisted
+  const [compressionNote, setCompressionNote] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const uploadingForSlide = useRef<number | null>(null)
 
@@ -327,9 +330,11 @@ export function CarouselBuilder({ templateSlug, postId, captionFirstLine, ctaVal
     if (!file || idx === null) return
 
     setUploading(idx)
+    setCompressionNote(null)
     try {
+      const prepared = await prepareMediaFile(file, { keepOriginalQuality })
       const formData = new FormData()
-      formData.append("file", file)
+      formData.append("file", prepared.file)
       // Re-use calendar upload endpoint structure but for slide media
       const res = await fetch(`/api/posts/${postId}/slide-media`, {
         method: "POST",
@@ -338,6 +343,11 @@ export function CarouselBuilder({ templateSlug, postId, captionFirstLine, ctaVal
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? "Upload failed")
       updateSlide(idx, { mediaUrl: json.url })
+      const note = compressionFeedback(prepared.originalBytes, prepared.uploadedBytes)
+      if (note) {
+        setCompressionNote(note)
+        setTimeout(() => setCompressionNote(null), 5000)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed")
     } finally {
@@ -345,6 +355,25 @@ export function CarouselBuilder({ templateSlug, postId, captionFirstLine, ctaVal
       uploadingForSlide.current = null
       if (fileInputRef.current) fileInputRef.current.value = ""
     }
+  }
+
+  // Background render (P4, 2026-07-14) — enqueue then poll for the result
+  // rather than holding the request open for 1 Puppeteer page per slide.
+  async function pollRenderJob(jobId: string): Promise<{ imageUrls: string[] }> {
+    const POLL_MS = 2_500
+    const MAX_POLLS = 48 // ~2 minutes ceiling
+
+    for (let i = 0; i < MAX_POLLS; i++) {
+      await new Promise(r => setTimeout(r, POLL_MS))
+      const res  = await fetch(`/api/render-jobs/${jobId}`)
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? "Failed to check render status")
+
+      if (json.status === "done")   return json.result as { imageUrls: string[] }
+      if (json.status === "failed") throw new Error(json.error ?? "Render failed")
+      // pending/rendering — keep polling
+    }
+    throw new Error("Render is taking longer than expected — try again in a moment.")
   }
 
   async function handleRender() {
@@ -367,9 +396,12 @@ export function CarouselBuilder({ templateSlug, postId, captionFirstLine, ctaVal
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? "Render failed")
+      if (!json.jobId) throw new Error("No job returned — render could not be started")
 
-      setRenderedUrls(json.imageUrls)
-      onRendered?.(json.imageUrls)
+      const result = await pollRenderJob(json.jobId)
+
+      setRenderedUrls(result.imageUrls)
+      onRendered?.(result.imageUrls)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Render failed")
     } finally {
@@ -391,6 +423,20 @@ export function CarouselBuilder({ templateSlug, postId, captionFirstLine, ctaVal
           <p className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">
             Fill in each slide below — hints tell you exactly what to write.
           </p>
+        </div>
+        <div className="flex flex-col items-end gap-1">
+          {compressionNote && (
+            <p className="text-[11px] text-[hsl(var(--muted-foreground))]">{compressionNote}</p>
+          )}
+          <label className="flex items-center gap-1.5 text-[11px] text-[hsl(var(--muted-foreground))] cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={keepOriginalQuality}
+              onChange={(e) => setKeepOriginalQuality(e.target.checked)}
+              className="h-3 w-3"
+            />
+            Keep original quality
+          </label>
         </div>
       </div>
 
