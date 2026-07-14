@@ -24,6 +24,10 @@
 
 import { createServiceClient } from "@/lib/supabase/service"
 import { getHealthWeights }    from "@/lib/server/brand/format-registry"
+import { allTemplates }        from "@/lib/server/render/templates"
+
+/** slug → render TemplateDefinition, for type/platform compatibility checks. */
+const renderRegistry = new Map(allTemplates.map(t => [t.slug, t]))
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -303,8 +307,13 @@ export async function scoreTemplatesForBrand(brandId: string): Promise<{
         const timesDismmissed = dismissedSugg?.dismissed_count ?? 0
 
         if ((recentSuggestions ?? 0) === 0 && timesDismmissed < 2) {
-          // Find the best alternative template for this platform
-          const { data: bestAlternative } = await supabase
+          // Find the best alternative template for this platform. A suggestion
+          // must stay within the same render type — template_health is keyed by
+          // (brand, platform, slug) only, so without this filter a single_image
+          // template could be "replaced" by a higher-scoring carousel-only one,
+          // and since suggestions now auto-apply on approval (P1), that would
+          // put a wrong-type slug into the brand's slot rotation.
+          const { data: alternativeRows } = await supabase
             .from("template_health")
             .select("template_slug, health_score")
             .eq("brand_id", brandId)
@@ -312,8 +321,14 @@ export async function scoreTemplatesForBrand(brandId: string): Promise<{
             .neq("template_slug", templateSlug)
             .gt("health_score", newScore + 15)
             .order("health_score", { ascending: false })
-            .limit(1)
-            .maybeSingle()
+            .limit(10)
+
+          const currentDef = renderRegistry.get(templateSlug)
+          const bestAlternative = (alternativeRows ?? []).find((row: { template_slug: string; health_score: number }) => {
+            const altDef = renderRegistry.get(row.template_slug)
+            if (!altDef || !currentDef || altDef.type !== currentDef.type) return false
+            return altDef.platforms === null || altDef.platforms.includes(platform)
+          }) ?? null
 
           if (bestAlternative) {
             const reason = trend === "declining"
