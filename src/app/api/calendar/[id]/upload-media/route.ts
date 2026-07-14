@@ -2,10 +2,15 @@ import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getBrand } from "@/lib/server/brand/getBrand"
 import { checkStorageLimit } from "@/lib/server/billing/limits"
+import { validateMagicBytes } from "@/lib/server/media/sniffMime"
 
 /** Server-side MIME allowlist — accept images and videos only. Mirrors the
- * allowlist in /api/posts/[id]/slide-media and /api/media/upload-url. */
+ * allowlist in /api/posts/[id]/slide-media and /api/media/upload-url.
+ * SVG is explicitly excluded even though it matches "image/" — an SVG stored
+ * in the public media bucket executes inline <script> when opened directly
+ * at its public URL (stored XSS). */
 const ALLOWED_MIME_PREFIXES = ["image/", "video/"]
+const BLOCKED_MIME_TYPES    = ["image/svg+xml"]
 
 /**
  * POST /api/calendar/[id]/upload-media
@@ -62,9 +67,14 @@ export async function POST(
     return NextResponse.json({ error: "File too large (max 50 MB)" }, { status: 400 })
   }
 
-  // Server-side MIME allowlist — never trust the client's declared type alone,
-  // but this is the best signal we have without sniffing bytes.
+  // Server-side MIME allowlist — never trust the client's declared type alone.
   const contentType = file.type || "application/octet-stream"
+  if (BLOCKED_MIME_TYPES.includes(contentType)) {
+    return NextResponse.json(
+      { error: `File type "${contentType}" is not allowed (SVG can contain executable content).` },
+      { status: 400 },
+    )
+  }
   if (!ALLOWED_MIME_PREFIXES.some(prefix => contentType.startsWith(prefix))) {
     return NextResponse.json(
       { error: `File type "${contentType}" is not allowed. Upload images or videos only.` },
@@ -94,6 +104,15 @@ export async function POST(
 
   // Upload to Supabase Storage bucket "media"
   const arrayBuffer = await file.arrayBuffer()
+
+  // Magic-byte check — the declared contentType is client-supplied and can be
+  // spoofed; verify the actual file bytes match a known signature for an
+  // allowed format before it's ever written to public storage.
+  const sniff = validateMagicBytes(arrayBuffer, contentType)
+  if (!sniff.valid) {
+    return NextResponse.json({ error: sniff.reason ?? "File content does not match its declared type." }, { status: 400 })
+  }
+
   const { error: uploadErr } = await supabase.storage
     .from("media")
     .upload(storagePath, arrayBuffer, {

@@ -191,6 +191,81 @@ export default async function AdminPage() {
     trendUnprocessed:       trendUnprocessed ?? 0,
   }
 
+  // ── Background jobs health (P4 job tables, added P6 2026-07-14) ───────────
+  // Invisible-code guard for the P4 async conversions: calendar_generation_jobs
+  // (backs /api/calendar/generate) and post_render_jobs (backs render-carousel /
+  // render-variants). Same "expected to run but didn't" shape as the other
+  // sections — counts by status over 7 days, plus orphan detection: any row
+  // still sitting in an active (non-terminal) status after 15 minutes means the
+  // Inngest job silently died or never picked it up.
+  // Wrapped defensively — both tables ship in unapplied migrations
+  // (20260714000011 / 20260714000012); until Stefan approves + applies them,
+  // this degrades to zero rows rather than breaking the page.
+  const fifteenMinAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString()
+
+  const [
+    { data: calendarJobs7d },
+    { count: calendarJobsStuck },
+    { data: renderJobs7d },
+    { count: renderJobsStuck },
+  ] = await Promise.all([
+    nt(service).from("calendar_generation_jobs")
+      .select("status, created_at")
+      .gte("created_at", sevenDaysAgo),
+    nt(service).from("calendar_generation_jobs")
+      .select("id", { count: "exact", head: true })
+      .in("status", ["pending", "running"])
+      .lt("created_at", fifteenMinAgo),
+    nt(service).from("post_render_jobs")
+      .select("status, job_type, created_at")
+      .gte("created_at", sevenDaysAgo),
+    nt(service).from("post_render_jobs")
+      .select("id", { count: "exact", head: true })
+      .in("status", ["pending", "rendering"])
+      .lt("created_at", fifteenMinAgo),
+  ]).catch(() => [
+    { data: [] }, { count: 0 }, { data: [] }, { count: 0 },
+  ]) as [
+    { data: Array<{ status: string; created_at: string }> | null },
+    { count: number | null },
+    { data: Array<{ status: string; job_type: string; created_at: string }> | null },
+    { count: number | null },
+  ]
+
+  function countByStatus(rows: Array<{ status: string }>) {
+    const counts = { pending: 0, running: 0, done: 0, failed: 0 }
+    for (const r of rows) {
+      if (r.status === "pending")   counts.pending++
+      else if (r.status === "running" || r.status === "rendering") counts.running++
+      else if (r.status === "done")   counts.done++
+      else if (r.status === "failed") counts.failed++
+    }
+    return { ...counts, total: rows.length }
+  }
+
+  const renderRows = renderJobs7d ?? []
+
+  const backgroundJobsHealth = {
+    calendarGeneration: {
+      jobType:    "calendar_generation" as const,
+      last7d:     countByStatus(calendarJobs7d ?? []),
+      stuckCount: calendarJobsStuck ?? 0,
+    },
+    postRenderCarousel: {
+      jobType:    "post_render_carousel" as const,
+      last7d:     countByStatus(renderRows.filter(r => r.job_type === "carousel")),
+      stuckCount: 0, // stuck count below is combined per-table (job_type not filtered server-side)
+    },
+    postRenderVariants: {
+      jobType:    "post_render_variants" as const,
+      last7d:     countByStatus(renderRows.filter(r => r.job_type === "variants")),
+      stuckCount: 0,
+    },
+    // post_render_jobs' stuck count spans both job_types (carousel + variants);
+    // shown once at the table level rather than double-counted per type.
+    postRenderStuckTotal: renderJobsStuck ?? 0,
+  }
+
   // ── Company margins (P5, 2026-07-14) ──────────────────────────────────────
   // Degrades gracefully: getMarginReport() only depends on tables that
   // already exist (accounts, subscriptions, invoices, render_credit_transactions,
@@ -217,6 +292,7 @@ export default async function AdminPage() {
       aiUsageFeatures={aiUsageFeatures}
       feedbackLoopHealth={feedbackLoopHealth}
       importedFeedHealth={importedFeedHealth}
+      backgroundJobsHealth={backgroundJobsHealth}
       marginReport={marginReport}
     />
   )

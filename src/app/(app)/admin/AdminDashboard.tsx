@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useState, useCallback } from "react"
-import { CheckCircle2, AlertTriangle, XCircle, Clock, Activity, Database, Zap, TrendingUp, ClipboardCopy, Loader2, DollarSign, Download } from "lucide-react"
+import { CheckCircle2, AlertTriangle, XCircle, Clock, Activity, Database, Zap, TrendingUp, ClipboardCopy, Loader2, DollarSign, Download, Server } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -83,6 +83,27 @@ interface ImportedFeedHealth {
   lastImportAt:        string | null
 }
 
+interface JobTypeStatusCounts {
+  pending: number
+  running: number
+  done:    number
+  failed:  number
+  total:   number
+}
+
+interface JobTypeHealth {
+  jobType:    string
+  last7d:     JobTypeStatusCounts
+  stuckCount: number
+}
+
+interface BackgroundJobsHealth {
+  calendarGeneration:   JobTypeHealth
+  postRenderCarousel:   JobTypeHealth
+  postRenderVariants:   JobTypeHealth
+  postRenderStuckTotal: number
+}
+
 interface CompanyMarginRow {
   accountId:  string
   name:       string
@@ -125,9 +146,10 @@ interface Props {
   aiUsageBrands:      AiUsageRow[]
   aiUsageModels:      AiUsageRow[]
   aiUsageFeatures:    AiUsageRow[]
-  feedbackLoopHealth: FeedbackLoopHealth
-  importedFeedHealth: ImportedFeedHealth[]
-  marginReport:       MarginReport | null
+  feedbackLoopHealth:  FeedbackLoopHealth
+  importedFeedHealth:  ImportedFeedHealth[]
+  backgroundJobsHealth: BackgroundJobsHealth
+  marginReport:        MarginReport | null
 }
 
 function formatEur(n: number): string {
@@ -271,6 +293,7 @@ export function AdminDashboard({
   aiUsageFeatures,
   feedbackLoopHealth,
   importedFeedHealth,
+  backgroundJobsHealth,
   marginReport,
 }: Props) {
   const brandMap = useMemo(
@@ -622,6 +645,56 @@ export function AdminDashboard({
         </section>
 
       </div>
+
+      {/* Background Jobs (P4 job tables — calendar_generation_jobs / post_render_jobs, added P6) */}
+      <section className="rounded-xl border p-5 space-y-4">
+        <div className="flex items-center gap-2">
+          <Server className="h-4 w-4 text-sky-500" />
+          <h2 className="font-semibold text-sm">Background Jobs (7d)</h2>
+        </div>
+
+        {backgroundJobsHealth.calendarGeneration.last7d.total === 0
+          && backgroundJobsHealth.postRenderCarousel.last7d.total === 0
+          && backgroundJobsHealth.postRenderVariants.last7d.total === 0 && (
+          <p className="text-xs text-[hsl(var(--muted-foreground))]">
+            No job rows yet — appears once the P4 migrations (calendar_generation_jobs, post_render_jobs) are applied and a job runs.
+          </p>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {([
+            { label: "Calendar generation", health: backgroundJobsHealth.calendarGeneration, stuck: backgroundJobsHealth.calendarGeneration.stuckCount },
+            { label: "Render — carousel",   health: backgroundJobsHealth.postRenderCarousel,  stuck: null },
+            { label: "Render — variants",   health: backgroundJobsHealth.postRenderVariants,  stuck: null },
+          ] as const).map(({ label, health, stuck }) => (
+            <div key={label} className="space-y-2">
+              <p className="text-xs font-medium">{label}</p>
+              <div className="flex items-center gap-3 text-xs text-[hsl(var(--muted-foreground))]">
+                <span>{health.last7d.total} total</span>
+                <span className="text-green-600 dark:text-green-400">✓ {health.last7d.done}</span>
+                {health.last7d.failed > 0 && <span className="text-red-500">✗ {health.last7d.failed}</span>}
+                {health.last7d.pending + health.last7d.running > 0 && (
+                  <span className="text-blue-600 dark:text-blue-400">
+                    <Clock className="h-3 w-3 inline -mt-0.5 mr-0.5" />
+                    {health.last7d.pending + health.last7d.running} in flight
+                  </span>
+                )}
+              </div>
+              {stuck !== null && stuck > 0 && (
+                <div className="rounded-lg bg-red-50 dark:bg-red-950/20 px-2 py-1 text-xs text-red-600 dark:text-red-400">
+                  🚨 {stuck} stuck &gt;15min — expected to run but didn&apos;t
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {backgroundJobsHealth.postRenderStuckTotal > 0 && (
+          <div className="rounded-lg bg-red-50 dark:bg-red-950/20 px-3 py-2 text-xs text-red-600 dark:text-red-400">
+            🚨 {backgroundJobsHealth.postRenderStuckTotal} post_render_jobs row(s) (carousel + variants combined) stuck in pending/rendering &gt;15min — check renderCarouselJob / renderVariantsJob Inngest logs.
+          </div>
+        )}
+      </section>
 
       {/* Trend Signal Freshness table */}
       <section className="rounded-xl border p-5 space-y-4">

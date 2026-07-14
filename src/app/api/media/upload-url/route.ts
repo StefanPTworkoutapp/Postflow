@@ -30,7 +30,20 @@ export async function POST(request: Request) {
 
     // MIME type allowlist — accept images, videos, and PDFs only.
     // Rejects executables, scripts, and other unsafe types.
+    // SVG is explicitly excluded even though it matches "image/" — an SVG stored
+    // in the public media bucket executes inline <script> when opened directly
+    // at its public URL (stored XSS). This route hands out a signed upload URL
+    // for a DIRECT client-to-storage upload, so the server never sees the file
+    // bytes and cannot magic-byte-sniff them — the MIME allowlist is the only
+    // server-side gate here.
     const ALLOWED_MIME_PREFIXES = ["image/", "video/", "application/pdf"]
+    const BLOCKED_MIME_TYPES    = ["image/svg+xml"]
+    if (BLOCKED_MIME_TYPES.includes(contentType)) {
+      return NextResponse.json(
+        { error: `File type "${contentType}" is not allowed (SVG can contain executable content).` },
+        { status: 400 },
+      )
+    }
     if (!ALLOWED_MIME_PREFIXES.some(prefix => contentType.startsWith(prefix))) {
       return NextResponse.json(
         { error: `File type "${contentType}" is not allowed. Upload images, videos, or PDFs only.` },

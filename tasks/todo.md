@@ -1,6 +1,35 @@
 # PostFlow — Task Tracker
 
-Last updated: 2026-06-14
+Last updated: 2026-07-14
+
+---
+
+## 2026-07-14 build batch — P0–P6 (committed on `main`, NOT pushed)
+
+- **P0** — fixed silent publish failures, upload guards, template-slug bug, broken music refs
+- **P1** — closed the adapt loop: clip-forge/trend feedback consumers, niche formats wired in, template auto-swap, faster tone loop
+- **P2a** — Threads direct publisher + OAuth pair; TikTok re-enable behind `TIKTOK_DIRECT_PUBLISH_ENABLED` flag
+- **P2b** — dedicated X/LinkedIn/TikTok render templates; wired feedback tag pickers
+- **P2c** — guided connection wizard; reminder publish mode
+- **P3** — feed import, calendar dedupe/cold-start baselines, weekly re-optimization, de-fitness fallbacks
+- **P4** — background jobs (Inngest) for calendar generation + carousel/variant renders; tightened media compression
+- **P5** — model right-sizing, per-company margin dashboard/email, AI budget caps
+- **P6** — security cleanup: blocked SVG upload (stored-XSS hole) in calendar/slide-media/upload-url routes, added magic-byte sniffing (`src/lib/server/media/sniffMime.ts`) on the two routes that read the file body, fenced untrusted imported-post captions in the Claude prompt (`getBrandContext.ts`) behind a `<recently_published_topics>` data delimiter, added a "Background Jobs" admin health section (calendar_generation_jobs / post_render_jobs — 7d status counts + >15min stuck/orphan detection)
+
+**13 new unapplied migrations from this batch** (write-only, need `supabase db push` after Stefan's review):
+- `20260714000001_posts_publish_error.sql`
+- `20260714000002_clip_forge_music_skipped.sql`
+- `20260714000003_feedback_loop_processed_columns.sql`
+- `20260714000004_trend_feedback_table.sql`
+- `20260714000005_template_suggestions_apply_state.sql`
+- `20260714000006_add_x_linkedin_tiktok_templates.sql`
+- `20260714000007_connection_wizard_progress.sql`
+- `20260714000008_posts_publish_mode.sql`
+- `20260714000009_imported_posts.sql`
+- `20260714000010_calendar_optimizations.sql`
+- `20260714000011_calendar_generation_jobs.sql`
+- `20260714000012_post_render_jobs.sql`
+- `20260714000013_ai_budget_events.sql`
 
 ---
 
@@ -87,7 +116,7 @@ All of these are in `.env.local` already — just need to be pushed to Vercel:
 - [ ] `SUPABASE_SERVICE_ROLE_KEY`
 - [ ] `SERPAPI_KEY`
 - [ ] `NEWSAPI_KEY`
-- [ ] `INNGEST_SIGNING_KEY`
+- [ ] `INNGEST_SIGNING_KEY`  ← LAUNCH BLOCKER (P4, 2026-07-14): calendar generation + carousel/variant renders now run as Inngest background jobs — without this set in prod, those jobs never execute and the async conversion silently does nothing (job rows sit in `pending` forever)
 - [ ] `INNGEST_EVENT_KEY`
 - [ ] `RESEND_API_KEY`
 - [ ] `CALENDAR_LINK_SECRET`  ← CRITICAL (hardcoded fallback removed — must be set in prod)
@@ -97,8 +126,11 @@ All of these are in `.env.local` already — just need to be pushed to Vercel:
 - [ ] `META_APP_SECRET`
 - [ ] `TIKTOK_CLIENT_KEY`
 - [ ] `TIKTOK_CLIENT_SECRET`
+- [ ] `TIKTOK_DIRECT_PUBLISH_ENABLED` (P2a, 2026-07-14) — feature flag gating real TikTok publish; keep unset/false until TikTok production app re-approval lands
 - [ ] `LINKEDIN_CLIENT_ID`
 - [ ] `LINKEDIN_CLIENT_SECRET`
+- [ ] `THREADS_APP_ID` (P2a, 2026-07-14) — Threads direct-publish OAuth
+- [ ] `THREADS_APP_SECRET` (P2a, 2026-07-14) — Threads direct-publish OAuth
 - [ ] `POSTFLOW_ANTHROPIC_KEY`
 - [ ] `CRON_SECRET`
 - [ ] `MOLLIE_API_KEY` (live key)
