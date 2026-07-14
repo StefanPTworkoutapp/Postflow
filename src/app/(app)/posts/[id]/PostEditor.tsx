@@ -1163,7 +1163,7 @@ export function PostEditor({ post, brandName, industry, contentLanguage = "en", 
                     value={stockQuery}
                     onChange={e => setStockQuery(e.target.value)}
                     onKeyDown={e => { if (e.key === "Enter") void handleStockSearch(stockQuery) }}
-                    placeholder={`Search photos… (e.g. ${industry || "fitness"})`}
+                    placeholder={`Search photos… (e.g. ${industry || "your industry"})`}
                     className="flex-1 h-8 rounded-md border border-[hsl(var(--input))] bg-transparent px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[hsl(var(--ring))]"
                   />
                   <Button

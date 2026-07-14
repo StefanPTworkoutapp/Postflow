@@ -29,6 +29,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient }              from "@/lib/supabase/server"
 import { getActiveBrand }            from "@/lib/server/brand/getActiveBrand"
+import { inngest }                   from "@/inngest/client"
 
 /** Respond with an HTML page that postMessages back to the opener (popup mode)
  *  or falls back to a normal redirect if opened as a full navigation. */
@@ -219,6 +220,10 @@ export async function GET(req: NextRequest) {
     console.log(
       `[instagram-callback] Connected @${username} (ig_account: ${igBusinessAccountId ?? igUserId}) for brand ${brand.id}`
     )
+
+    // Fire-and-forget feed import (P3, 2026-07-14) — never blocks the redirect.
+    void inngest.send({ name: "postflow/social.connected", data: { brandId: brand.id, platform: "instagram" } })
+      .catch(err => console.error("[instagram-callback] feed import event failed to enqueue:", err))
 
     return oauthResult({ success: true, platform: "instagram", handle: username, redirectBase: REDIRECT_BASE, returnTo })
 

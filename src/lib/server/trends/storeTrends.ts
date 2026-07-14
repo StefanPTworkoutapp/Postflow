@@ -38,7 +38,10 @@ export async function storeTrendsForBrand(brandId: string): Promise<{
   if (!brand) return { google: 0, news: 0 }
 
   const weekOf  = getWeekStart()
-  const keyword = brand.niche ?? brand.industry ?? "health fitness"
+  // De-fitness-ified (P3, 2026-07-14): brand.niche/industry always wins; the
+  // ultimate fallback (brand has neither set) is a neutral generic term so a
+  // non-fitness brand isn't force-fed fitness trend keywords.
+  const keyword = brand.niche ?? brand.industry ?? "general business"
 
   // Fetch from both sources in parallel
   const [googleTrends, newsHeadlines] = await Promise.all([

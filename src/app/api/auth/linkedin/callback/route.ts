@@ -11,6 +11,7 @@
 import { NextRequest } from "next/server"
 import { createClient }   from "@/lib/supabase/server"
 import { getActiveBrand } from "@/lib/server/brand/getActiveBrand"
+import { inngest }        from "@/inngest/client"
 
 const REDIRECT_BASE = process.env.NEXT_PUBLIC_APP_URL ?? "https://postflow-amber.vercel.app"
 
@@ -193,6 +194,10 @@ export async function GET(req: NextRequest) {
     }
 
     console.log(`[linkedin-callback] Connected ${displayName} (sub: ${sub}) for brand ${brand.id}`)
+
+    // Fire-and-forget feed import (P3, 2026-07-14) — never blocks the redirect.
+    void inngest.send({ name: "postflow/social.connected", data: { brandId: brand.id, platform: "linkedin" } })
+      .catch(e => console.error("[linkedin-callback] feed import event failed to enqueue:", e))
 
     return oauthResult({ success: true, platform: "linkedin", handle: displayName, returnTo })
 

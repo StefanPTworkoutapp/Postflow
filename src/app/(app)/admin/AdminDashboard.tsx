@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useState, useCallback } from "react"
-import { CheckCircle2, AlertTriangle, XCircle, Clock, Activity, Database, Zap, TrendingUp, ClipboardCopy, Loader2, DollarSign } from "lucide-react"
+import { CheckCircle2, AlertTriangle, XCircle, Clock, Activity, Database, Zap, TrendingUp, ClipboardCopy, Loader2, DollarSign, Download } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -76,6 +76,13 @@ interface FeedbackLoopHealth {
   trendUnprocessed:      number
 }
 
+interface ImportedFeedHealth {
+  platform:            string
+  accountsConnected:   number
+  accountsWithImports: number
+  lastImportAt:        string | null
+}
+
 interface Props {
   syncRuns:           SyncRun[]
   researchRuns:       ResearchRun[]
@@ -88,6 +95,7 @@ interface Props {
   aiUsageModels:      AiUsageRow[]
   aiUsageFeatures:    AiUsageRow[]
   feedbackLoopHealth: FeedbackLoopHealth
+  importedFeedHealth: ImportedFeedHealth[]
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -225,6 +233,7 @@ export function AdminDashboard({
   aiUsageModels,
   aiUsageFeatures,
   feedbackLoopHealth,
+  importedFeedHealth,
 }: Props) {
   const brandMap = useMemo(
     () => new Map(brands.map(b => [b.id, b])),
@@ -361,6 +370,48 @@ export function AdminDashboard({
                     <span>Last run: {relativeTime(run.started_at)}</span>
                     <span className="text-green-600 dark:text-green-400">✓ {run.success_count}</span>
                     {run.error_count > 0 && <span className="text-red-500">✗ {run.error_count}</span>}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </section>
+
+        {/* Imported Feed (P3, 2026-07-14) */}
+        <section className="rounded-xl border p-5 space-y-4">
+          <div className="flex items-center gap-2">
+            <Download className="h-4 w-4 text-indigo-500" />
+            <h2 className="font-semibold text-sm">Imported Feed</h2>
+          </div>
+          {importedFeedHealth.map(h => {
+            const missing = h.accountsConnected - h.accountsWithImports
+            const isStale = h.lastImportAt
+              ? Date.now() - new Date(h.lastImportAt).getTime() > 2 * 24 * 60 * 60 * 1000
+              : h.accountsConnected > 0
+            return (
+              <div key={h.platform} className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium capitalize">{h.platform}</span>
+                  {h.accountsConnected === 0 ? (
+                    <span className="text-xs text-[hsl(var(--muted-foreground))]">No accounts connected</span>
+                  ) : missing > 0 ? (
+                    <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30">
+                      <AlertTriangle className="h-3 w-3" />
+                      {missing} without imports
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950/30">
+                      <CheckCircle2 className="h-3 w-3" />
+                      all imported
+                    </span>
+                  )}
+                </div>
+                {h.accountsConnected > 0 && (
+                  <div className="flex items-center gap-3 text-xs text-[hsl(var(--muted-foreground))]">
+                    <span>{h.accountsWithImports}/{h.accountsConnected} accounts with imports</span>
+                    <span className={cn(isStale && h.lastImportAt ? "text-amber-500" : undefined)}>
+                      Last import: {relativeTime(h.lastImportAt)}
+                    </span>
                   </div>
                 )}
               </div>

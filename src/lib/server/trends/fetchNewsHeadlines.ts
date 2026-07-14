@@ -1,6 +1,6 @@
 /**
- * NewsAPI fetcher — pulls trending health/fitness/business headlines
- * relevant to the brand's industry + niche.
+ * NewsAPI fetcher — pulls trending headlines relevant to the brand's
+ * industry + niche (any vertical, not just health/fitness).
  *
  * Requires env: NEWSAPI_KEY (from newsapi.org)
  *
@@ -13,14 +13,20 @@ export interface NewsHeadline {
   url:       string
 }
 
+/**
+ * Builds the NewsAPI query from the brand's own niche/industry — never
+ * hardcodes a vertical. De-fitness-ified (P3, 2026-07-14): previously this
+ * always appended "fitness OR wellness OR health" regardless of the brand's
+ * actual niche, which skewed every non-fitness brand's headlines toward
+ * fitness content. Now: niche/industry narrows the query when present; only
+ * when the brand has NEITHER set do we fall back to a neutral generic term
+ * (so the query is never empty).
+ */
 function buildQuery(industry: string | null, niche: string | null): string {
   const terms: string[] = []
   if (niche)     terms.push(`"${niche}"`)
   else if (industry) terms.push(industry)
-  // Always add general health/fitness/wellness context
-  if (!terms.some(t => t.toLowerCase().includes("health"))) {
-    terms.push("fitness OR wellness OR health")
-  }
+  if (!terms.length) terms.push("business OR industry trends")
   return terms.join(" AND ")
 }
 

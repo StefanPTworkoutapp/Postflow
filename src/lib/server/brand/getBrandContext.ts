@@ -94,6 +94,88 @@ interface NicheBenchmarkEntry {
   top_template_slugs: string[] | null
 }
 
+interface ImportedPostRow {
+  platform:   string
+  caption:    string | null
+  posted_at:  string | null
+  media_type: string | null
+  engagement: Record<string, number | null> | null
+}
+
+export interface ColdStartBaseline {
+  platform:       string
+  bestDaysOfWeek: number[]
+  bestHoursOfDay: number[]
+  topMediaType:   string | null
+  sampleSize:     number
+}
+
+/**
+ * Cold-start baseline (P3, 2026-07-14) — when a brand-new (or newly-connected)
+ * account has no PostFlow-native performance_patterns yet (sample_size < 5,
+ * see optimal-time.ts / this file's `filteredPatterns` filter), derive a
+ * PROVISIONAL best-day/best-hour/top-format signal from the account's own
+ * imported (pre-existing) published posts instead of falling back to a
+ * generic industry default. Simple + deterministic — no AI call:
+ *   1. Score each imported post: likes + comments×2 + shares×3
+ *      (weights match the emphasis already used elsewhere: comments/shares
+ *      are heavier engagement signals than a like).
+ *   2. Take the top 30% (min 3) highest-scoring posts.
+ *   3. Tabulate day-of-week + hour-of-day from their posted_at, media_type
+ *      frequency — return the top 2 days/hours and the modal media_type.
+ * Requires >=5 imported posts for a platform to produce a baseline at all
+ * (same sample-size bar as native patterns) — otherwise silently omitted.
+ */
+export function deriveColdStartBaselines(imported: ImportedPostRow[]): ColdStartBaseline[] {
+  const byPlatform = new Map<string, ImportedPostRow[]>()
+  for (const p of imported) {
+    if (!p.posted_at) continue
+    const list = byPlatform.get(p.platform) ?? []
+    list.push(p)
+    byPlatform.set(p.platform, list)
+  }
+
+  const baselines: ColdStartBaseline[] = []
+  for (const [platform, posts] of byPlatform) {
+    if (posts.length < 5) continue
+
+    const scored = posts
+      .map(p => {
+        const e = p.engagement ?? {}
+        const score = (e.likes ?? 0) + (e.comments ?? 0) * 2 + (e.shares ?? 0) * 3
+        return { ...p, score }
+      })
+      .sort((a, b) => b.score - a.score)
+
+    const topSlice = scored.slice(0, Math.max(3, Math.ceil(scored.length * 0.3)))
+
+    const dayCounts   = new Map<number, number>()
+    const hourCounts  = new Map<number, number>()
+    const mediaCounts = new Map<string, number>()
+    for (const p of topSlice) {
+      const d = new Date(p.posted_at!)
+      if (Number.isNaN(d.getTime())) continue
+      dayCounts.set(d.getUTCDay(),   (dayCounts.get(d.getUTCDay())   ?? 0) + 1)
+      hourCounts.set(d.getUTCHours(), (hourCounts.get(d.getUTCHours()) ?? 0) + 1)
+      if (p.media_type) mediaCounts.set(p.media_type, (mediaCounts.get(p.media_type) ?? 0) + 1)
+    }
+
+    const topN = (m: Map<number, number>, n: number) =>
+      [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, n).map(([k]) => k)
+
+    const topMediaType = [...mediaCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null
+
+    baselines.push({
+      platform,
+      bestDaysOfWeek: topN(dayCounts, 2),
+      bestHoursOfDay: topN(hourCounts, 2),
+      topMediaType,
+      sampleSize: posts.length,
+    })
+  }
+  return baselines
+}
+
 function buildPromptBlock(opts: {
   brand:                Record<string, unknown>
   tokens:               Record<string, { value: unknown; confidence: number }>
@@ -105,8 +187,10 @@ function buildPromptBlock(opts: {
   templateHealth?:      TemplateHealthEntry[]
   templateSuggestions?: TemplateSuggestionEntry[]
   nicheBenchmarks?:     NicheBenchmarkEntry[]
+  coldStartBaselines?:  ColdStartBaseline[]
+  recentTopics?:        string[]
 }): string {
-  const { brand, tokens, patterns, trends, toneSummary, platform, contentLanguage, templateHealth, templateSuggestions, nicheBenchmarks } = opts
+  const { brand, tokens, patterns, trends, toneSummary, platform, contentLanguage, templateHealth, templateSuggestions, nicheBenchmarks, coldStartBaselines, recentTopics } = opts
   const b = brand as {
     name: string; industry?: string; niche?: string; primary_goal?: string
     goals?: string[]; do_not_mention?: string[]
@@ -156,6 +240,27 @@ function buildPromptBlock(opts: {
   })
   const performanceBlock = perfLines.length
     ? `\nPERFORMANCE DATA (90-day real results — weight heavily):\n${perfLines.join("\n")}`
+    : ""
+
+  // ── Cold-start baseline block ───────────────────────────────────────────
+  // Only surfaced for a platform that has NO sufficient native pattern
+  // (filteredPatterns above) — a brand's own real 90-day data always wins
+  // once it exists; this is purely a bridge for day-one accounts.
+  const platformsWithPatterns = new Set(filteredPatterns.map(p => p.platform as string))
+  const coldStartLines = (coldStartBaselines ?? [])
+    .filter(cs => !platformsWithPatterns.has(cs.platform) && (!platform || cs.platform === platform))
+    .map(cs => {
+      const days  = cs.bestDaysOfWeek.map(d => DAY_NAMES[d]).join(",")
+      const hours = cs.bestHoursOfDay.map(h => `${h}:00`).join(",")
+      return `  ${cs.platform} (PROVISIONAL — from ${cs.sampleSize} imported posts, no native data yet): best days=${days} | best hours=${hours}${cs.topMediaType ? ` | top format=${cs.topMediaType}` : ""}`
+    })
+  const coldStartBlock = coldStartLines.length
+    ? `\nCOLD-START BASELINE (provisional, derived from this account's pre-existing published posts — treat as directional only, native data supersedes it once available):\n${coldStartLines.join("\n")}`
+    : ""
+
+  // ── Recently published dedupe block ─────────────────────────────────────
+  const recentTopicsBlock = recentTopics?.length
+    ? `\nRECENTLY PUBLISHED ON THIS ACCOUNT (do not repeat these topics — find a fresh angle or a different subject):\n${recentTopics.map(t => `  - ${t}`).join("\n")}`
     : ""
 
   // ── Trends block ──────────────────────────────────────────────
@@ -264,6 +369,8 @@ function buildPromptBlock(opts: {
     b.do_not_mention?.length ? `Never mention: ${b.do_not_mention.join(", ")}` : "",
     styleVolBlock,
     performanceBlock,
+    coldStartBlock,
+    recentTopicsBlock,
     trendBlock,
     templateBlock,
     nicheFormatsBlock,
@@ -342,7 +449,31 @@ export async function getBrandContext(
     .select("platform,top_template_slugs")
     .eq("niche_tag", nicheTag)
 
-  const [patternsResult, trendsResult, templateHealthResult, templateSuggestionsResult, nicheBenchmarksResult] = await Promise.allSettled([
+  // imported_posts is not yet in generated database.types.ts pre-migration —
+  // same type-bypass idiom as dailyAnalyticsFetch.ts's `newTables()` helper.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const importedPostsQuery = (supabase as any)
+    .from("imported_posts")
+    .select("platform,caption,posted_at,media_type,engagement")
+    .eq("brand_id", brandId)
+    .order("posted_at", { ascending: false })
+    .limit(200)
+
+  // PostFlow's own recently-published posts — for the dedupe block, so the
+  // "don't repeat this" list covers both pre-existing (imported) AND
+  // PostFlow-generated history, not just one source.
+  const ownRecentPostsQuery = supabase
+    .from("posts")
+    .select("caption")
+    .eq("brand_id", brandId)
+    .eq("status", "posted")
+    .order("posted_at", { ascending: false })
+    .limit(20)
+
+  const [
+    patternsResult, trendsResult, templateHealthResult, templateSuggestionsResult,
+    nicheBenchmarksResult, importedPostsResult, ownRecentPostsResult,
+  ] = await Promise.allSettled([
     supabase
       .from("performance_patterns")
       .select("platform,avg_engagement_rate,best_days_of_week,best_hours_of_day,best_content_pillars,best_post_types,top_hashtags,sample_size")
@@ -358,6 +489,8 @@ export async function getBrandContext(
     templateHealthQuery,
     templateSuggestionsQuery,
     nicheBenchmarksQuery,
+    importedPostsQuery,
+    ownRecentPostsQuery,
   ])
 
   const allPatterns = patternsResult.status === "fulfilled"
@@ -379,6 +512,26 @@ export async function getBrandContext(
   const nicheBenchmarks = (nicheBenchmarksResult.status === "fulfilled"
     ? (nicheBenchmarksResult.value.data ?? [])
     : []) as NicheBenchmarkEntry[]
+
+  const importedPosts = (importedPostsResult.status === "fulfilled"
+    ? ((importedPostsResult.value as { data: unknown[] | null }).data ?? [])
+    : []) as Array<{ platform: string; caption: string | null; posted_at: string | null; media_type: string | null; engagement: Record<string, number | null> | null }>
+
+  const ownRecentPosts = (ownRecentPostsResult.status === "fulfilled"
+    ? (ownRecentPostsResult.value.data ?? [])
+    : []) as Array<{ caption: string | null }>
+
+  // ── Dedupe block: recently-published topics (imported + PostFlow-own) ────
+  const truncate = (s: string) => (s.length > 80 ? `${s.slice(0, 77).trim()}…` : s)
+  const recentTopics = [
+    ...importedPosts.slice(0, 30).map(p => p.caption).filter((c): c is string => !!c?.trim()),
+    ...ownRecentPosts.map(p => p.caption).filter((c): c is string => !!c?.trim()),
+  ]
+    .map(truncate)
+    .filter((c, i, arr) => arr.indexOf(c) === i)   // dedupe
+    .slice(0, 40)
+
+  const coldStartBaselines = deriveColdStartBaselines(importedPosts)
 
   // 3. Build platform-specific performance context (for generateCaption)
   const platformPattern = platform
@@ -421,6 +574,8 @@ export async function getBrandContext(
     templateHealth:       templateHealth.length ? templateHealth : undefined,
     templateSuggestions:  templateSuggestions.length ? templateSuggestions : undefined,
     nicheBenchmarks:      nicheBenchmarks.length ? nicheBenchmarks : undefined,
+    coldStartBaselines:   coldStartBaselines.length ? coldStartBaselines : undefined,
+    recentTopics:         recentTopics.length ? recentTopics : undefined,
   })
 
   return {

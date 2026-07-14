@@ -90,7 +90,12 @@ ${entry.topic ?? "No topic set"}
 ${feedback ? `USER FEEDBACK: ${feedback}` : "Just generate a fresh, different idea."}
 
 RULES:
-- Topic must be SPECIFIC — not generic. Bad: "workout tips". Good: "Why your glutes aren't activating during squats (and how to fix it in 3 moves)"
+- Topic must be SPECIFIC and in THIS brand's own niche (${ctx.niche ?? ctx.industry ?? "its niche"}) — not generic category advice.
+  Bad (too generic, any niche): "workout tips" / "business tips" / "cooking tips"
+  Good (specific, illustrative of the LEVEL of specificity only — write your own in the brand's actual niche):
+    fitness: "Why your glutes aren't activating during squats (and how to fix it in 3 moves)"
+    food: "The one proofing mistake that makes your sourdough dense"
+    professional services: "Why your invoice terms are costing you 30 days of cashflow"
 - Media brief: short, direct, actionable. Max 20 words. Tell them exactly what to shoot/source.
 - For "photo" media type: describe a real, photographable moment the brand owner can capture.
 - For "stock": describe exactly what to search online.

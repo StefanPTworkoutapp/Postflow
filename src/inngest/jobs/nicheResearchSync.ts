@@ -64,7 +64,7 @@ Return ONLY a JSON array of up to 8 trend signals. Each item must have:
 - "rationale": string — one sentence explaining why this is trending now
 
 Focus on:
-- Topics that fit the ${niche} niche specifically (not generic fitness/business trends)
+- Topics that fit the ${niche} niche specifically (not generic ${niche} trends — be concrete)
 - Content formats performing well on ${platformLabel[platform] ?? platform} this month
 - Questions and pain points the audience is actively searching
 

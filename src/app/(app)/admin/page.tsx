@@ -59,6 +59,37 @@ export default async function AdminPage() {
     .order("processed_at", { ascending: false })
     .limit(50)
 
+  // ── Imported feed health (P3, 2026-07-14) ───────────────────────────────────
+  // Invisible-code guard for feedImportOnConnect/feedImportNightly: accounts
+  // connected on a supported platform vs accounts that actually have imported
+  // rows, plus last-import age — same "expected to run but didn't" shape as
+  // the Analytics Sync section above.
+  const IMPORT_PLATFORMS = ["instagram", "facebook", "linkedin"] as const
+  const { data: importAccounts } = await service
+    .from("social_accounts")
+    .select("brand_id, platform")
+    .in("platform", IMPORT_PLATFORMS as unknown as string[])
+    .eq("is_active", true)
+
+  const { data: importedPosts } = await nt(service)
+    .from("imported_posts")
+    .select("brand_id, platform, imported_at")
+    .order("imported_at", { ascending: false })
+    .limit(1000)
+
+  const importedFeedHealth = IMPORT_PLATFORMS.map(platform => {
+    const connected = (importAccounts ?? []).filter(a => a.platform === platform)
+    const platformImports = (importedPosts ?? []).filter((p: { platform: string }) => p.platform === platform)
+    const accountsWithImports = new Set(platformImports.map((p: { brand_id: string }) => p.brand_id)).size
+    const lastImportAt = platformImports[0]?.imported_at ?? null   // list is ordered desc overall, so first match per platform is the latest
+    return {
+      platform,
+      accountsConnected:   connected.length,
+      accountsWithImports,
+      lastImportAt,
+    }
+  })
+
   // ── Brand list (for name lookups) ─────────────────────────────────────────
   const { data: brands } = await service
     .from("brands")
@@ -175,6 +206,7 @@ export default async function AdminPage() {
       aiUsageModels={aiUsageModels}
       aiUsageFeatures={aiUsageFeatures}
       feedbackLoopHealth={feedbackLoopHealth}
+      importedFeedHealth={importedFeedHealth}
     />
   )
 }

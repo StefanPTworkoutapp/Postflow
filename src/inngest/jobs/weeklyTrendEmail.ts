@@ -36,7 +36,7 @@ async function generateNarrative(opts: {
       content: `You are a social media strategist writing a weekly trend intelligence briefing for a brand.
 
 Brand: ${opts.brandName}
-Industry: ${opts.industry ?? "health/fitness"}
+Industry: ${opts.industry ?? "general business"}
 Niche: ${opts.niche ?? "general"}
 
 Trending topics this week (Google Trends):

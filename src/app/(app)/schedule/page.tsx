@@ -11,6 +11,7 @@ import Link               from "next/link"
 import { createClient }   from "@/lib/supabase/server"
 import { getActiveBrand }       from "@/lib/server/brand/getActiveBrand"
 import { CalendarView }   from "../calendar/CalendarView"
+import { CalendarOptimizationsSummary, type CalendarOptimization } from "../calendar/CalendarOptimizationsSummary"
 import { ScheduleTabBar } from "./ScheduleTabBar"
 
 // ── Posts tab imports (inlined from posts/page.tsx) ───────────────────────────
@@ -123,6 +124,19 @@ export default async function SchedulePage({
     calendarEntries = data ?? []
   }
 
+  // ── Calendar optimizations (this week) ──────────────────────────────────────
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+  // calendar_optimizations is not yet in generated database.types.ts pre-migration.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: recentOptimizations } = activeBrandId
+    ? await (supabase as any)
+        .from("calendar_optimizations")
+        .select("id, entry_id, change_type, from_value, to_value, reason, created_at")
+        .eq("brand_id", activeBrandId)
+        .gte("created_at", sevenDaysAgo)
+        .order("created_at", { ascending: false })
+    : { data: [] }
+
   // ── Posts data ─────────────────────────────────────────────────────────────
   const { data: posts } = activeBrandId
     ? await supabase
@@ -187,6 +201,8 @@ export default async function SchedulePage({
               })}
             </div>
           )}
+
+          <CalendarOptimizationsSummary optimizations={(recentOptimizations ?? []) as CalendarOptimization[]} />
 
           <CalendarView
             // eslint-disable-next-line @typescript-eslint/no-explicit-any

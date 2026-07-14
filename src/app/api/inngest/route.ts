@@ -16,6 +16,9 @@ import { publishScheduledPost }      from "@/inngest/jobs/publishScheduledPost"
 import { evergreenRepurpose }        from "@/inngest/jobs/evergreenRepurpose"
 import { postPublishedAnalytics }    from "@/inngest/jobs/postPublishedAnalytics"
 import { clipForgeLearningLoop }     from "@/inngest/jobs/clipForgeLearningLoop"
+import { feedImportOnConnect }       from "@/inngest/jobs/feedImportOnConnect"
+import { feedImportNightly }         from "@/inngest/jobs/feedImportNightly"
+import { weeklyCalendarReoptimize }  from "@/inngest/jobs/weeklyCalendarReoptimize"
 
 export const { GET, POST, PUT } = serve({
   client:    inngest,
@@ -36,5 +39,8 @@ export const { GET, POST, PUT } = serve({
     evergreenRepurpose,
     postPublishedAnalytics,
     clipForgeLearningLoop,
+    feedImportOnConnect,
+    feedImportNightly,
+    weeklyCalendarReoptimize,
   ],
 })

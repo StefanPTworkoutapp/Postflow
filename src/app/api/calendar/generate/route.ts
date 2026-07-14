@@ -143,7 +143,11 @@ RULES:
 - Avoid weekends for LinkedIn (Mon–Fri only)
 - Instagram and TikTok can post any day
 - Vary post types: myth-busting, how-to, client FAQ, quick tip, stat/fact, personal story angle, before/after concept
-- Topics must be SPECIFIC (not "workout tips" — instead: "Why your hip flexors are causing your lower back pain")
+- Topics must be SPECIFIC, in THIS brand's own niche (${ctx.niche ?? ctx.industry ?? "their niche"}) — not generic category tips.
+  Examples of the level of specificity required (illustrative only — write your own topic in the brand's actual niche):
+    fitness: "Why your hip flexors are causing your lower back pain"
+    food/restaurant: "The 90-second mistake that makes your pasta water taste flat"
+    professional services: "The one line in your contract clients always skip — and why it costs you"
 - Each day should have at most one post per platform
 - Skip these already-occupied dates: ${[...occupiedDates].join(", ") || "none"}
 
@@ -164,7 +168,10 @@ MEDIA TYPE RULES — this determines what content the brand owner needs to provi
 "video" → a short personal video/reel they film themselves.
   Use for: exercise demos, talking to camera, Q&A, day-in-the-life, client shoutout (muted).
   Brief: what to film + duration. Max 20 words.
-  Example brief: "30s reel: film yourself demonstrating the hip flexor stretch, no talking, text overlay with step names."
+  Example briefs (illustrative — write one that fits THIS brand's niche):
+    fitness: "30s reel: film yourself demonstrating the hip flexor stretch, no talking, text overlay with step names."
+    food: "20s reel: overhead shot plating the dish step by step, text overlay naming each step."
+    professional services: "25s reel: talking-head explaining the one contract clause clients miss, text overlay with the key phrase."
 
 "carousel" → multiple slides the brand owner uploads; the app assembles into a branded carousel using the brand template.
   Use for: how-to steps, myth-busting, tips lists, before/after sequences, case study walkthroughs.
@@ -176,7 +183,10 @@ MEDIA TYPE RULES — this determines what content the brand owner needs to provi
 "stock" → visual content that must be sourced online (NOT personal). Use ONLY when the content genuinely cannot be a personal photo.
   Use for: anatomy diagrams, medical illustrations, scientific charts, specific equipment shots.
   Brief: describe exactly what to search for online. Max 20 words.
-  Example brief: "Search: 'hip flexor anatomy diagram' — clean medical illustration showing psoas and iliacus muscles."
+  Example briefs (illustrative — write one that fits THIS brand's niche):
+    fitness: "Search: 'hip flexor anatomy diagram' — clean medical illustration showing psoas and iliacus muscles."
+    food: "Search: 'fresh basil pesto ingredients flat lay' — clean overhead shot, natural light."
+    professional services: "Search: 'contract review checklist icon set' — clean flat-style business icons."
 
 "none" → text-only. No visual.
   Use for: LinkedIn thought leadership, X/Threads takes, opinion pieces, polls, pure text posts.
@@ -208,6 +218,11 @@ slide_content rules:
 - Middle items: headline = the point, body = 1–2 sentence explanation
 - Last item: is_cta: true — action-focused. "Save this", "Follow for more", or specific CTA. No body needed.
 - slide_count must equal the length of slide_content array.
+
+The JSON shape below is illustrative of STRUCTURE ONLY — the topic/headline/brief
+text in this example happens to be a fitness scenario, but that is not a hint about
+this brand's niche. Every field you generate must be written for THIS brand's own
+niche (${ctx.niche ?? ctx.industry ?? "its niche"}), never copied or adapted from this example.
 
 Return ONLY a JSON array (no markdown, no explanation):
 [

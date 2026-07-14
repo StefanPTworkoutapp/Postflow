@@ -12,6 +12,7 @@
 import { NextRequest } from "next/server"
 import { createClient }    from "@/lib/supabase/server"
 import { getActiveBrand }  from "@/lib/server/brand/getActiveBrand"
+import { inngest }         from "@/inngest/client"
 
 const GRAPH         = "https://graph.facebook.com/v21.0"
 const REDIRECT_BASE = process.env.NEXT_PUBLIC_APP_URL ?? "https://postflow-amber.vercel.app"
@@ -175,6 +176,10 @@ export async function GET(req: NextRequest) {
     }
 
     console.log(`[facebook-callback] Connected Page "${page.name}" (${page.id}) for brand ${brand.id}`)
+
+    // Fire-and-forget feed import (P3, 2026-07-14) — never blocks the redirect.
+    void inngest.send({ name: "postflow/social.connected", data: { brandId: brand.id, platform: "facebook" } })
+      .catch(e => console.error("[facebook-callback] feed import event failed to enqueue:", e))
 
     return oauthResult({ success: true, platform: "facebook", handle: page.name, returnTo })
 
