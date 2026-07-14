@@ -25,6 +25,7 @@ import { getBrand }                    from "@/lib/server/brand/getBrand"
 import { assembleBrandedRender }       from "@/lib/server/render/brand-assembler"
 import { submitRender }                from "@/lib/server/render/shotstack"
 import { transcribeClips }             from "@/lib/server/clip-forge/whisper-captions"
+import { resolveTrackUrl }             from "@/lib/server/music/music-selector"
 import { getRenderCreditBalance, deductRenderCredit } from "@/lib/server/billing/renderCredits"
 import type { BrandKit, ClipInput, AssembleSpec } from "@/lib/server/render/brand-assembler"
 
@@ -146,6 +147,21 @@ export async function POST(
     const tokensSnap = j.brand_tokens_snapshot ?? {}
     const textOverlayStyle = (tokensSnap.text_overlay_style?.value as string | undefined) ?? "bold_center"
 
+    // ── Verify the selected music track actually resolves before wiring it in ──
+    // The curated track library still has placeholder /tracks/*.mp3 paths that
+    // were never uploaded — including one of those in the render spec would
+    // make Shotstack fail trying to fetch a non-existent audio file. Fail soft:
+    // render WITHOUT a soundtrack instead of failing the whole render, and
+    // record why so the review UI can show "rendered without music".
+    const resolvedMusicSrc = resolveTrackUrl(musicSrc)
+    const musicSkippedReason =
+      musicSrc && !resolvedMusicSrc
+        ? "Selected music track is not yet available — rendered without a soundtrack."
+        : null
+    if (musicSkippedReason) {
+      console.warn(`[clip-forge/render] music track did not resolve, skipping: ${musicSrc}`)
+    }
+
     // ── Assemble render spec ──────────────────────────────────────────────────
     const assembleSpec: AssembleSpec = {
       clips:            clipInputs,
@@ -153,8 +169,8 @@ export async function POST(
       goal:             j.goal,
       brandKit:         j.brand_kit_snapshot,
       textOverlayStyle,
-      music: musicSrc
-        ? { src: musicSrc, volume: musicVolume }
+      music: resolvedMusicSrc
+        ? { src: resolvedMusicSrc, volume: musicVolume }
         : undefined,
     }
 
@@ -164,14 +180,33 @@ export async function POST(
     const renderResult = await submitRender(renderSpec)
 
     // ── Update job + deduct credit (atomically in order) ─────────────────────
-    await (nt(supabase))
+    const jobUpdate: Record<string, unknown> = {
+      status:               "rendering",
+      render_progress:      0,
+      shotstack_render_id:  renderResult.renderId,
+      music_skipped_reason: musicSkippedReason,
+    }
+    const { error: jobUpdateErr } = await (nt(supabase))
       .from("clip_forge_jobs")
-      .update({
-        status:               "rendering",
-        render_progress:      0,
-        shotstack_render_id:  renderResult.renderId,
-      })
+      .update(jobUpdate)
       .eq("id", jobId)
+
+    if (jobUpdateErr) {
+      // music_skipped_reason column may not exist yet (migration pending) —
+      // degrade gracefully so the render itself is never blocked on this.
+      console.warn(
+        "[clip-forge/render] music_skipped_reason column write failed (migration pending?) — falling back:",
+        jobUpdateErr.message,
+      )
+      await (nt(supabase))
+        .from("clip_forge_jobs")
+        .update({
+          status:              "rendering",
+          render_progress:     0,
+          shotstack_render_id: renderResult.renderId,
+        })
+        .eq("id", jobId)
+    }
 
     // Deduct 1 render credit now that the render has been submitted
     await deductRenderCredit({ accountId: user.id, jobId })

@@ -25,7 +25,7 @@ import { getBrandContext }            from "@/lib/server/brand/getBrandContext"
 import { getVersionTokens }           from "@/lib/server/trends/trend-filter"
 import { assembleBrandedRender }      from "@/lib/server/render/brand-assembler"
 import { submitRender }               from "@/lib/server/render/shotstack"
-import { selectMusicTracks }          from "@/lib/server/music/music-selector"
+import { selectMusicTracks, resolveTrackUrl } from "@/lib/server/music/music-selector"
 import type { TrendConcept }          from "@/lib/server/trends/trend-filter"
 import type { BrandKit, ClipInput }   from "@/lib/server/render/brand-assembler"
 
@@ -137,6 +137,16 @@ export async function POST(
     const tracksA = selectMusicTracks(versionA.music_energy, musicGenre, c.platform)
     const tracksB = selectMusicTracks(versionB.music_energy, musicGenre, c.platform)
 
+    // Verify the top track for each version actually resolves before wiring it
+    // into the render spec. The curated library still has placeholder
+    // /tracks/*.mp3 paths that were never uploaded — including one in a
+    // Shotstack render spec would make the render fail on a missing asset.
+    // Fail soft: render without a soundtrack for that version instead.
+    const musicA = resolveTrackUrl(tracksA[0]?.full_url)
+    const musicB = resolveTrackUrl(tracksB[0]?.full_url)
+    if (tracksA[0] && !musicA) console.warn(`[trend/render] music track did not resolve, skipping (version A): ${tracksA[0].full_url}`)
+    if (tracksB[0] && !musicB) console.warn(`[trend/render] music track did not resolve, skipping (version B): ${tracksB[0].full_url}`)
+
     const brandKit = c.format_spec.brand_kit_snapshot
 
     // ── Build Version A render spec (trend-first) ─────────────────────────────
@@ -150,7 +160,7 @@ export async function POST(
       goal:             c.format_spec.goal,
       brandKit,
       textOverlayStyle: versionA.text_overlay_style,
-      music:            tracksA[0] ? { src: tracksA[0].full_url, volume: 0.4 } : undefined,
+      music:            musicA ? { src: musicA, volume: 0.4 } : undefined,
     })
 
     // ── Build Version B render spec (brand-first) ─────────────────────────────
@@ -164,7 +174,7 @@ export async function POST(
       goal:             c.format_spec.goal,
       brandKit,
       textOverlayStyle: versionB.text_overlay_style,
-      music:            tracksB[0] ? { src: tracksB[0].full_url, volume: 0.4 } : undefined,
+      music:            musicB ? { src: musicB, volume: 0.4 } : undefined,
     })
 
     // ── Submit both to Shotstack in parallel ──────────────────────────────────

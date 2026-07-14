@@ -103,6 +103,8 @@ interface Post {
   carousel_image_urls:    string[] | null
   /** Set when the post has been shared to a client portal and reviewed */
   client_approval_status: "pending" | "approved" | "flagged" | null
+  /** Error message from the last failed direct-publish attempt (status === "failed") */
+  publish_error?:      string | null
   content_calendar:    {
     id?: string
     scheduled_date?: string
@@ -157,6 +159,8 @@ export function PostEditor({ post, brandName, industry, contentLanguage = "en", 
   const [saving,      setSaving]      = useState(false)
   const [scheduling,  setScheduling]  = useState(false)
   const [scheduleMsg, setScheduleMsg] = useState<{ type: "success" | "warn"; text: string } | null>(null)
+  const [retrying,    setRetrying]    = useState(false)
+  const [publishError, setPublishError] = useState<string | null>(post.publish_error ?? null)
   // notifyPublish: kept for backward-compat JSX; not triggered by direct publishing
   const [notifyPublish, setNotifyPublish] = useState(false)
   const [deleting,    setDeleting]    = useState(false)
@@ -329,6 +333,40 @@ export function PostEditor({ post, brandName, industry, contentLanguage = "en", 
       }
     } finally {
       setScheduling(false)
+    }
+  }
+
+  // Retry a failed direct-publish: re-fires the same schedule flow used by
+  // "Schedule post →" above, just with an immediate-future time so the post
+  // doesn't need a new date/time pick. Reuses POST /api/posts/[id]/schedule.
+  async function handleRetry() {
+    setRetrying(true)
+    setError(null)
+    setScheduleMsg(null)
+    try {
+      const scheduledAt = new Date(Date.now() + 2 * 60 * 1000).toISOString()
+      const schedRes = await fetch(`/api/posts/${post.id}/schedule`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ scheduledAt }),
+      })
+      const schedJson = await schedRes.json()
+
+      if (schedRes.ok) {
+        setStatus("scheduled")
+        setPublishError(null)
+        setScheduleMsg({
+          type: "success",
+          text: "✅ Retrying — this post will publish again in a couple of minutes.",
+        })
+        router.refresh()
+      } else if (schedJson.needsBuffer) {
+        setScheduleMsg({ type: "warn", text: `⚠️ ${schedJson.error}` })
+      } else {
+        setError(schedJson.error ?? "Retry failed")
+      }
+    } finally {
+      setRetrying(false)
     }
   }
 
@@ -586,6 +624,11 @@ export function PostEditor({ post, brandName, industry, contentLanguage = "en", 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <h1 className="text-xl font-semibold capitalize">{post.platform} post</h1>
+            {status === "failed" && (
+              <span className="inline-flex items-center gap-1 text-xs font-medium text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-full px-2 py-0.5">
+                ❌ Publish failed
+              </span>
+            )}
             {post.client_approval_status === "approved" && (
               <span className="inline-flex items-center gap-1 text-xs font-medium text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800 rounded-full px-2 py-0.5">
                 👍 Client approved
@@ -1320,11 +1363,20 @@ export function PostEditor({ post, brandName, industry, contentLanguage = "en", 
             </Button>
           )}
 
+          {/* Failed → Retry */}
+          {status === "failed" && (
+            <Button onClick={handleRetry} disabled={saving || retrying} className="bg-red-600 hover:bg-red-700 text-white">
+              {retrying
+                ? <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />Retrying…</>
+                : "🔁 Retry publish"}
+            </Button>
+          )}
+
           {/* Step back */}
-          {(status === "planned" || status === "ready" || status === "scheduled") && (
+          {(status === "planned" || status === "ready" || status === "scheduled" || status === "failed") && (
             <Button
               variant="ghost"
-              onClick={() => handleSave(status === "scheduled" ? "ready" : status === "ready" ? "planned" : "draft")}
+              onClick={() => handleSave(status === "scheduled" || status === "failed" ? "ready" : status === "ready" ? "planned" : "draft")}
               disabled={saving}
               className="text-[hsl(var(--muted-foreground))] ml-auto"
             >
@@ -1332,6 +1384,13 @@ export function PostEditor({ post, brandName, industry, contentLanguage = "en", 
             </Button>
           )}
         </div>
+
+        {/* Failed publish — clear error state with the reason */}
+        {status === "failed" && publishError && (
+          <p className="text-xs rounded-lg px-3 py-2 bg-red-50 text-red-700 dark:bg-red-950/20 dark:text-red-400">
+            ❌ Publish failed: {publishError}
+          </p>
+        )}
 
         {/* Carousel render reminder */}
         {selectedTemplate && ALL_TEMPLATES.find(t => t.slug === selectedTemplate)?.type === "carousel" && carouselImageUrls.length === 0 && (

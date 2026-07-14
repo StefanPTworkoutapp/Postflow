@@ -58,7 +58,10 @@ export async function POST(
       return NextResponse.json({ error: "Post not found" }, { status: 404 })
     }
 
-    if (!["draft", "ready", "planned"].includes(post.status)) {
+    // "failed" is included so a post whose direct publish failed (retries
+    // exhausted, status set by publishScheduledPost's onFailure handler) can
+    // be retried via the same Retry action that reuses this route.
+    if (!["draft", "ready", "planned", "failed"].includes(post.status)) {
       return NextResponse.json(
         { error: `Post status "${post.status}" cannot be scheduled` },
         { status: 400 },
@@ -82,17 +85,29 @@ export async function POST(
       )
     }
 
-    // Save scheduled_for + status
-    const { error: updateErr } = await supabase
+    // Save scheduled_for + status.
+    // publish_error is cleared here too — a Retry from a "failed" post should
+    // not keep showing the previous error once it's back in the schedule queue.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error: updateErr } = await (supabase as any)
       .from("posts")
       .update({
         scheduled_for: scheduledAt,
         status:        "scheduled",
+        publish_error: null,
       })
       .eq("id", postId)
 
     if (updateErr) {
-      return NextResponse.json({ error: updateErr.message }, { status: 500 })
+      // publish_error column may not exist yet (migration pending) — degrade gracefully
+      const { error: fallbackErr } = await supabase
+        .from("posts")
+        .update({ scheduled_for: scheduledAt, status: "scheduled" })
+        .eq("id", postId)
+
+      if (fallbackErr) {
+        return NextResponse.json({ error: fallbackErr.message }, { status: 500 })
+      }
     }
 
     // Also sync the calendar entry status

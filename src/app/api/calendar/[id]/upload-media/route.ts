@@ -3,6 +3,10 @@ import { createClient } from "@/lib/supabase/server"
 import { getBrand } from "@/lib/server/brand/getBrand"
 import { checkStorageLimit } from "@/lib/server/billing/limits"
 
+/** Server-side MIME allowlist — accept images and videos only. Mirrors the
+ * allowlist in /api/posts/[id]/slide-media and /api/media/upload-url. */
+const ALLOWED_MIME_PREFIXES = ["image/", "video/"]
+
 /**
  * POST /api/calendar/[id]/upload-media
  *
@@ -58,6 +62,16 @@ export async function POST(
     return NextResponse.json({ error: "File too large (max 50 MB)" }, { status: 400 })
   }
 
+  // Server-side MIME allowlist — never trust the client's declared type alone,
+  // but this is the best signal we have without sniffing bytes.
+  const contentType = file.type || "application/octet-stream"
+  if (!ALLOWED_MIME_PREFIXES.some(prefix => contentType.startsWith(prefix))) {
+    return NextResponse.json(
+      { error: `File type "${contentType}" is not allowed. Upload images or videos only.` },
+      { status: 400 },
+    )
+  }
+
   // Plan storage quota check
   const fileSizeMb = file.size / (1024 * 1024)
   const storageCheck = await checkStorageLimit(brand.id, fileSizeMb)
@@ -83,7 +97,7 @@ export async function POST(
   const { error: uploadErr } = await supabase.storage
     .from("media")
     .upload(storagePath, arrayBuffer, {
-      contentType: file.type || "application/octet-stream",
+      contentType,
       upsert:      false,
     })
 

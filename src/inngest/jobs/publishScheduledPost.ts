@@ -14,14 +14,47 @@
  *   6. Fire processPostAnalytics after 24h to let platform metrics settle
  *
  * Error handling:
- *   - Publish failure → update post status to "failed", store error message
- *   - Inngest retries automatically on unexpected throws (max 3 attempts by default)
+ *   - Inngest retries automatically on unexpected throws (retries: 2 → 3 attempts total)
+ *   - Once retries are exhausted, the `onFailure` handler below fires: it updates the
+ *     post's status to "failed" and stores the error in posts.publish_error so the
+ *     Posts list / PostEditor can surface a clear failed state with a Retry action
  */
 
 import { inngest }             from "../client"
 import { createServiceClient } from "@/lib/supabase/service"
 import { dispatchPublish }     from "@/lib/server/publish/dispatcher"
 import type { PostType }       from "@/lib/server/publish/types"
+
+/**
+ * Marks a post as failed and records the error message.
+ *
+ * Written defensively: `publish_error` is a column added in migration
+ * 20260714000001_posts_publish_error.sql. Until that migration is applied in
+ * a given environment, the first update (which includes the column) will
+ * fail — in that case we fall back to a plain status update so the post is
+ * never left silently stuck on "scheduled" even pre-migration.
+ */
+async function markPostFailed(postId: string, message: string) {
+  const supabase = createServiceClient()
+  const truncated = message.slice(0, 2000)
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error: updateErr } = await (supabase as any)
+    .from("posts")
+    .update({ status: "failed", publish_error: truncated })
+    .eq("id", postId)
+
+  if (updateErr) {
+    console.warn(
+      "[publishScheduledPost] publish_error column write failed (migration pending?) — falling back to status-only update:",
+      updateErr.message,
+    )
+    await supabase
+      .from("posts")
+      .update({ status: "failed" })
+      .eq("id", postId)
+  }
+}
 
 export const publishScheduledPost = inngest.createFunction(
   {
@@ -30,6 +63,24 @@ export const publishScheduledPost = inngest.createFunction(
     triggers:    [{ event: "postflow/post.scheduled" }],
     retries:     2,
     concurrency: { limit: 10 },
+    // Fires once Inngest has exhausted all retries for this run (max 3
+    // attempts total: the initial run + `retries: 2`). This is the terminal
+    // failure path — mark the post "failed" with the error so it's no longer
+    // silently stuck on "scheduled" and the UI can offer a Retry action.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    onFailure: async ({ event, error }: any) => {
+      const originalData = event?.data?.event?.data as
+        | { postId?: string }
+        | undefined
+      const postId = originalData?.postId
+      if (!postId) {
+        console.error("[publishScheduledPost] onFailure fired with no postId in original event data")
+        return
+      }
+      const message = error instanceof Error ? error.message : String(error ?? "Unknown publish error")
+      console.error(`[publishScheduledPost] Post ${postId} failed to publish after retries: ${message}`)
+      await markPostFailed(postId, message)
+    },
   },
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async ({ event, step }: any) => {
@@ -113,15 +164,27 @@ export const publishScheduledPost = inngest.createFunction(
     // ── Step 5: Mark as posted ────────────────────────────────────────────────
     await step.run("mark-posted", async () => {
       const supabase = createServiceClient()
-      await supabase
+      const baseUpdate = {
+        status:         "posted",
+        posted_at:      new Date().toISOString(),
+        posted_url:     result.postedUrl ?? null,
+        buffer_post_id: result.publishedId, // reusing this column as platform_post_id
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: updateErr } = await (supabase as any)
         .from("posts")
-        .update({
-          status:         "posted",
-          posted_at:      new Date().toISOString(),
-          posted_url:     result.postedUrl ?? null,
-          buffer_post_id: result.publishedId, // reusing this column as platform_post_id
-        })
+        // publish_error clears any error recorded by a previous failed attempt
+        .update({ ...baseUpdate, publish_error: null })
         .eq("id", postId)
+
+      if (updateErr) {
+        // publish_error column not present yet (migration pending) — degrade gracefully
+        console.warn(
+          "[publishScheduledPost] publish_error column write failed (migration pending?) — falling back:",
+          updateErr.message,
+        )
+        await supabase.from("posts").update(baseUpdate).eq("id", postId)
+      }
     })
 
     // ── Step 6: Schedule analytics fetch in 24h ───────────────────────────────

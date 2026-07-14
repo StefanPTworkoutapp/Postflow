@@ -20,6 +20,41 @@ interface TemplateSlot {
 }
 
 /**
+ * Render template slugs (from the registry at src/lib/server/render/templates/index.ts),
+ * grouped by post_type. Used when a brand has no saved template slots — the
+ * result of selectTemplate() is stored as posts.template_slug / content_calendar
+ * entries, which the render pipeline resolves via getTemplate(slug) from that
+ * registry. It must NEVER return a caption-template id (DEFAULT_TEMPLATES
+ * below, e.g. "edu-tips") — those live in a different id namespace and would
+ * make getTemplate() throw "Unknown template slug".
+ */
+const RENDER_SLUGS_BY_POST_TYPE: Record<string, string[]> = {
+  single_image:      ["photo-overlay", "edu-bold", "quote-card", "dark-statement", "tip-numbered"],
+  carousel:          ["carousel-edu", "carousel-myth"],
+  reel:              ["reel-cover"],
+  reel_cover:        ["reel-cover"],
+  story:             ["story-teaser"],
+  // No dedicated render template exists for these post types yet — fall back
+  // to the safest general-purpose single-image slug rather than throwing.
+  text_only:         ["photo-overlay"],
+  quote:             ["quote-card"],
+  testimonial:       ["photo-overlay"],
+  behind_the_scenes: ["photo-overlay"],
+}
+
+/** Single-slug fallback per post_type, used when there's no rotation pool to pick from. */
+function ultimateFallbackSlug(postType: string): string {
+  switch (postType) {
+    case "carousel":   return "carousel-edu"
+    case "reel":
+    case "reel_cover": return "reel-cover"
+    case "story":      return "story-teaser"
+    case "quote":      return "quote-card"
+    default:           return "photo-overlay"
+  }
+}
+
+/**
  * Select the next template slug to use for a brand + post_type combination.
  *
  * @param brandId   - brands.id
@@ -50,13 +85,16 @@ export async function selectTemplate(
     return slot.template_slug
   }
 
-  // 2. Fallback: pick a default template for this post_type
-  const defaults = DEFAULT_TEMPLATES.filter(t => t.post_type === postType)
-  if (defaults.length === 0) {
-    // Ultimate fallback: any template
-    return DEFAULT_TEMPLATES[postCount % DEFAULT_TEMPLATES.length]?.id ?? "edu-tips"
+  // 2. Fallback: rotate through the render templates valid for this post_type.
+  // (Must return a render slug, not a caption-template id — see
+  // RENDER_SLUGS_BY_POST_TYPE above.)
+  const renderSlugs = RENDER_SLUGS_BY_POST_TYPE[postType]
+  if (!renderSlugs || renderSlugs.length === 0) {
+    // Ultimate fallback: no pool for this post_type at all — pick the single
+    // best-fit render slug so callers always get something valid.
+    return ultimateFallbackSlug(postType)
   }
-  return defaults[postCount % defaults.length].id
+  return renderSlugs[postCount % renderSlugs.length]
 }
 
 /**

@@ -36,12 +36,27 @@ export async function GET(
     if (!brand) return NextResponse.json({ error: "No brand found" }, { status: 400 })
 
     // ── Load job ──────────────────────────────────────────────────────────────
-    const { data: job, error } = await (nt(supabase))
+    // music_skipped_reason is added by migration
+    // 20260714000002_clip_forge_music_skipped.sql — select it defensively so a
+    // pending migration doesn't 404 every poll (an unknown column fails the
+    // whole select, not just that field).
+    let job: unknown
+    let error: unknown
+    ;({ data: job, error } = await (nt(supabase))
       .from("clip_forge_jobs")
-      .select("id, brand_id, status, render_progress, shotstack_render_id, output_video_url, output_caption, output_hashtags")
+      .select("id, brand_id, status, render_progress, shotstack_render_id, output_video_url, output_caption, output_hashtags, music_skipped_reason")
       .eq("id", jobId)
       .eq("brand_id", brand.id)
-      .maybeSingle()
+      .maybeSingle())
+
+    if (error) {
+      ;({ data: job, error } = await (nt(supabase))
+        .from("clip_forge_jobs")
+        .select("id, brand_id, status, render_progress, shotstack_render_id, output_video_url, output_caption, output_hashtags")
+        .eq("id", jobId)
+        .eq("brand_id", brand.id)
+        .maybeSingle())
+    }
 
     if (error || !job) {
       return NextResponse.json({ error: "Job not found" }, { status: 404 })
@@ -56,6 +71,8 @@ export async function GET(
       output_video_url: string | null
       output_caption: string | null
       output_hashtags: string[] | null
+      /** May be undefined pre-migration (20260714000002_clip_forge_music_skipped.sql) */
+      music_skipped_reason?: string | null
     }
     const j = job as JobRow
 
@@ -80,12 +97,13 @@ export async function GET(
           .eq("id", jobId)
 
         return NextResponse.json({
-          status:         newStatus,
-          renderProgress: renderStatus.progress,
-          outputVideoUrl: renderStatus.url ?? j.output_video_url,
-          outputCaption:  j.output_caption,
-          outputHashtags: j.output_hashtags,
-          error:          renderStatus.error,
+          status:             newStatus,
+          renderProgress:     renderStatus.progress,
+          outputVideoUrl:     renderStatus.url ?? j.output_video_url,
+          outputCaption:      j.output_caption,
+          outputHashtags:     j.output_hashtags,
+          musicSkippedReason: j.music_skipped_reason ?? null,
+          error:              renderStatus.error,
         })
       } catch (pollErr) {
         console.warn("[clip-forge/get] Shotstack poll failed:", pollErr)
@@ -94,11 +112,12 @@ export async function GET(
     }
 
     return NextResponse.json({
-      status:         j.status,
-      renderProgress: j.render_progress,
-      outputVideoUrl: j.output_video_url,
-      outputCaption:  j.output_caption,
-      outputHashtags: j.output_hashtags,
+      status:             j.status,
+      renderProgress:     j.render_progress,
+      outputVideoUrl:     j.output_video_url,
+      outputCaption:      j.output_caption,
+      outputHashtags:     j.output_hashtags,
+      musicSkippedReason: j.music_skipped_reason ?? null,
     })
 
   } catch (err) {

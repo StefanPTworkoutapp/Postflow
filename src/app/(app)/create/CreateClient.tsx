@@ -59,11 +59,13 @@ interface JobResult {
 }
 
 interface JobStatus {
-  status:         string
-  renderProgress: number
-  outputVideoUrl: string | null
-  outputCaption:  string | null
-  outputHashtags: string[] | null
+  status:             string
+  renderProgress:     number
+  outputVideoUrl:     string | null
+  outputCaption:      string | null
+  outputHashtags:     string[] | null
+  /** Set when the selected music track didn't resolve — rendered without a soundtrack */
+  musicSkippedReason?: string | null
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
@@ -388,6 +390,13 @@ export function CreateClient() {
                 className="max-h-[480px] max-w-full rounded-xl border shadow-sm"
               />
             </div>
+          )}
+
+          {/* Music fell back — rendered without a soundtrack */}
+          {jobStatus?.musicSkippedReason && (
+            <p className="text-xs rounded-lg px-3 py-2 bg-amber-50 text-amber-700 dark:bg-amber-950/20 dark:text-amber-400">
+              🔇 Rendered without music: {jobStatus.musicSkippedReason}
+            </p>
           )}
 
           {/* Caption */}

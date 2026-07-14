@@ -71,6 +71,7 @@ export default async function PostPage({ params }: Props) {
           slide_content:        (post.slide_content as any) ?? null,
           carousel_image_urls:    (post.carousel_image_urls as string[] | null) ?? null,
           client_approval_status: post.client_approval_status as "pending" | "approved" | "flagged" | null ?? null,
+          publish_error:          (post as unknown as { publish_error?: string | null }).publish_error ?? null,
           content_calendar:       cal,
         }}
         brandName={brand.name}

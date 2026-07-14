@@ -21,6 +21,7 @@ import { PlusCircle, FileText } from "lucide-react"
 
 // ── Upload tab imports ────────────────────────────────────────────────────────
 import { UploadTabContent } from "./UploadTabContent"
+import { RetryPublishButton } from "./RetryPublishButton"
 
 export const metadata: Metadata = { title: "PostFlow · Schedule" }
 
@@ -233,11 +234,16 @@ export default async function SchedulePage({
             <div className="space-y-3">
               {posts.map((post) => {
                 const cal = post.content_calendar as { scheduled_date?: string; topic?: string } | null
+                // publish_error may not be selected in the generated types yet
+                // (migration 20260714000001_posts_publish_error.sql pending) —
+                // read it defensively.
+                const publishError = (post as unknown as { publish_error?: string | null }).publish_error ?? null
+                const isFailed = post.status === "failed"
                 return (
-                  <Link key={post.id} href={`/posts/${post.id}`}>
-                    <Card className="hover:shadow-md transition-shadow cursor-pointer">
-                      <CardContent className="py-4 px-5">
-                        <div className="flex items-start gap-4">
+                  <Card key={post.id} className="hover:shadow-md transition-shadow">
+                    <CardContent className="py-4 px-5">
+                      <div className="flex items-start gap-4">
+                        <Link href={`/posts/${post.id}`} className="flex items-start gap-4 flex-1 min-w-0 cursor-pointer">
                           <span className="text-2xl mt-0.5 shrink-0">
                             {PLATFORM_EMOJI[post.platform] ?? "📄"}
                           </span>
@@ -266,14 +272,22 @@ export default async function SchedulePage({
                                 {post.hashtags.length > 6 && ` +${post.hashtags.length - 6}`}
                               </p>
                             ) : null}
+                            {isFailed && publishError && (
+                              <p className="text-xs text-red-600 dark:text-red-400 truncate">
+                                ❌ {publishError}
+                              </p>
+                            )}
                           </div>
+                        </Link>
+                        <div className="flex flex-col items-end gap-2 shrink-0">
                           <Badge className={`shrink-0 text-xs border-0 ${STATUS_STYLES[post.status] ?? ""}`}>
                             {post.status}
                           </Badge>
+                          {isFailed && <RetryPublishButton postId={post.id} />}
                         </div>
-                      </CardContent>
-                    </Card>
-                  </Link>
+                      </div>
+                    </CardContent>
+                  </Card>
                 )
               })}
             </div>

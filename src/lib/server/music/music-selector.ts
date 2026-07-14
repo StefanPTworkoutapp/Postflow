@@ -155,6 +155,42 @@ function energyDelta(tokenEnergy: string, trackEnergy: string): number {
   return Math.abs(a - b)
 }
 
+// ── Asset resolution guard ────────────────────────────────────────────────────
+//
+// The curated track library above still points at /tracks/*.mp3 paths that
+// were never uploaded (see file header). If a render spec includes a track
+// whose asset doesn't actually resolve, Shotstack fails trying to fetch it.
+// resolveTrackUrl() lets callers verify a track before wiring it into a
+// render — fail-soft callers should render WITHOUT music rather than fail
+// the whole render over a missing audio file.
+
+import fs   from "node:fs"
+import path from "node:path"
+
+/**
+ * Returns `url` unchanged if it resolves to a real asset, otherwise `null`.
+ *
+ * - Absolute http(s) URLs (real storage/CDN, once tracks are uploaded there)
+ *   are trusted as-is — we don't make a network round-trip here.
+ * - Relative paths (the current placeholder library, e.g. "/tracks/full/x.mp3")
+ *   are checked against the `public/` directory, since Next.js serves that
+ *   directory's contents verbatim at the site root.
+ */
+export function resolveTrackUrl(url: string | null | undefined): string | null {
+  if (!url) return null
+
+  if (/^https?:\/\//i.test(url)) return url
+
+  const relative = url.startsWith("/") ? url.slice(1) : url
+  const fullPath = path.join(process.cwd(), "public", relative)
+  try {
+    if (fs.existsSync(fullPath) && fs.statSync(fullPath).isFile()) return url
+  } catch {
+    // fall through to null
+  }
+  return null
+}
+
 // ── Main selector ─────────────────────────────────────────────────────────────
 
 /**
