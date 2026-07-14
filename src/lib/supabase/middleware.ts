@@ -45,6 +45,9 @@ export async function updateSession(request: NextRequest) {
   const isAuthRoute = pathname.startsWith("/login") || pathname.startsWith("/signup")
   const isPublicRoute =
     isAuthRoute ||
+    pathname.startsWith("/forgot-password") ||          // Public: request a reset link
+    pathname.startsWith("/reset-password") ||           // Public: recovery link lands here (session is in the URL hash, no cookie yet)
+    pathname.startsWith("/api/auth/forgot-password") || // Public: unauthenticated reset request
     pathname.startsWith("/auth/callback") ||
     pathname.startsWith("/api/inngest") ||          // Inngest webhook — must be public
     pathname.startsWith("/api/webhooks/") ||        // Stripe/Mollie/Buffer webhooks
