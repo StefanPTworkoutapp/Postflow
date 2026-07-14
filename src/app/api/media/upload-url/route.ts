@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { createServiceClient } from "@/lib/supabase/service"
 import { getBrand } from "@/lib/server/brand/getBrand"
 import { checkStorageLimit } from "@/lib/server/billing/limits"
 
@@ -69,13 +70,20 @@ export async function POST(request: Request) {
     const ext  = filename.split(".").pop() ?? "bin"
     const path = `${brand.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
 
-    const { data, error } = await supabase.storage
+    // Sign with the service client: the storage.objects INSERT policy (managed
+    // in the dashboard) doesn't match our `${brand.id}/…` path prefix, so a
+    // user-scoped createSignedUploadUrl fails RLS ("new row violates row-level
+    // security policy") for accounts the policy shape doesn't cover.
+    // Authorization is enforced ABOVE in code: session user + brand ownership
+    // (getBrand scopes to the caller's account) + MIME + size + storage quota.
+    const service = createServiceClient()
+    const { data, error } = await service.storage
       .from("media")
       .createSignedUploadUrl(path)
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
-    const publicUrl = supabase.storage.from("media").getPublicUrl(path).data.publicUrl
+    const publicUrl = service.storage.from("media").getPublicUrl(path).data.publicUrl
 
     return NextResponse.json({ signedUrl: data.signedUrl, path, publicUrl })
   } catch (err) {

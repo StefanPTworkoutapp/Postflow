@@ -11,6 +11,7 @@
 
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { createServiceClient } from "@/lib/supabase/service"
 import { getBrand }     from "@/lib/server/brand/getBrand"
 import { checkStorageLimit } from "@/lib/server/billing/limits"
 
@@ -56,7 +57,12 @@ export async function POST(req: Request) {
     const ext  = filename.split(".").pop() ?? "mp4"
     const path = `${brand.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
 
-    const { data, error } = await supabase.storage
+    // Sign with the service client — storage RLS policies (dashboard-managed)
+    // don't reliably cover our brand-scoped path prefixes for user-scoped
+    // clients. Authorization is already enforced above in code (session user,
+    // brand ownership, MIME/size/quota checks).
+    const service = createServiceClient()
+    const { data, error } = await service.storage
       .from("postflow-clips")
       .createSignedUploadUrl(path)
 

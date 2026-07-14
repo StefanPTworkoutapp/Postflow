@@ -61,10 +61,28 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: jobErr?.message ?? "Failed to enqueue generation job" }, { status: 500 })
     }
 
-    await inngest.send({
-      name: "postflow/calendar.generate.requested",
-      data: { jobId: job.id },
-    })
+    try {
+      await inngest.send({
+        name: "postflow/calendar.generate.requested",
+        data: { jobId: job.id },
+      })
+    } catch (sendErr) {
+      // Fail soft: don't strand the job row as a forever-"pending" orphan when
+      // the Inngest event API is unreachable (local dev without the Inngest dev
+      // server, or a prod Inngest blip). Mark it failed with an honest message
+      // so the status poll / admin health surface it, and give the user a
+      // human-readable error instead of a raw "fetch failed".
+      const msg = sendErr instanceof Error ? sendErr.message : "unknown error"
+      console.error("[calendar/generate] inngest.send failed:", msg)
+      await nt(supabase)
+        .from("calendar_generation_jobs")
+        .update({ status: "failed", error: `Could not start the generation job (${msg})`, completed_at: new Date().toISOString() })
+        .eq("id", job.id)
+      return NextResponse.json(
+        { error: "Could not start the generation job — please try again in a moment." },
+        { status: 503 },
+      )
+    }
 
     return NextResponse.json({ jobId: job.id }, { status: 202 })
   } catch (err) {

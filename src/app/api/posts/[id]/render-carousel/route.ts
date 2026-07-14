@@ -88,10 +88,25 @@ export async function POST(
     return NextResponse.json({ error: jobErr?.message ?? "Failed to enqueue render job" }, { status: 500 })
   }
 
-  await inngest.send({
-    name: "postflow/post.render-carousel.requested",
-    data: { jobId: job.id },
-  })
+  try {
+    await inngest.send({
+      name: "postflow/post.render-carousel.requested",
+      data: { jobId: job.id },
+    })
+  } catch (sendErr) {
+    // Fail soft: mark the job row failed rather than stranding a forever-
+    // "pending" orphan when the Inngest event API is unreachable.
+    const msg = sendErr instanceof Error ? sendErr.message : "unknown error"
+    console.error("[postflow/post.render-carousel.requested] inngest.send failed:", msg)
+    await nt(supabase)
+      .from("post_render_jobs")
+      .update({ status: "failed", error: `Could not start the render job (${msg})`, completed_at: new Date().toISOString() })
+      .eq("id", job.id)
+    return NextResponse.json(
+      { error: "Could not start the render job — please try again in a moment." },
+      { status: 503 },
+    )
+  }
 
   return NextResponse.json({ jobId: job.id }, { status: 202 })
 }

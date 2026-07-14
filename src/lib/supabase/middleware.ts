@@ -3,6 +3,13 @@ import { NextResponse, type NextRequest } from "next/server"
 import type { Database } from "@/types/database.types"
 
 export async function updateSession(request: NextRequest) {
+  // Expose pathname to server components (layout.tsx reads it via headers()).
+  // Must be set on the REQUEST headers before NextResponse.next({ request }) —
+  // setting it on the response (the old bug) is invisible to server components,
+  // which made (app)/layout.tsx's isOnboarding check always false and sent every
+  // brand-less user into an infinite /onboarding redirect loop.
+  request.headers.set("x-pathname", request.nextUrl.pathname)
+
   let supabaseResponse = NextResponse.next({ request })
 
   const supabase = createServerClient<Database>(
@@ -61,8 +68,8 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  // Expose pathname to server components via a request header
-  supabaseResponse.headers.set("x-pathname", pathname)
+  // (x-pathname for server components is set on the REQUEST headers at the
+  // top of this function — a response header here would be invisible to them.)
 
   return supabaseResponse
 }

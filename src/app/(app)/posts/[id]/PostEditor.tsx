@@ -17,8 +17,13 @@ interface TemplateMeta {
   name:        string
   description: string
   type:        "single_image" | "carousel" | "reel_cover" | "story"
+  /** Platform-dedicated templates; undefined = available on all platforms. */
+  platforms?:  string[]
 }
 
+// KEEP IN SYNC with the render registry (src/lib/server/render/templates/index.ts)
+// and the postflow.templates DB seed — a slug missing here is invisible in the
+// editor's picker even when the server-side rotation can select it.
 const ALL_TEMPLATES: TemplateMeta[] = [
   { slug: "photo-overlay",  name: "Photo with Caption",      description: "Full-bleed photo + gradient overlay",         type: "single_image" },
   { slug: "edu-bold",       name: "Education — Bold",        description: "Large bold text on white",                    type: "single_image" },
@@ -29,6 +34,9 @@ const ALL_TEMPLATES: TemplateMeta[] = [
   { slug: "carousel-myth",  name: "Carousel — Myth vs Reality", description: "Dark myth / brand-colour reality pairs",   type: "carousel"     },
   { slug: "reel-cover",     name: "Reel Cover",              description: "9:16 bold text over photo",                   type: "reel_cover"   },
   { slug: "story-teaser",   name: "Story Teaser",            description: "Vertical story with swipe-up CTA",            type: "story"        },
+  { slug: "x-statement",      name: "X — Statement",         description: "Bold statement card native to X",             type: "single_image", platforms: ["x"] },
+  { slug: "linkedin-insight", name: "LinkedIn — Insight",    description: "Professional insight/pull-quote card",        type: "single_image", platforms: ["linkedin"] },
+  { slug: "tiktok-cover",     name: "TikTok — Photo Cover",  description: "Vertical gradient cover with hook headline",  type: "single_image", platforms: ["tiktok"] },
 ]
 
 /**
@@ -48,6 +56,9 @@ const RENDER_TO_CAPTION: Record<string, { captionId: string; postType: string }>
   "carousel-myth":  { captionId: "carousel-edu",   postType: "carousel"     },
   "reel-cover":     { captionId: "reel-hook",      postType: "reel"         },
   "story-teaser":   { captionId: "story-hook",     postType: "story"        },
+  "x-statement":      { captionId: "quote-insight", postType: "single_image" },
+  "linkedin-insight": { captionId: "edu-tips",      postType: "single_image" },
+  "tiktok-cover":     { captionId: "edu-tips",      postType: "single_image" },
 }
 
 const TYPE_BADGE: Record<TemplateMeta["type"], string> = {
@@ -978,7 +989,7 @@ export function PostEditor({ post, brandName, industry, contentLanguage = "en", 
         {showTemplatePicker && (
           <div className="space-y-2 mt-1">
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              {ALL_TEMPLATES.map((t) => {
+              {ALL_TEMPLATES.filter(t => !t.platforms || t.platforms.includes(post.platform)).map((t) => {
                 const isSelected = selectedTemplate === t.slug
                 const health     = templateHealth?.[t.slug]
                 // Health badge: only show when we have >= 3 posts of data
