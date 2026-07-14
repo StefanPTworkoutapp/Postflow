@@ -129,8 +129,15 @@ export function ConnectWizardModal({
       const start = firstUnconnectedPlatform()
       if (!start) { setInitialised(true); return } // everything already connected
 
+      // `start` is the first NOT-yet-connected platform, so any saved step > 0
+      // means the user was genuinely mid-flow here and we should offer to
+      // resume. Deliberately NOT gated on `saved.completed`: that flag is a
+      // sticky artifact of a prior Skip/finish and would wrongly suppress the
+      // resume prompt on a later real close-and-reopen. Skip now resets
+      // current_step to 0 (see skipPlatform), so step > 0 reliably means
+      // in-progress, not skipped.
       const saved = progressMap[start]
-      if (saved && !saved.completed && saved.current_step > 0) {
+      if (saved && saved.current_step > 0) {
         setResumePrompt({ platform: start, step: saved.current_step })
       } else {
         setPlatform(start)
@@ -166,11 +173,18 @@ export function ConnectWizardModal({
 
   if (!open) return null
 
-  function goToNextPlatform(fromPlatform: WizardPlatform) {
+  function advanceAfter(
+    fromPlatform: WizardPlatform,
+    opts: { completed: boolean; resetStep: boolean },
+  ) {
     void fetch("/api/settings/connection-wizard", {
       method:  "PATCH",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ platform: fromPlatform, current_step: STEP_COUNTS[fromPlatform] - 1, completed: true }),
+      body:    JSON.stringify({
+        platform:     fromPlatform,
+        current_step: opts.resetStep ? 0 : STEP_COUNTS[fromPlatform] - 1,
+        completed:    opts.completed,
+      }),
     })
     const idx  = PLATFORM_ORDER.indexOf(fromPlatform)
     const next = PLATFORM_ORDER.slice(idx + 1).find(p => !isConnected(p))
@@ -180,6 +194,19 @@ export function ConnectWizardModal({
     } else {
       onClose()
     }
+  }
+
+  // Genuine completion (platform connected): mark completed.
+  function goToNextPlatform(fromPlatform: WizardPlatform) {
+    advanceAfter(fromPlatform, { completed: true, resetStep: false })
+  }
+
+  // Skip = "not now": reset saved step to 0 so it doesn't leave a phantom
+  // mid-flow position that would trigger a false resume prompt next time, and
+  // don't mark completed (the platform is still unconnected and should reopen
+  // cleanly at step 1, not be treated as done).
+  function skipPlatform(fromPlatform: WizardPlatform) {
+    advanceAfter(fromPlatform, { completed: false, resetStep: true })
   }
 
   async function handleCheckConnection() {
@@ -368,7 +395,7 @@ export function ConnectWizardModal({
 
               <button
                 type="button"
-                onClick={() => goToNextPlatform(platform)}
+                onClick={() => skipPlatform(platform)}
                 className="text-xs text-[hsl(var(--muted-foreground))] hover:text-foreground transition-colors"
               >
                 Skip {platformLabel} →
