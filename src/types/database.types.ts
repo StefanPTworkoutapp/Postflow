@@ -53,6 +53,44 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_budget_events: {
+        Row: {
+          account_id: string
+          cap_usd: number
+          created_at: string
+          id: string
+          plan: string
+          spent_usd: number
+          verdict: string
+        }
+        Insert: {
+          account_id: string
+          cap_usd: number
+          created_at?: string
+          id?: string
+          plan: string
+          spent_usd: number
+          verdict: string
+        }
+        Update: {
+          account_id?: string
+          cap_usd?: number
+          created_at?: string
+          id?: string
+          plan?: string
+          spent_usd?: number
+          verdict?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_budget_events_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ai_usage_logs: {
         Row: {
           brand_id: string | null
@@ -395,6 +433,101 @@ export type Database = {
           },
         ]
       }
+      calendar_generation_jobs: {
+        Row: {
+          brand_id: string
+          completed_at: string | null
+          created_at: string
+          error: string | null
+          id: string
+          input: Json
+          month: number
+          result: Json | null
+          status: string
+          year: number
+        }
+        Insert: {
+          brand_id: string
+          completed_at?: string | null
+          created_at?: string
+          error?: string | null
+          id?: string
+          input: Json
+          month: number
+          result?: Json | null
+          status?: string
+          year: number
+        }
+        Update: {
+          brand_id?: string
+          completed_at?: string | null
+          created_at?: string
+          error?: string | null
+          id?: string
+          input?: Json
+          month?: number
+          result?: Json | null
+          status?: string
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "calendar_generation_jobs_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      calendar_optimizations: {
+        Row: {
+          brand_id: string
+          change_type: string
+          created_at: string
+          entry_id: string
+          from_value: string | null
+          id: string
+          reason: string | null
+          to_value: string | null
+        }
+        Insert: {
+          brand_id: string
+          change_type: string
+          created_at?: string
+          entry_id: string
+          from_value?: string | null
+          id?: string
+          reason?: string | null
+          to_value?: string | null
+        }
+        Update: {
+          brand_id?: string
+          change_type?: string
+          created_at?: string
+          entry_id?: string
+          from_value?: string | null
+          id?: string
+          reason?: string | null
+          to_value?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "calendar_optimizations_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "calendar_optimizations_entry_id_fkey"
+            columns: ["entry_id"]
+            isOneToOne: false
+            referencedRelation: "content_calendar"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clip_forge_clips: {
         Row: {
           created_at: string
@@ -446,6 +579,8 @@ export type Database = {
           created_at: string
           id: string
           job_id: string
+          processed: boolean
+          processed_at: string | null
           rating: string
           tags: string[] | null
         }
@@ -455,6 +590,8 @@ export type Database = {
           created_at?: string
           id?: string
           job_id: string
+          processed?: boolean
+          processed_at?: string | null
           rating: string
           tags?: string[] | null
         }
@@ -464,6 +601,8 @@ export type Database = {
           created_at?: string
           id?: string
           job_id?: string
+          processed?: boolean
+          processed_at?: string | null
           rating?: string
           tags?: string[] | null
         }
@@ -494,6 +633,7 @@ export type Database = {
           goal: string
           id: string
           input_clips: Json
+          music_skipped_reason: string | null
           output_caption: string | null
           output_hashtags: string[] | null
           output_video_url: string | null
@@ -512,6 +652,7 @@ export type Database = {
           goal: string
           id?: string
           input_clips?: Json
+          music_skipped_reason?: string | null
           output_caption?: string | null
           output_hashtags?: string[] | null
           output_video_url?: string | null
@@ -530,6 +671,7 @@ export type Database = {
           goal?: string
           id?: string
           input_clips?: Json
+          music_skipped_reason?: string | null
           output_caption?: string | null
           output_hashtags?: string[] | null
           output_video_url?: string | null
@@ -542,6 +684,44 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "clip_forge_jobs_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      connection_wizard_progress: {
+        Row: {
+          brand_id: string
+          completed: boolean
+          created_at: string
+          current_step: number
+          id: string
+          platform: string
+          updated_at: string
+        }
+        Insert: {
+          brand_id: string
+          completed?: boolean
+          created_at?: string
+          current_step?: number
+          id?: string
+          platform: string
+          updated_at?: string
+        }
+        Update: {
+          brand_id?: string
+          completed?: boolean
+          created_at?: string
+          current_step?: number
+          id?: string
+          platform?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "connection_wizard_progress_brand_id_fkey"
             columns: ["brand_id"]
             isOneToOne: false
             referencedRelation: "brands"
@@ -666,6 +846,50 @@ export type Database = {
             columns: ["account_id"]
             isOneToOne: false
             referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      imported_posts: {
+        Row: {
+          brand_id: string
+          caption: string | null
+          engagement: Json | null
+          id: string
+          imported_at: string
+          media_type: string | null
+          platform: string
+          platform_post_id: string
+          posted_at: string | null
+        }
+        Insert: {
+          brand_id: string
+          caption?: string | null
+          engagement?: Json | null
+          id?: string
+          imported_at?: string
+          media_type?: string | null
+          platform: string
+          platform_post_id: string
+          posted_at?: string | null
+        }
+        Update: {
+          brand_id?: string
+          caption?: string | null
+          engagement?: Json | null
+          id?: string
+          imported_at?: string
+          media_type?: string | null
+          platform?: string
+          platform_post_id?: string
+          posted_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "imported_posts_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
             referencedColumns: ["id"]
           },
         ]
@@ -1149,6 +1373,60 @@ export type Database = {
           },
         ]
       }
+      post_render_jobs: {
+        Row: {
+          brand_id: string
+          completed_at: string | null
+          created_at: string
+          error: string | null
+          id: string
+          input: Json
+          job_type: string
+          post_id: string
+          result: Json | null
+          status: string
+        }
+        Insert: {
+          brand_id: string
+          completed_at?: string | null
+          created_at?: string
+          error?: string | null
+          id?: string
+          input: Json
+          job_type: string
+          post_id: string
+          result?: Json | null
+          status?: string
+        }
+        Update: {
+          brand_id?: string
+          completed_at?: string | null
+          created_at?: string
+          error?: string | null
+          id?: string
+          input?: Json
+          job_type?: string
+          post_id?: string
+          result?: Json | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_render_jobs_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "post_render_jobs_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       posts: {
         Row: {
           actual_performance: Json | null
@@ -1174,6 +1452,11 @@ export type Database = {
           posted_at: string | null
           posted_url: string | null
           predicted_performance: Json | null
+          publish_error: string | null
+          publish_mode: string
+          reminder_sent_at: string | null
+          reminder_song_name: string | null
+          reminder_song_vibe: string | null
           scheduled_for: string | null
           slide_content: Json | null
           source_post_id: string | null
@@ -1206,6 +1489,11 @@ export type Database = {
           posted_at?: string | null
           posted_url?: string | null
           predicted_performance?: Json | null
+          publish_error?: string | null
+          publish_mode?: string
+          reminder_sent_at?: string | null
+          reminder_song_name?: string | null
+          reminder_song_vibe?: string | null
           scheduled_for?: string | null
           slide_content?: Json | null
           source_post_id?: string | null
@@ -1238,6 +1526,11 @@ export type Database = {
           posted_at?: string | null
           posted_url?: string | null
           predicted_performance?: Json | null
+          publish_error?: string | null
+          publish_mode?: string
+          reminder_sent_at?: string | null
+          reminder_song_name?: string | null
+          reminder_song_vibe?: string | null
           scheduled_for?: string | null
           slide_content?: Json | null
           source_post_id?: string | null
@@ -1554,6 +1847,9 @@ export type Database = {
       }
       template_suggestions: {
         Row: {
+          applied: boolean
+          applied_at: string | null
+          applied_reason: string | null
           brand_id: string
           created_at: string
           current_score: number | null
@@ -1568,8 +1864,12 @@ export type Database = {
           status: string
           suggested_score: number | null
           suggested_slug: string
+          swapped_slots: Json | null
         }
         Insert: {
+          applied?: boolean
+          applied_at?: string | null
+          applied_reason?: string | null
           brand_id: string
           created_at?: string
           current_score?: number | null
@@ -1584,8 +1884,12 @@ export type Database = {
           status?: string
           suggested_score?: number | null
           suggested_slug: string
+          swapped_slots?: Json | null
         }
         Update: {
+          applied?: boolean
+          applied_at?: string | null
+          applied_reason?: string | null
           brand_id?: string
           created_at?: string
           current_score?: number | null
@@ -1600,6 +1904,7 @@ export type Database = {
           status?: string
           suggested_score?: number | null
           suggested_slug?: string
+          swapped_slots?: Json | null
         }
         Relationships: [
           {
@@ -1674,6 +1979,7 @@ export type Database = {
           created_at: string
           feedback_type: string | null
           id: string
+          immediate_nudge_applied: boolean
           pattern_detected: string | null
           post_id: string | null
           user_comment: string | null
@@ -1684,6 +1990,7 @@ export type Database = {
           created_at?: string
           feedback_type?: string | null
           id?: string
+          immediate_nudge_applied?: boolean
           pattern_detected?: string | null
           post_id?: string | null
           user_comment?: string | null
@@ -1694,6 +2001,7 @@ export type Database = {
           created_at?: string
           feedback_type?: string | null
           id?: string
+          immediate_nudge_applied?: boolean
           pattern_detected?: string | null
           post_id?: string | null
           user_comment?: string | null
@@ -1846,6 +2154,60 @@ export type Database = {
             columns: ["niche_trend_id"]
             isOneToOne: false
             referencedRelation: "niche_trends"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trend_feedback: {
+        Row: {
+          brand_id: string
+          brand_tokens_snapshot: Json | null
+          chosen_version: string | null
+          created_at: string
+          id: string
+          job_id: string
+          processed: boolean
+          processed_at: string | null
+          rating: string
+          tags: string[] | null
+        }
+        Insert: {
+          brand_id: string
+          brand_tokens_snapshot?: Json | null
+          chosen_version?: string | null
+          created_at?: string
+          id?: string
+          job_id: string
+          processed?: boolean
+          processed_at?: string | null
+          rating: string
+          tags?: string[] | null
+        }
+        Update: {
+          brand_id?: string
+          brand_tokens_snapshot?: Json | null
+          chosen_version?: string | null
+          created_at?: string
+          id?: string
+          job_id?: string
+          processed?: boolean
+          processed_at?: string | null
+          rating?: string
+          tags?: string[] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trend_feedback_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trend_feedback_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "trend_builder_jobs"
             referencedColumns: ["id"]
           },
         ]
