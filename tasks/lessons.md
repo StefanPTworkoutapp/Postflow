@@ -358,3 +358,13 @@ In all cases, the Suspense fallback was shown on SSR and never replaced after hy
   Instead: fetch all data in the page-level server component, pass data as props to child components.
 - Only use `<Suspense>` for: (a) client components that use `React.lazy()` / `dynamic()`, or (b) async server components that do NOT call Request-time APIs (`cookies`, `headers`).
 - When debugging a stuck Suspense: check `document.querySelectorAll('template').length` — a non-zero count means at least one Suspense is not resolving. Also check for 0 streaming `$RC` scripts in the page source.
+
+---
+
+## [2026-07-14] A reusable feedback picker existing in the codebase doesn't mean it's wired into every flow that needs it
+
+**What happened:** `FeedbackRow` (with `REEL_FEEDBACK_TAGS`) was built and correctly wired end-to-end (picker → state → `VIDEO_FEEDBACK_TAG_MAP` → `nudgeToken`) for `trend_feedback`/`clip_forge_feedback` server-side, and the API routes (`PATCH /api/clip-forge/[id]/feedback`, `PATCH /api/trend/[id]/feedback`) both already read `tags: string[]` from the body. But neither `CreateClient.tsx` (clip-forge) nor `TrendClient.tsx` (trend) actually rendered `FeedbackRow` at all — only `StoriesClient.tsx` did. Both flows only sent `{ rating }`, silently dropping the entire tag-based learning signal for every clip-forge/trend job even though the backend was ready to receive and act on it.
+
+**Root cause:** The picker was assumed to be "already wired" because it existed as a component and the consuming API/token-map code was correctly built. Nobody checked whether every intended CALLER actually rendered it. A feature can be 100% correct on the receiving end and still be a no-op end-to-end if the sending end never fires it.
+
+**Rule going forward:** When a shared UI input component (feedback picker, tag selector, rating control) is meant to feed a specific API field, grep for every route that reads that field (`tags`, in this case) and verify EVERY client that PATCHes/POSTs to it actually renders the corresponding picker and includes its selected value in the body — not just the one reference flow it was first built for. "The component exists" and "the API reads the field" are necessary but not sufficient; check the actual call sites.

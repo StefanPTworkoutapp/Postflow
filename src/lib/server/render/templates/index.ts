@@ -18,6 +18,9 @@ import { definition as carouselEdu }   from "./carousel-edu"
 import { definition as carouselMyth }  from "./carousel-myth"
 import { definition as reelCover }     from "./reel-cover"
 import { definition as storyTeaser }   from "./story-teaser"
+import { definition as xStatement }      from "./x-statement"
+import { definition as linkedinInsight } from "./linkedin-insight"
+import { definition as tiktokCover }     from "./tiktok-cover"
 import type { TemplateDefinition }     from "./types"
 
 /** All registered templates, ordered by sort_order matching the DB seed */
@@ -31,6 +34,9 @@ export const allTemplates: TemplateDefinition[] = [
   carouselMyth,
   reelCover,
   storyTeaser,
+  xStatement,       // ← dedicated X single-image card
+  linkedinInsight,  // ← dedicated LinkedIn single-image card
+  tiktokCover,      // ← dedicated TikTok photo-mode single-image card
 ]
 
 /** O(1) lookup by slug */

@@ -21,6 +21,7 @@ import { SelectCard }     from "@/components/clip-forge/SelectCard"
 import { ConnectPrompt }  from "@/components/clip-forge/ConnectPrompt"
 import { ConceptCard }    from "@/components/trend-forge/ConceptCard"
 import { RenderStatusBar } from "@/components/trend-forge/RenderStatusBar"
+import { FeedbackRow, REEL_FEEDBACK_TAGS } from "@/components/shared/FeedbackRow"
 import type { UploadedClip } from "@/components/clip-forge/ClipDropzone"
 import type { TrendConcept } from "@/lib/server/trends/trend-filter"
 
@@ -75,6 +76,7 @@ export function TrendClient() {
   const [nudgeText,     setNudgeText]     = useState("")
   const [nudgeUsed,     setNudgeUsed]     = useState(false)
   const [feedbackDone,  setFeedbackDone]  = useState(false)
+  const [feedbackTag,   setFeedbackTag]   = useState<string | null>(null)
   const [captionCopied, setCaptionCopied] = useState(false)
 
   // Global
@@ -210,7 +212,7 @@ export function TrendClient() {
     await fetch(`/api/trend/${jobId}/feedback`, {
       method:  "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ rating }),
+      body: JSON.stringify({ rating, tags: feedbackTag ? [feedbackTag] : [] }),
     })
     setFeedbackDone(true)
   }
@@ -477,6 +479,16 @@ export function TrendClient() {
                   </div>
                 </div>
               )}
+
+              {/* Optional tag feedback */}
+              <div className="space-y-2">
+                <p className="text-xs text-muted-foreground">Anything specific? (optional)</p>
+                <FeedbackRow
+                  tags={REEL_FEEDBACK_TAGS}
+                  selected={feedbackTag}
+                  onSelect={setFeedbackTag}
+                />
+              </div>
 
               {/* Approve / Reject */}
               <div className="flex gap-3">

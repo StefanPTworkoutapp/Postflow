@@ -55,6 +55,41 @@ function ultimateFallbackSlug(postType: string): string {
 }
 
 /**
+ * Dedicated single-platform render templates that should be preferred over
+ * the generic multi-platform pool for a given post_type + platform. Added
+ * P2b (2026-07-14) — X and LinkedIn single_image posts were previously
+ * rendered from the same generic pool as Instagram/Facebook (photo-overlay,
+ * edu-bold, etc.), which looks resized rather than native to those
+ * platforms. TikTok's entry is for photo-mode/single-image TikTok posts
+ * only — NOT actual video reels, which stay on "reel-cover" via
+ * RENDER_SLUGS_BY_POST_TYPE["reel"/"reel_cover"] above and are untouched by
+ * this map. reel-cover and tiktok-cover coexist for different content:
+ * reel-cover = first frame of an uploaded video reel, tiktok-cover = a
+ * from-scratch graphic for a single-image TikTok post.
+ *
+ * This only applies in the no-saved-slots fallback branch below — a
+ * brand's saved/locked template_slug always wins, same as every other
+ * rotation entry.
+ */
+const PLATFORM_DEDICATED_SLUG: Record<string, Record<string, string>> = {
+  single_image: {
+    x:        "x-statement",
+    linkedin: "linkedin-insight",
+    tiktok:   "tiktok-cover",
+  },
+}
+
+/**
+ * Returns the dedicated render slug for this post_type + platform, if one
+ * exists. Returns undefined when there's no platform-specific override —
+ * callers fall through to the generic rotation pool.
+ */
+function getPlatformDedicatedSlug(postType: string, platform?: string): string | undefined {
+  if (!platform) return undefined
+  return PLATFORM_DEDICATED_SLUG[postType]?.[platform]
+}
+
+/**
  * Fetch the brand's niche top-performing template slugs for a platform, from
  * the weekly refreshNicheBenchmarks() output. Was computed and stored with
  * zero readers until P1 (2026-07-14) — see buildWeightedPool() below for how
@@ -135,7 +170,16 @@ export async function selectTemplate(
     return slot.template_slug
   }
 
-  // 2. Fallback: rotate through the render templates valid for this post_type,
+  // 2a. Platform-dedicated slug: a platform with its own native render
+  // template (X, LinkedIn, TikTok photo-mode) is preferred outright over the
+  // generic multi-platform pool — a native look is the correct default here,
+  // not just one option in the rotation. Only applies when there's no saved
+  // slot (checked above), so a brand that has explicitly picked/locked a
+  // different template for this post_type is never overridden.
+  const dedicatedSlug = getPlatformDedicatedSlug(postType, platform)
+  if (dedicatedSlug) return dedicatedSlug
+
+  // 2b. Fallback: rotate through the render templates valid for this post_type,
   // weighted toward niche top performers when we have that data (all pool
   // entries here are inherently "unlocked" — there's no saved/locked slot to
   // defer to in this branch).

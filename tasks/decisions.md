@@ -477,4 +477,22 @@ pulls trend data also triggers the email.
 
 **Reason:** The calendar GET endpoint currently only returns content_calendar entries with a posts join for `{ id, caption, status, platform }` — it doesn't return `posts.scheduled_for`. Adding this to the GET response is a small refactor but was out of scope for this sprint. The 9am placeholder is honest (it labels itself as such in the helper text) and can be improved later.
 
+---
+
+## [2026-07-14] P2b — dedicated render templates per platform + reel-cover vs tiktok-cover coexistence
+
+**Decision:** Added three dedicated single_image render templates — `x-statement`, `linkedin-insight`, `tiktok-cover` — instead of continuing to render X/LinkedIn/TikTok single-image posts from the generic multi-platform pool (photo-overlay, edu-bold, quote-card, dark-statement, tip-numbered). `selectTemplate()`'s no-saved-slots fallback now checks a `PLATFORM_DEDICATED_SLUG` map first: for `single_image` posts on platform `x`/`linkedin`/`tiktok`, the dedicated slug is returned directly (not folded into the weighted rotation pool) — a platform-native look is the correct default, not just one option in the mix. A brand's saved/locked `brand_template_preferences` slot still always wins; this only changes what a brand with NO saved slots gets by default.
+
+**reel-cover vs tiktok-cover coexistence:** These are deliberately two different templates for two different content types, not a duplicate:
+- `reel-cover` (`type: "reel_cover"`, platforms `["instagram","tiktok"]`) — the first frame of an actual **uploaded video** reel. Dark vignette over the photo/video still-frame, "Watch this →" hook label.
+- `tiktok-cover` (`type: "single_image"`, platforms `["tiktok"]`) — a from-scratch **graphic** for TikTok's photo-mode/single-image posts. Brand-colour gradient background (no photo dependency), huge hook headline in the upper third, chevron scroll-cue.
+
+Both stay type-distinct on purpose: reel_cover-type templates are selected via `RENDER_SLUGS_BY_POST_TYPE["reel"/"reel_cover"]` (untouched by this change), single_image-type templates via the new dedicated-slug map. No new `TemplateDefinition.type` value was introduced — `tiktok-cover` reuses the existing `"single_image"` type, which also means it gets its 1080×1920 dims "for free" from `renderPost.ts`'s existing `PLATFORM_DIMS.tiktok` entry (no dimension-table changes needed).
+
+**How existing templates get DB-seeded (found while wiring this):** `postflow.templates` rows are seeded via idempotent migration INSERTs (`INSERT ... SELECT ... WHERE NOT EXISTS (SELECT 1 FROM postflow.templates WHERE slug = '...')`), NOT via a script. The base 8 defaults shipped in `20260507000001_templates_table.sql`; `photo-overlay` was added later in `20260616000002_add_photo_overlay_template.sql` after being found registered in code but missing from the DB since launch. The three new templates follow the exact same idempotent pattern in `20260714000006_add_x_linkedin_tiktok_templates.sql` — written, NOT applied (per hard rule: SQL is written and reviewed, Stefan approves + pushes).
+
+**Alternatives considered:** Fold the dedicated slugs into the existing rotation pool via niche-style weighting (rejected — would only bias toward the platform-native template some of the time, when it should always be the default absent an explicit brand choice). Give tiktok-cover its own new `TemplateDefinition.type` (rejected — an unnecessary new type value when "single_image" + platform-restricted already expresses "this is a single-image template, just for tiktok").
+
+**Impact:** Brands with no saved `single_image` template slots for X/LinkedIn/TikTok now render natively for those platforms instead of a resized IG-style card. `docs/architecture` template registry docs (if any get created later) should list all 11 registered slugs, not just the original 8.
+
 **Impact:** When improving the week view, update `GET /api/calendar` to include `posts.scheduled_for` in the join, then use that time to position each entry in the correct hour slot.

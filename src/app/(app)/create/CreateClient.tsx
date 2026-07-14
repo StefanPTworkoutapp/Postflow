@@ -18,6 +18,7 @@ import { ClipDropzone }  from "@/components/clip-forge/ClipDropzone"
 import { MusicPicker }   from "@/components/clip-forge/MusicPicker"
 import { SelectCard }    from "@/components/clip-forge/SelectCard"
 import { ConnectPrompt } from "@/components/clip-forge/ConnectPrompt"
+import { FeedbackRow, REEL_FEEDBACK_TAGS } from "@/components/shared/FeedbackRow"
 import type { UploadedClip } from "@/components/clip-forge/ClipDropzone"
 import type { MusicTrack }  from "@/lib/server/music/music-selector"
 
@@ -88,6 +89,7 @@ export function CreateClient() {
 
   // Step 4 — preview
   const [feedbackDone, setFeedbackDone] = useState(false)
+  const [feedbackTag,  setFeedbackTag]  = useState<string | null>(null)
   const [captionCopied, setCaptionCopied] = useState(false)
 
   // Global loading
@@ -206,7 +208,7 @@ export function CreateClient() {
     await fetch(`/api/clip-forge/${jobResult.jobId}/feedback`, {
       method:  "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ rating }),
+      body: JSON.stringify({ rating, tags: feedbackTag ? [feedbackTag] : [] }),
     })
     setFeedbackDone(true)
   }
@@ -433,20 +435,30 @@ export function CreateClient() {
 
           {/* Feedback */}
           {!feedbackDone ? (
-            <div className="flex gap-3">
-              <Button
-                variant="outline"
-                className="flex-1 border-rose-200 text-rose-600 hover:bg-rose-50 dark:border-rose-800 dark:text-rose-400"
-                onClick={() => handleFeedback("reject")}
-              >
-                <XCircle className="h-4 w-4 mr-2" /> Reject
-              </Button>
-              <Button
-                className="flex-1"
-                onClick={() => handleFeedback("approve")}
-              >
-                <CheckCircle2 className="h-4 w-4 mr-2" /> Approve
-              </Button>
+            <div className="space-y-3">
+              <div className="space-y-2">
+                <p className="text-xs text-muted-foreground">Anything specific? (optional)</p>
+                <FeedbackRow
+                  tags={REEL_FEEDBACK_TAGS}
+                  selected={feedbackTag}
+                  onSelect={setFeedbackTag}
+                />
+              </div>
+              <div className="flex gap-3">
+                <Button
+                  variant="outline"
+                  className="flex-1 border-rose-200 text-rose-600 hover:bg-rose-50 dark:border-rose-800 dark:text-rose-400"
+                  onClick={() => handleFeedback("reject")}
+                >
+                  <XCircle className="h-4 w-4 mr-2" /> Reject
+                </Button>
+                <Button
+                  className="flex-1"
+                  onClick={() => handleFeedback("approve")}
+                >
+                  <CheckCircle2 className="h-4 w-4 mr-2" /> Approve
+                </Button>
+              </div>
             </div>
           ) : (
             <SuccessBlock
