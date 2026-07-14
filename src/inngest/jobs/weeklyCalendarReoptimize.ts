@@ -28,6 +28,10 @@
 import { inngest } from "../client"
 import { createServiceClient } from "@/lib/supabase/service"
 import { getTemplateSlots } from "@/lib/server/render/selectTemplate"
+import { allTemplates } from "@/lib/server/render/templates"
+
+/** slug → render TemplateDefinition, for type/platform compatibility checks. */
+const renderRegistry = new Map(allTemplates.map(t => [t.slug, t]))
 
 /**
  * Type-bypass helper for tables not yet in the generated database.types.ts.
@@ -168,13 +172,27 @@ async function reoptimizeBrand(brandId: string): Promise<{ timingChanges: number
         const matchingSlot = slots.find(s => s.template_slug === entry.template_slug)
 
         if (!matchingSlot?.locked) {
+          // A replacement must render the same kind of output as the current
+          // template. template_health is keyed by (brand, platform, slug) only,
+          // so without this check a single_image entry could be "upgraded" to a
+          // carousel-only template that scored better on the same platform —
+          // which renders silently wrong (carousel hook slide as the post image)
+          // and skews the derived caption post_type.
+          const currentDef = renderRegistry.get(entry.template_slug)
           const alternative = templateHealthRows
-            .filter(t =>
-              t.platform === platform &&
-              t.template_slug !== entry.template_slug &&
-              (t.posts_count ?? 0) >= 3 &&
-              (t.health_score ?? 0) >= (currentHealth!.health_score ?? 0) + 15
-            )
+            .filter(t => {
+              if (
+                t.platform !== platform ||
+                t.template_slug === entry.template_slug ||
+                (t.posts_count ?? 0) < 3 ||
+                (t.health_score ?? 0) < (currentHealth!.health_score ?? 0) + 15
+              ) return false
+              const altDef = renderRegistry.get(t.template_slug)
+              if (!altDef || !currentDef) return false // unknown slug → never swap to/from it
+              if (altDef.type !== currentDef.type) return false
+              // platforms: null = all platforms; otherwise must include this one
+              return altDef.platforms === null || altDef.platforms.includes(platform)
+            })
             .sort((a, b) => (b.health_score ?? 0) - (a.health_score ?? 0))[0]
 
           if (alternative) {
