@@ -17,6 +17,7 @@ import { getBrand }         from "@/lib/server/brand/getBrand"
 import { inngest }          from "@/inngest/client"
 import { isDirectPublishPlatform } from "@/lib/server/publish/dispatcher"
 import { isTikTokDirectPublishEnabled } from "@/lib/server/publish/publishToTikTok"
+import { getReminderMusicRecommendation } from "@/lib/server/music/reminder-recommendation"
 
 export async function POST(
   request: Request,
@@ -47,7 +48,9 @@ export async function POST(
       return NextResponse.json({ error: "Scheduled time must be in the future" }, { status: 400 })
     }
 
-    // Load post — verify ownership and eligibility
+    // Load post — verify ownership and eligibility.
+    // publish_mode is read via a separate best-effort call below (cast to any)
+    // since that column may not exist yet pre-migration — degrades to 'direct'.
     const { data: post, error: postErr } = await supabase
       .from("posts")
       .select("id, platform, status, brand_id")
@@ -59,32 +62,69 @@ export async function POST(
       return NextResponse.json({ error: "Post not found" }, { status: 404 })
     }
 
-    // "failed" is included so a post whose direct publish failed (retries
-    // exhausted, status set by publishScheduledPost's onFailure handler) can
-    // be retried via the same Retry action that reuses this route.
-    if (!["draft", "ready", "planned", "failed"].includes(post.status)) {
+    // "reminder_sent" is included so a reminder post whose email failed to
+    // send (retries exhausted → onFailure marked it "failed") or one already
+    // sent can be re-scheduled via the same Retry / reschedule action.
+    if (!["draft", "ready", "planned", "failed", "reminder_sent"].includes(post.status)) {
       return NextResponse.json(
         { error: `Post status "${post.status}" cannot be scheduled` },
         { status: 400 },
       )
     }
 
-    // Check platform is supported for direct publishing.
-    // TikTok is listed as a direct platform but publishing stays gated behind
-    // TIKTOK_DIRECT_PUBLISH_ENABLED (production app denied as of 2026-07) — treat
-    // it the same as an unsupported platform until that flag is flipped on.
-    const tikTokBlocked = post.platform === "tiktok" && !isTikTokDirectPublishEnabled()
-    if (!isDirectPublishPlatform(post.platform) || tikTokBlocked) {
-      return NextResponse.json(
-        {
-          error: tikTokBlocked
-            ? "TikTok direct publishing is pending approval from TikTok. Connect Buffer in Settings to publish TikTok posts in the meantime."
-            : `${post.platform} does not support direct publishing yet. Connect Buffer to schedule this post.`,
-          needsBuffer: true,
-          platform:    post.platform,
-        },
-        { status: 422 },
-      )
+    const publishMode = await (async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("posts")
+        .select("publish_mode")
+        .eq("id", postId)
+        .maybeSingle()
+      if (error || !data) return "direct"
+      return (data as { publish_mode?: string | null }).publish_mode ?? "direct"
+    })()
+    const isReminderMode = publishMode === "reminder"
+
+    // Reminder mode never calls a platform API — PostFlow only sleeps until
+    // scheduledAt then emails the client a ready-to-post package. So the
+    // direct-publish-platform / TikTok-approval gate below only applies to
+    // 'direct' mode; any platform is fine for a reminder.
+    if (!isReminderMode) {
+      // Check platform is supported for direct publishing.
+      // TikTok is listed as a direct platform but publishing stays gated behind
+      // TIKTOK_DIRECT_PUBLISH_ENABLED (production app denied as of 2026-07) — treat
+      // it the same as an unsupported platform until that flag is flipped on.
+      const tikTokBlocked = post.platform === "tiktok" && !isTikTokDirectPublishEnabled()
+      if (!isDirectPublishPlatform(post.platform) || tikTokBlocked) {
+        return NextResponse.json(
+          {
+            error: tikTokBlocked
+              ? "TikTok direct publishing is pending approval from TikTok. Connect Buffer in Settings to publish TikTok posts in the meantime."
+              : `${post.platform} does not support direct publishing yet. Connect Buffer to schedule this post.`,
+            needsBuffer: true,
+            platform:    post.platform,
+          },
+          { status: 422 },
+        )
+      }
+    }
+
+    // Reminder mode: compute the recommended song now (cheap static scoring,
+    // no AI call) so it's ready to include in the reminder email later.
+    if (isReminderMode) {
+      try {
+        const recommendation = await getReminderMusicRecommendation(brand.id, post.platform)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any)
+          .from("posts")
+          .update({
+            reminder_song_name: recommendation.trackName,
+            reminder_song_vibe: recommendation.vibe,
+          })
+          .eq("id", postId)
+      } catch (err) {
+        // Non-fatal — the reminder email just omits the song recommendation.
+        console.warn("[schedule] reminder song recommendation failed:", err)
+      }
     }
 
     // Save scheduled_for + status.

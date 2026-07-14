@@ -26,6 +26,8 @@ export async function PATCH(
       topic?:                string
       media_ids?:            string[]
       generated_image_url?:  string | null
+      /** 'direct' (default) | 'reminder' — see docs on posts.publish_mode */
+      publish_mode?:         string
     }
 
     // Build typed posts update
@@ -45,7 +47,29 @@ export async function PATCH(
       .single()
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
-    const post = data
+    let post = data
+
+    // publish_mode lives on a column added by migration 20260714000008 that may
+    // not be in the generated database.types.ts / applied yet — updated via a
+    // separate best-effort call (cast to any) so this route never crashes
+    // pre-migration, and the caption/hashtags/etc update above always succeeds
+    // even if this one is rejected by a stale schema cache.
+    if (body.publish_mode !== undefined) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: pmData, error: pmError } = await (supabase as any)
+        .from("posts")
+        .update({ publish_mode: body.publish_mode })
+        .eq("id", id)
+        .eq("brand_id", brand.id)
+        .select("*, content_calendar(id, scheduled_date, topic)")
+        .single()
+
+      if (pmError) {
+        console.warn("[PATCH /api/posts/:id] publish_mode column write failed (migration pending?):", pmError.message)
+      } else if (pmData) {
+        post = pmData
+      }
+    }
 
     // Sync the linked calendar entry (date, topic, and status mirror)
     const POST_TO_CAL_STATUS: Record<string, string> = {

@@ -190,6 +190,28 @@ export async function fetchAndStoreMetaAnalytics(brandId: string): Promise<{
 
   if (!posts?.length) return { processed: 0, errors: 0 }
 
+  // 3b. Reminder-mode posts (publish_mode = 'reminder') were never published
+  // via the Meta API by PostFlow — they have no real platform post id to
+  // attribute, even if the client later taps "Mark as posted". Matching them
+  // against live IG media by caption prefix would misattribute someone else's
+  // post (or crash pre-migration), so exclude them here. Selected separately
+  // and swallowed on error so a pre-migration environment (column doesn't
+  // exist yet) just treats every post as 'direct'.
+  const reminderPostIds = await (async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supabase as any)
+      .from("posts")
+      .select("id")
+      .eq("brand_id", brandId)
+      .eq("platform", "instagram")
+      .eq("publish_mode", "reminder")
+    if (error || !data) return new Set<string>()
+    return new Set((data as Array<{ id: string }>).map(r => r.id))
+  })()
+
+  const eligiblePosts = posts.filter(p => !reminderPostIds.has(p.id))
+  if (!eligiblePosts.length) return { processed: 0, errors: 0 }
+
   // 4. Fetch recent IG media from Meta (with media_type for Reel detection)
   const mediaItems = await fetchRecentMedia(
     social.platform_account_id,
@@ -203,7 +225,7 @@ export async function fetchAndStoreMetaAnalytics(brandId: string): Promise<{
   // 5. Match media items to posts by caption prefix (first 50 chars)
   for (const media of mediaItems) {
     const captionPrefix = (media.caption ?? "").slice(0, 50).trim()
-    const matchedPost   = posts.find(p =>
+    const matchedPost   = eligiblePosts.find(p =>
       captionPrefix && p.caption?.startsWith(captionPrefix)
     )
     if (!matchedPost) continue

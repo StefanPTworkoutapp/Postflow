@@ -10,10 +10,11 @@ import {
 import { Button }        from "@/components/ui/button"
 import { PlatformBadge, PLATFORM_META } from "@/components/shared/PlatformBadge"
 import { cn }            from "@/lib/utils"
+import { ConnectWizardModal } from "./ConnectWizardModal"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-interface SocialAccount {
+export interface SocialAccount {
   id:                    string
   platform:              string
   account_handle:        string | null
@@ -594,6 +595,7 @@ function ConnectionsInner({ initialAccounts, brandId, oauthConnected, oauthError
   const [error,         setError]         = useState<string | null>(null)
   const [success,       setSuccess]       = useState<string | null>(null)
   const [connecting,    setConnecting]    = useState<string | null>(null)
+  const [wizardOpen,    setWizardOpen]    = useState(false)
 
   // ── Handle OAuth callback params (passed from server page) ─────────────────
   useEffect(() => {
@@ -737,6 +739,30 @@ function ConnectionsInner({ initialAccounts, brandId, oauthConnected, oauthError
 
   return (
     <div className="space-y-6">
+      {/* Guided setup — a single popup that walks through every platform, including
+          the full Buffer walkthrough, with persisted step progress and a step counter. */}
+      <div className="flex justify-end">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setWizardOpen(true)}
+          className="gap-1.5"
+        >
+          <Link2 className="h-3.5 w-3.5" />
+          Guided setup
+        </Button>
+      </div>
+
+      <ConnectWizardModal
+        open={wizardOpen}
+        onClose={() => setWizardOpen(false)}
+        brandId={brandId}
+        accounts={accounts}
+        onConnectPlatform={handleConnect}
+        onRefresh={handleRefresh}
+        connectingPlatform={connecting}
+      />
+
       {/* Banners */}
       {success && (
         <div className="flex items-center gap-2 rounded-lg bg-green-50 dark:bg-green-950/20 px-3 py-2 text-sm text-green-700 dark:text-green-400">

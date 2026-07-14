@@ -72,6 +72,10 @@ export default async function PostPage({ params }: Props) {
           carousel_image_urls:    (post.carousel_image_urls as string[] | null) ?? null,
           client_approval_status: post.client_approval_status as "pending" | "approved" | "flagged" | null ?? null,
           publish_error:          (post as unknown as { publish_error?: string | null }).publish_error ?? null,
+          publish_mode:           (post as unknown as { publish_mode?: string | null }).publish_mode ?? "direct",
+          reminder_song_name:     (post as unknown as { reminder_song_name?: string | null }).reminder_song_name ?? null,
+          reminder_song_vibe:     (post as unknown as { reminder_song_vibe?: string | null }).reminder_song_vibe ?? null,
+          reminder_sent_at:       (post as unknown as { reminder_sent_at?: string | null }).reminder_sent_at ?? null,
           content_calendar:       cal,
         }}
         brandName={brand.name}

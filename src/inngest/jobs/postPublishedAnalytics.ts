@@ -50,6 +50,29 @@ export const postPublishedAnalytics = inngest.createFunction(
       return data
     })
 
+    // ── Step 1b: Skip reminder-mode posts ──────────────────────────────────
+    // publishScheduledPost never fires this event for publish_mode='reminder'
+    // posts (it returns early after emailing), so this only guards against a
+    // stray/manual event send. A reminder post has no real platform post id —
+    // fetching "analytics" for it would be meaningless or crash. Selected
+    // separately and swallowed on error so a pre-migration environment
+    // (publish_mode column absent) just proceeds as 'direct'.
+    const isReminderMode = await step.run("check-reminder-mode", async () => {
+      const db = createServiceClient()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (db as any)
+        .from("posts")
+        .select("publish_mode")
+        .eq("id", postId)
+        .maybeSingle()
+      if (error || !data) return false
+      return (data as { publish_mode?: string | null }).publish_mode === "reminder"
+    })
+
+    if (isReminderMode) {
+      return { skipped: true, reason: "reminder-mode post — no platform post id to fetch analytics for" }
+    }
+
     // ── Step 2: Check if analytics already exist (e.g. daily cron got there first) ──
     const alreadyFetched = await step.run("check-existing-analytics", async () => {
       const db = createServiceClient()

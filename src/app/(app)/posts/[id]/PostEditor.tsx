@@ -105,6 +105,14 @@ interface Post {
   client_approval_status: "pending" | "approved" | "flagged" | null
   /** Error message from the last failed direct-publish attempt (status === "failed") */
   publish_error?:      string | null
+  /** 'direct' (default): PostFlow publishes via the platform API. 'reminder': PostFlow emails
+   *  a ready-to-post package and the client posts it themselves (adds music manually in-app). */
+  publish_mode?:       string | null
+  /** Recommended track name/vibe for reminder-mode posts — metadata only, no audio file. */
+  reminder_song_name?: string | null
+  reminder_song_vibe?: string | null
+  /** Set once the reminder email has actually gone out */
+  reminder_sent_at?:   string | null
   content_calendar:    {
     id?: string
     scheduled_date?: string
@@ -161,6 +169,13 @@ export function PostEditor({ post, brandName, industry, contentLanguage = "en", 
   const [scheduleMsg, setScheduleMsg] = useState<{ type: "success" | "warn"; text: string } | null>(null)
   const [retrying,    setRetrying]    = useState(false)
   const [publishError, setPublishError] = useState<string | null>(post.publish_error ?? null)
+  // Reminder publish mode — 'direct' (default, PostFlow publishes via API) or
+  // 'reminder' (PostFlow emails a ready-to-post package; the client posts it
+  // themselves and adds the recommended song manually in-app).
+  const [publishMode, setPublishMode] = useState<"direct" | "reminder">(
+    post.publish_mode === "reminder" ? "reminder" : "direct"
+  )
+  const [markingPosted, setMarkingPosted] = useState(false)
   // notifyPublish: kept for backward-compat JSX; not triggered by direct publishing
   const [notifyPublish, setNotifyPublish] = useState(false)
   const [deleting,    setDeleting]    = useState(false)
@@ -259,6 +274,7 @@ export function PostEditor({ post, brandName, industry, contentLanguage = "en", 
           scheduled_date: scheduledDate,
           topic:          topic || null,
           media_ids:      mediaIds,
+          publish_mode:   publishMode,
         }),
       })
       const json = await res.json()
@@ -288,6 +304,7 @@ export function PostEditor({ post, brandName, industry, contentLanguage = "en", 
           scheduled_date: scheduledDate,
           topic:          topic || null,
           media_ids:      mediaIds,
+          publish_mode:   publishMode,
         }),
       })
       const saveJson = await saveRes.json()
@@ -309,7 +326,9 @@ export function PostEditor({ post, brandName, industry, contentLanguage = "en", 
         setStatus("scheduled")
         setScheduleMsg({
           type: "success",
-          text: `✅ Scheduled for ${new Date(scheduledAt).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })} at ${String(optimalHour).padStart(2, "0")}:00. PostFlow will publish it automatically.`,
+          text: publishMode === "reminder"
+            ? `✅ Reminder set for ${new Date(scheduledAt).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })} at ${String(optimalHour).padStart(2, "0")}:00. You'll get an email with everything you need to post it yourself.`
+            : `✅ Scheduled for ${new Date(scheduledAt).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })} at ${String(optimalHour).padStart(2, "0")}:00. PostFlow will publish it automatically.`,
         })
         router.refresh()
       } else if (schedJson.needsBuffer) {
@@ -584,6 +603,28 @@ export function PostEditor({ post, brandName, industry, contentLanguage = "en", 
     }
   }
 
+  // Reminder-mode posts have no platform post id (nothing was published via an
+  // API) — this just records that the client actually posted it themselves,
+  // so downstream analytics/round-trip code sees the same "posted" terminal
+  // state a direct-publish post reaches.
+  async function handleMarkPosted() {
+    setMarkingPosted(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/posts/${post.id}`, {
+        method:  "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ status: "posted" }),
+      })
+      const json = await res.json()
+      if (!res.ok) { setError(json.error ?? "Failed to mark as posted"); return }
+      setStatus("posted")
+      router.refresh()
+    } finally {
+      setMarkingPosted(false)
+    }
+  }
+
   return (
     <div className="space-y-6 max-w-4xl">
       {/* Back link + header */}
@@ -627,6 +668,16 @@ export function PostEditor({ post, brandName, industry, contentLanguage = "en", 
             {status === "failed" && (
               <span className="inline-flex items-center gap-1 text-xs font-medium text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-full px-2 py-0.5">
                 ❌ Publish failed
+              </span>
+            )}
+            {status === "reminder_sent" && (
+              <span className="inline-flex items-center gap-1 text-xs font-medium text-indigo-700 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800 rounded-full px-2 py-0.5">
+                ⏰ Reminder sent — post it yourself
+              </span>
+            )}
+            {status === "scheduled" && publishMode === "reminder" && (
+              <span className="inline-flex items-center gap-1 text-xs font-medium text-indigo-700 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-800 rounded-full px-2 py-0.5">
+                ⏰ Reminder scheduled
               </span>
             )}
             {post.client_approval_status === "approved" && (
@@ -731,6 +782,84 @@ export function PostEditor({ post, brandName, industry, contentLanguage = "en", 
           )}
         </div>
       </div>
+
+      {/* Publish mode — only relevant before the post has actually gone out */}
+      {["draft", "planned", "ready", "failed"].includes(status) && (
+        <div className="space-y-1.5">
+          <Label>Publish mode</Label>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <button
+              type="button"
+              onClick={() => setPublishMode("direct")}
+              className={cn(
+                "flex-1 text-left rounded-xl border p-3 transition-colors",
+                publishMode === "direct"
+                  ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-950/30 ring-1 ring-indigo-400"
+                  : "border-[hsl(var(--border))] hover:border-indigo-300"
+              )}
+            >
+              <p className="text-sm font-medium">🚀 Auto-publish</p>
+              <p className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">
+                PostFlow publishes this post automatically at the scheduled time.
+              </p>
+            </button>
+            <button
+              type="button"
+              onClick={() => setPublishMode("reminder")}
+              className={cn(
+                "flex-1 text-left rounded-xl border p-3 transition-colors",
+                publishMode === "reminder"
+                  ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-950/30 ring-1 ring-indigo-400"
+                  : "border-[hsl(var(--border))] hover:border-indigo-300"
+              )}
+            >
+              <p className="text-sm font-medium">⏰ Reminder — I&apos;ll post it myself</p>
+              <p className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">
+                You get an email at the scheduled time with the caption, media link, and a
+                recommended song to add manually — no auto-publish, so you can pick the
+                exact music yourself in-app.
+              </p>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Reminder-mode song recommendation — shown once scheduled */}
+      {publishMode === "reminder" && (post.reminder_song_name || (status === "scheduled" || status === "reminder_sent")) && (
+        <div className="rounded-xl border border-indigo-200 dark:border-indigo-800 bg-indigo-50/60 dark:bg-indigo-950/20 px-4 py-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-indigo-800 dark:text-indigo-300">🎵 Recommended song</p>
+          {post.reminder_song_name ? (
+            <p className="text-sm text-indigo-900 dark:text-indigo-200 mt-1">
+              Search for <strong>{post.reminder_song_name}</strong> in {post.platform}&apos;s audio picker
+              {post.reminder_song_vibe && <span className="text-indigo-700/80 dark:text-indigo-400"> — {post.reminder_song_vibe}</span>}
+            </p>
+          ) : (
+            <p className="text-sm text-indigo-900/80 dark:text-indigo-200/80 mt-1">
+              A song will be recommended once this post is scheduled.
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Reminder sent — client posts it themselves, then confirms here */}
+      {status === "reminder_sent" && (
+        <div className="rounded-xl border border-indigo-200 dark:border-indigo-800 bg-indigo-50/60 dark:bg-indigo-950/20 p-4 space-y-2">
+          <p className="text-sm font-medium text-indigo-900 dark:text-indigo-200">
+            ⏰ Reminder email sent{post.reminder_sent_at ? ` at ${new Date(post.reminder_sent_at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}` : ""}.
+          </p>
+          <p className="text-xs text-indigo-800/80 dark:text-indigo-300/80">
+            Post it yourself on {post.platform}, then confirm below so your analytics stay accurate.
+          </p>
+          <Button
+            size="sm"
+            onClick={handleMarkPosted}
+            disabled={markingPosted}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white"
+          >
+            {markingPosted ? <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />Marking…</> : "✓ Mark as posted"}
+          </Button>
+        </div>
+      )}
 
       {/* Media brief from calendar entry */}
       {post.content_calendar?.media_brief && post.content_calendar.required_media_type !== "none" && (() => {
@@ -1356,10 +1485,12 @@ export function PostEditor({ post, brandName, industry, contentLanguage = "en", 
           {status === "ready" && (
             <Button onClick={handleSchedule} disabled={saving || scheduling} className="bg-indigo-600 hover:bg-indigo-700 text-white">
               {scheduling
-                ? <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />Scheduling…</>
-                : carouselImageUrls.length > 0
-                  ? `Schedule ${carouselImageUrls.length} slides to Buffer →`
-                  : "Schedule post →"}
+                ? <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />{publishMode === "reminder" ? "Scheduling reminder…" : "Scheduling…"}</>
+                : publishMode === "reminder"
+                  ? "Schedule reminder →"
+                  : carouselImageUrls.length > 0
+                    ? `Schedule ${carouselImageUrls.length} slides to Buffer →`
+                    : "Schedule post →"}
             </Button>
           )}
 
@@ -1368,15 +1499,24 @@ export function PostEditor({ post, brandName, industry, contentLanguage = "en", 
             <Button onClick={handleRetry} disabled={saving || retrying} className="bg-red-600 hover:bg-red-700 text-white">
               {retrying
                 ? <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />Retrying…</>
-                : "🔁 Retry publish"}
+                : publishMode === "reminder" ? "🔁 Retry reminder" : "🔁 Retry publish"}
+            </Button>
+          )}
+
+          {/* Reminder sent → Mark as posted (also available from this action row) */}
+          {status === "reminder_sent" && (
+            <Button onClick={handleMarkPosted} disabled={markingPosted} className="bg-indigo-600 hover:bg-indigo-700 text-white">
+              {markingPosted
+                ? <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />Marking…</>
+                : "✓ Mark as posted"}
             </Button>
           )}
 
           {/* Step back */}
-          {(status === "planned" || status === "ready" || status === "scheduled" || status === "failed") && (
+          {(status === "planned" || status === "ready" || status === "scheduled" || status === "failed" || status === "reminder_sent") && (
             <Button
               variant="ghost"
-              onClick={() => handleSave(status === "scheduled" || status === "failed" ? "ready" : status === "ready" ? "planned" : "draft")}
+              onClick={() => handleSave(status === "scheduled" || status === "failed" || status === "reminder_sent" ? "ready" : status === "ready" ? "planned" : "draft")}
               disabled={saving}
               className="text-[hsl(var(--muted-foreground))] ml-auto"
             >
@@ -1449,7 +1589,9 @@ export function PostEditor({ post, brandName, industry, contentLanguage = "en", 
 
         {status === "scheduled" && !scheduleMsg && !notifyPublish && (
           <p className="text-xs text-[hsl(var(--muted-foreground))] bg-[hsl(var(--muted))]/40 rounded-lg px-3 py-2">
-            📌 This post is scheduled. If Buffer is connected, it will auto-publish at the scheduled time.
+            {publishMode === "reminder"
+              ? "⏰ This post is in reminder mode — you'll get an email at the scheduled time to post it yourself."
+              : "📌 This post is scheduled. If Buffer is connected, it will auto-publish at the scheduled time."}
           </p>
         )}
       </div>

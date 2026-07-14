@@ -92,10 +92,31 @@ export async function fetchAndStoreLinkedInAnalytics(brandId: string): Promise<{
 
   if (!posts?.length) return { processed: 0, errors: 0 }
 
+  // Reminder-mode posts (publish_mode = 'reminder') never got a real share URN
+  // from PostFlow — buffer_post_id being non-null for one would only happen if
+  // a post switched modes after already being posted directly, which shouldn't
+  // occur, but skip explicitly rather than trust that invariant. Selected
+  // separately and swallowed on error so a pre-migration environment (column
+  // doesn't exist yet) just treats every post as 'direct'.
+  const reminderPostIds = await (async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supabase as any)
+      .from("posts")
+      .select("id")
+      .eq("brand_id", brandId)
+      .eq("platform", "linkedin")
+      .eq("publish_mode", "reminder")
+    if (error || !data) return new Set<string>()
+    return new Set((data as Array<{ id: string }>).map(r => r.id))
+  })()
+
+  const eligiblePosts = posts.filter(p => !reminderPostIds.has(p.id))
+  if (!eligiblePosts.length) return { processed: 0, errors: 0 }
+
   let processed = 0
   let errors    = 0
 
-  for (const post of posts) {
+  for (const post of eligiblePosts) {
     if (!post.buffer_post_id) continue
     const stats = await fetchShareStats(post.buffer_post_id, social.platform_access_token)
     if (!stats) { errors++; continue }
