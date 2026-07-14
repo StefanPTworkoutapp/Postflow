@@ -4,6 +4,8 @@
  * Claude writes the narrative — this file handles layout + theming.
  */
 
+import { buildEmailBrandHeader, buildEmailFooter } from "./emailBrand"
+
 export interface TrendEmailData {
   brandName:      string
   recipientEmail: string
@@ -53,8 +55,9 @@ export function buildTrendEmailHtml(d: TrendEmailData): string {
   <div style="max-width:600px;margin:32px auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 1px 6px rgba(0,0,0,0.08);">
 
     <!-- Header -->
-    <div style="background:#6366f1;padding:28px 32px;">
-      <p style="margin:0;color:rgba(255,255,255,0.8);font-size:12px;letter-spacing:0.08em;text-transform:uppercase;">PostFlow · Trend Intelligence</p>
+    ${buildEmailBrandHeader({ background: "#6366f1" })}
+    <div style="background:#6366f1;padding:12px 32px 28px 32px;">
+      <p style="margin:0;color:rgba(255,255,255,0.8);font-size:12px;letter-spacing:0.08em;text-transform:uppercase;">Trend Intelligence</p>
       <h1 style="margin:6px 0 0 0;color:#fff;font-size:22px;font-weight:700;">Week of ${d.weekOf}</h1>
       <p style="margin:4px 0 0 0;color:rgba(255,255,255,0.75);font-size:14px;">${d.brandName}</p>
     </div>
@@ -81,12 +84,12 @@ export function buildTrendEmailHtml(d: TrendEmailData): string {
     </div>` : ""}
 
     <!-- Footer -->
-    <div style="padding:20px 32px;background:#f8fafc;border-top:1px solid #e2e8f0;">
-      <p style="margin:0;font-size:12px;color:#94a3b8;text-align:center;">
-        PostFlow · You're receiving this because you have an active brand.<br>
+    ${buildEmailFooter({
+      extra: `<p style="margin:8px 0 0 0;font-size:11px;color:#94a3b8;text-align:center;">
+        You're receiving this because you have an active brand.
         <a href="#" style="color:#6366f1;">Unsubscribe</a>
-      </p>
-    </div>
+      </p>`,
+    })}
   </div>
 </body>
 </html>`

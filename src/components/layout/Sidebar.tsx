@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import Image from "next/image"
 import {
   LayoutDashboard,
   CalendarDays,
@@ -9,7 +10,6 @@ import {
   Palette,
   BarChart2,
   Settings,
-  Zap,
   Link2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -107,7 +107,7 @@ export function Sidebar({ userEmail: _userEmail, brands, activeBrandId }: Sideba
     <aside className="flex h-screen w-60 flex-col border-r bg-[hsl(var(--sidebar-background))] text-[hsl(var(--sidebar-foreground))] shrink-0">
       {/* Logo */}
       <div className="flex h-14 items-center gap-2 px-4 border-b border-[hsl(var(--sidebar-border))]">
-        <Zap className="h-5 w-5 text-[var(--pf-teal)] shrink-0" />
+        <Image src="/postflow-logo-icon.png" alt="" width={20} height={20} className="rounded-md shrink-0" />
         <span className="font-semibold text-sm tracking-tight">PostFlow</span>
       </div>
 

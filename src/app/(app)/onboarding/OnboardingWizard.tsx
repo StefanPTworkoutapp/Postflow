@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Loader2, Zap } from "lucide-react"
+import Image from "next/image"
+import { Loader2 } from "lucide-react"
 import type { Database } from "@/types/database.types"
 import type { OnboardingDraft } from "@/lib/shared/onboarding/types"
 import { TOTAL_STEPS } from "@/lib/shared/onboarding/types"
@@ -202,7 +203,7 @@ export function OnboardingWizard({ existingBrand }: Props) {
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 border-b">
         <div className="flex items-center gap-2">
-          <Zap className="h-5 w-5 text-[var(--pf-teal)]" />
+          <Image src="/postflow-logo-icon.png" alt="" width={20} height={20} className="rounded-md" />
           <span className="font-semibold text-sm">PostFlow</span>
         </div>
         <div className="flex items-center gap-4">

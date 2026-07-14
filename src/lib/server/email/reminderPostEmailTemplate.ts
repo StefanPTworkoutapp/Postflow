@@ -11,6 +11,7 @@
  */
 
 import { Resend } from "resend"
+import { buildEmailBrandHeader, buildEmailFooter } from "./emailBrand"
 
 // Lazy init — avoids throwing at build time when env vars are absent (same
 // pattern as postReminders.ts / weeklyTrendEmail.ts).
@@ -76,7 +77,8 @@ export function buildReminderPostEmailHtml(d: ReminderPostEmailData): string {
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;padding:0;background:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
   <div style="max-width:560px;margin:32px auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 1px 6px rgba(0,0,0,0.08);">
-    <div style="background:#6366f1;padding:24px 28px;">
+    ${buildEmailBrandHeader({ background: "#6366f1" })}
+    <div style="background:#6366f1;padding:8px 28px 24px 28px;">
       <p style="margin:0;color:#fff;font-size:22px;">⏰ Time to post on ${platformLabel}</p>
       <p style="margin:6px 0 0 0;color:rgba(255,255,255,0.8);font-size:14px;">${d.brandName} · reminder mode</p>
     </div>
@@ -115,9 +117,9 @@ export function buildReminderPostEmailHtml(d: ReminderPostEmailData): string {
         Once it's live, come back and tap "Mark as posted" on this post so your analytics stay accurate.
       </p>
     </div>
-    <div style="padding:16px 28px;background:#f8fafc;border-top:1px solid #e2e8f0;">
-      <p style="margin:0;font-size:12px;color:#94a3b8;text-align:center;">PostFlow reminder-mode post</p>
-    </div>
+    ${buildEmailFooter({
+      extra: `<p style="margin:8px 0 0 0;font-size:11px;color:#94a3b8;text-align:center;">Reminder-mode post</p>`,
+    })}
   </div>
 </body>
 </html>`

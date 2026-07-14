@@ -17,7 +17,8 @@ export default function TermsPage() {
       <style>{`
         .pf-legal { background: #fff; color: #111827; min-height: 100vh; }
         .pf-legal-nav { display: flex; align-items: center; justify-content: space-between; padding: 1.25rem 2rem; border-bottom: 1px solid #e5e7eb; }
-        .pf-legal-logo { font-weight: 700; font-size: 1.125rem; color: #111827; text-decoration: none; letter-spacing: -0.02em; }
+        .pf-legal-logo { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 1.125rem; color: #111827; text-decoration: none; letter-spacing: -0.02em; }
+        .pf-legal-logo img { width: 24px; height: 24px; border-radius: 6px; display: block; }
         .pf-legal-logo span { color: #0DA5A5; }
         .pf-legal-back { font-size: 0.875rem; color: #6b7280; text-decoration: none; }
         .pf-legal-back:hover { color: #0DA5A5; }
@@ -34,7 +35,10 @@ export default function TermsPage() {
       `}</style>
 
       <nav className="pf-legal-nav">
-        <a href="https://postflowsocials.app" className="pf-legal-logo">Post<span>Flow</span></a>
+        <a href="https://postflowsocials.app" className="pf-legal-logo">
+          <img src="/postflow-logo-icon.png" alt="" />
+          Post<span>Flow</span>
+        </a>
         <a href="https://postflowsocials.app" className="pf-legal-back">← Back to PostFlow</a>
       </nav>
 

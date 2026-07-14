@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
@@ -84,7 +85,10 @@ export default function SignupPage() {
     return (
       <Card>
         <CardHeader className="text-center">
-          <div className="mx-auto mb-2 text-2xl font-bold tracking-tight">PostFlow</div>
+          <div className="mx-auto mb-2 flex items-center justify-center gap-2">
+            <Image src="/postflow-logo-icon.png" alt="" width={28} height={28} className="rounded-md" />
+            <span className="text-2xl font-bold tracking-tight">PostFlow</span>
+          </div>
           <CardTitle className="text-xl">Check your email</CardTitle>
           <CardDescription>
             We sent a confirmation link to <strong>{email}</strong>. Click it to activate your account.
@@ -102,7 +106,10 @@ export default function SignupPage() {
   return (
     <Card>
       <CardHeader className="text-center">
-        <div className="mx-auto mb-2 text-2xl font-bold tracking-tight">PostFlow</div>
+        <div className="mx-auto mb-2 flex items-center justify-center gap-2">
+          <Image src="/postflow-logo-icon.png" alt="" width={28} height={28} className="rounded-md" priority />
+          <span className="text-2xl font-bold tracking-tight">PostFlow</span>
+        </div>
         <CardTitle className="text-xl">Create your account</CardTitle>
         <CardDescription>Start your 14-day free trial — no card required</CardDescription>
       </CardHeader>

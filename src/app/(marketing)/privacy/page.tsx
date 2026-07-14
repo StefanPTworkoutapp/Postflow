@@ -67,14 +67,14 @@ export default function PrivacyPage() {
         .pf-logo-mark {
           width: 28px;
           height: 28px;
-          background: var(--teal);
           border-radius: 6px;
           display: flex;
           align-items: center;
           justify-content: center;
+          overflow: hidden;
         }
 
-        .pf-logo-mark svg { width: 16px; height: 16px; fill: white; }
+        .pf-logo-mark img { width: 100%; height: 100%; display: block; }
 
         .pf-nav-link {
           color: var(--grey-500);
@@ -323,10 +323,7 @@ export default function PrivacyPage() {
         <nav className="pf-nav">
           <a href="https://postflowsocials.app" className="pf-logo">
             <div className="pf-logo-mark">
-              <svg viewBox="0 0 16 16">
-                <path d="M3 3h4v4H3zM9 3h4v4H9zM3 9h4v4H3zM9 9h4v4H9z" opacity="0.4" />
-                <path d="M3 3h4v4H3z" />
-              </svg>
+              <img src="/postflow-logo-icon.png" alt="" width={28} height={28} />
             </div>
             PostFlow
           </a>

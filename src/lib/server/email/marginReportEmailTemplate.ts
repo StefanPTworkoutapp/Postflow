@@ -7,6 +7,7 @@
  */
 
 import type { MarginReport } from "@/lib/server/admin/marginReport"
+import { buildEmailBrandHeader, buildEmailFooter } from "./emailBrand"
 
 function formatEur(n: number): string {
   const sign = n < 0 ? "-" : ""
@@ -54,8 +55,11 @@ export function buildMarginReportEmailHtml(report: MarginReport): string {
 <body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
   <table width="100%" cellpadding="0" cellspacing="0" style="max-width:640px;margin:0 auto;background:#ffffff;">
     <tr>
-      <td style="padding:32px 32px 16px 32px;">
-        <h1 style="margin:0 0 4px 0;font-size:20px;color:#111827;">PostFlow monthly cost &amp; margin</h1>
+      <td style="padding:0;">${buildEmailBrandHeader({ background: "#ffffff", textColor: "#1B2B4B" })}</td>
+    </tr>
+    <tr>
+      <td style="padding:8px 32px 16px 32px;">
+        <h1 style="margin:0 0 4px 0;font-size:20px;color:#111827;">Monthly cost &amp; margin</h1>
         <p style="margin:0;font-size:14px;color:#6b7280;">${report.month}</p>
       </td>
     </tr>
@@ -102,7 +106,9 @@ export function buildMarginReportEmailHtml(report: MarginReport): string {
         </p>
       </td>
     </tr>
-    <tr><td style="padding:24px 32px;">&nbsp;</td></tr>
+    <tr>
+      <td style="padding:0;">${buildEmailFooter()}</td>
+    </tr>
   </table>
 </body>
 </html>`

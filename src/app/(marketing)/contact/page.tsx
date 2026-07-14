@@ -2,14 +2,19 @@
 
 import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
+import Image from "next/image"
 
+// Shared PostFlow brand mark — kept consistent with the /join marketing page.
 function Logo({ size = 6 }: { size?: number }) {
+  const px = size * 4 // Tailwind's w-N / h-N scale is N * 0.25rem = N * 4px
   return (
-    <div className={`w-${size} h-${size} rounded-lg bg-[#0DA5A5] flex items-center justify-center shrink-0`}>
-      <svg className="w-[58%] h-[58%] text-white" viewBox="0 0 16 16" fill="currentColor">
-        <path d="M8 1L1 5v6l7 4 7-4V5L8 1zm0 2.18L13.18 6 8 8.82 2.82 6 8 3.18z"/>
-      </svg>
-    </div>
+    <Image
+      src="/postflow-logo-icon.png"
+      alt="PostFlow"
+      width={px}
+      height={px}
+      className="rounded-lg shrink-0"
+    />
   )
 }
 
