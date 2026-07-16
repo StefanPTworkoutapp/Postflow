@@ -23,13 +23,6 @@ export default function SignupPage() {
   const [googleLoading, setGoogleLoading] = useState(false)
   const [success, setSuccess] = useState(false)
 
-  // Fire-and-forget the app-owned welcome email once signup succeeds. The
-  // route emails the authenticated session's own address, so it only fires
-  // when a session actually exists. Never blocks or breaks signup.
-  function fireWelcomeEmail() {
-    fetch("/api/auth/welcome", { method: "POST" }).catch(() => {})
-  }
-
   async function handleEmailSignup(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
@@ -59,19 +52,17 @@ export default function SignupPage() {
       return
     }
 
-    // If a session is returned, email confirmation is disabled in the
-    // Supabase project (auto-confirm ON). The user is already authenticated —
-    // send the welcome email, then send them in.
+    // If a session is returned, email confirmation is disabled (auto-confirm
+    // ON). The user is already authenticated — send them straight in.
     if (data.session) {
-      fireWelcomeEmail()
       router.push("/dashboard")
       router.refresh()
       return
     }
 
-    // No session (email confirmation enabled) — still welcome them; the route
-    // no-ops if there's no readable session yet.
-    fireWelcomeEmail()
+    // No session: email confirmation is required (mailer_autoconfirm OFF).
+    // Supabase has sent the native confirmation email — show the "check your
+    // email to confirm" state rather than assuming an instant session.
     setSuccess(true)
     setLoading(false)
   }

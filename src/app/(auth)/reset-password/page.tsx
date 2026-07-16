@@ -22,48 +22,112 @@ export default function ResetPasswordPage() {
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
-  // On load, establish the recovery session. Supabase recovery links land here
-  // with the token in the URL hash; the browser client (detectSessionInUrl)
-  // parses it and emits PASSWORD_RECOVERY / SIGNED_IN. We also read any error
-  // the hash carries (e.g. otp_expired) to show a clear "link expired" state.
+  // On load, establish the recovery session. Supabase can deliver the recovery
+  // credential in three different shapes depending on the project's auth flow
+  // and the mail client that opened the link, so we handle ALL of them:
+  //
+  //   • ?code=…                         → exchangeCodeForSession  (PKCE, same-device)
+  //   • ?token_hash=…&type=recovery     → verifyOtp               (device-independent, Supabase's recommended email path)
+  //   • #access_token=…&refresh_token=… → setSession              (implicit hash)
+  //
+  // We also listen for PASSWORD_RECOVERY / SIGNED_IN and check getSession() as a
+  // belt-and-suspenders (detectSessionInUrl may have already parsed the hash),
+  // and read any explicit error in the URL (e.g. otp_expired) to show a clear
+  // "link expired" state. "invalid" is only shown AFTER we genuinely fail to
+  // establish a session — the async exchange/verify is awaited first so we never
+  // false-positive while establishment is still in flight.
   useEffect(() => {
     let settled = false
+    let unmounted = false
 
-    // 1. Explicit error in the hash → expired/invalid link.
-    if (typeof window !== "undefined" && window.location.hash) {
-      const params = new URLSearchParams(window.location.hash.replace(/^#/, ""))
-      if (params.get("error") || params.get("error_code")) {
-        setPhase("invalid")
-        return
-      }
+    const markReady = () => {
+      if (settled || unmounted) return
+      settled = true
+      setPhase("ready")
     }
 
-    // 2. React to the recovery session being established from the URL hash.
     const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
       if ((event === "PASSWORD_RECOVERY" || event === "SIGNED_IN") && session) {
-        settled = true
-        setPhase("ready")
+        markReady()
       }
     })
 
-    // 3. Also check synchronously in case the session was already parsed
-    //    before the listener attached.
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session && !settled) {
-        settled = true
-        setPhase("ready")
-      }
-    })
+    async function establish() {
+      if (typeof window === "undefined") return
 
-    // 4. Fallback: if nothing established a session shortly after load, the
-    //    link is invalid or already consumed.
-    const timeout = setTimeout(() => {
-      if (!settled) setPhase(prev => (prev === "checking" ? "invalid" : prev))
-    }, 4000)
+      const query = new URLSearchParams(window.location.search)
+      const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""))
+
+      // 1. Explicit error carried in the query or hash → expired/invalid link.
+      const errCode =
+        query.get("error_code") ??
+        query.get("error") ??
+        hash.get("error_code") ??
+        hash.get("error")
+      if (errCode) {
+        if (!settled && !unmounted) setPhase("invalid")
+        return
+      }
+
+      // 2. Already-established session (e.g. detectSessionInUrl parsed the hash
+      //    before we ran, or the user reloaded with a live recovery session).
+      const existing = await supabase.auth.getSession()
+      if (existing.data.session) {
+        markReady()
+        return
+      }
+
+      // 3. PKCE, same-device: ?code=…
+      const code = query.get("code")
+      if (code) {
+        const { error } = await supabase.auth.exchangeCodeForSession(code)
+        if (!error) {
+          markReady()
+          return
+        }
+      }
+
+      // 4. Device-independent email link: ?token_hash=…&type=recovery
+      const tokenHash = query.get("token_hash")
+      const type = query.get("type")
+      if (tokenHash && (type === "recovery" || type === null)) {
+        const { error } = await supabase.auth.verifyOtp({
+          token_hash: tokenHash,
+          type: "recovery",
+        })
+        if (!error) {
+          markReady()
+          return
+        }
+      }
+
+      // 5. Implicit hash: #access_token=…&refresh_token=…
+      const accessToken = hash.get("access_token")
+      const refreshToken = hash.get("refresh_token")
+      if (accessToken && refreshToken) {
+        const { error } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        })
+        if (!error) {
+          markReady()
+          return
+        }
+      }
+
+      // 6. Nothing worked. Give the onAuthStateChange listener a brief grace
+      //    window (detectSessionInUrl may still be resolving the hash), then
+      //    conclude the link is invalid or already consumed.
+      setTimeout(() => {
+        if (!settled && !unmounted) setPhase("invalid")
+      }, 1500)
+    }
+
+    void establish()
 
     return () => {
+      unmounted = true
       sub.subscription.unsubscribe()
-      clearTimeout(timeout)
     }
   }, [supabase])
 

@@ -3,12 +3,16 @@
 import { useState } from "react"
 import Link from "next/link"
 import Image from "next/image"
+import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 
+const APP_BASE_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://postflowsocials.app"
+
 export default function ForgotPasswordPage() {
+  const [supabase] = useState(() => createClient())
   const [email, setEmail] = useState("")
   const [loading, setLoading] = useState(false)
   const [sent, setSent] = useState(false)
@@ -16,18 +20,18 @@ export default function ForgotPasswordPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
+    // Native Supabase recovery email. resetPasswordForEmail is anti-enumeration
+    // by default: it resolves without error whether or not the address maps to
+    // an account, and Supabase only sends when it does. We therefore always show
+    // the same generic confirmation and never reveal existence either way.
     try {
-      await fetch("/api/auth/forgot-password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+      await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${APP_BASE_URL}/reset-password`,
       })
     } catch {
-      // The route always returns generic success; even a network error
-      // shouldn't reveal anything. Show the same confirmation.
+      // Even an unexpected/network error must not reveal anything — show the
+      // same confirmation.
     }
-    // Always show the generic confirmation — never reveal whether the
-    // address exists.
     setSent(true)
     setLoading(false)
   }
