@@ -15,6 +15,7 @@ const DISPLAY_PLANS = [
       { text: "5 posts per month",               detail: null },
       { text: "1 brand",                          detail: null },
       { text: "Instagram, LinkedIn & Facebook",   detail: null },
+      { text: "1 GB storage",                     detail: null },
       { text: "Basic analytics",                  detail: "Reach, likes, comments per post" },
     ],
   },
@@ -27,6 +28,7 @@ const DISPLAY_PLANS = [
       { text: "Reels & Stories",         detail: null },
       { text: "Brand voice",             detail: null },
       { text: "Buffer integration",      detail: null },
+      { text: "10 GB storage",           detail: null },
       { text: "Standard analytics",      detail: "Post performance, template health scores, weekly trend digest" },
     ],
   },
@@ -39,10 +41,19 @@ const DISPLAY_PLANS = [
       { text: "3 brands",               detail: null },
       { text: "3 team members",         detail: null },
       { text: "Unlimited templates",    detail: null },
+      { text: "50 GB storage",          detail: null },
       { text: "Advanced analytics",     detail: "Performance trends over time, A/B template comparison, Reel completion rates, carousel swipe rates, lock your best template" },
     ],
   },
 ] as const
+
+const STORAGE_ADDONS = [
+  { gb: 50,  monthly: 5,  annual: 4  },
+  { gb: 200, monthly: 15, annual: 12 },
+  { gb: 500, monthly: 30, annual: 24 },
+] as const
+
+const RENDER_PACK = { credits: 10, price: 9 } as const
 
 // ── Component ─────────────────────────────────────────────────────────────
 
@@ -179,6 +190,46 @@ export function PricingSection() {
           Prices exclude VAT where applicable. EU VAT handled automatically.
           Pause or cancel any time.
         </p>
+
+        {/* Add-ons */}
+        <div className="mb-16">
+          <h3 className="text-lg font-semibold mb-1">Add-ons</h3>
+          <p className="text-sm text-white/40 mb-6">Available on any paid plan. Added to your subscription, cancel any time.</p>
+
+          <div className="grid sm:grid-cols-2 gap-4">
+            {/* Storage add-ons */}
+            <div className="rounded-2xl border border-white/[0.07] bg-[#141929] p-6">
+              <p className="text-xs text-[#0DA5A5] font-bold tracking-widest uppercase mb-3">Extra Storage</p>
+              <div className="space-y-3">
+                {STORAGE_ADDONS.map(({ gb, monthly, annual }) => (
+                  <div key={gb} className="flex items-center justify-between">
+                    <span className="text-sm text-white/70">+{gb} GB</span>
+                    <span className="text-sm text-white/50">
+                      {billing === "annual"
+                        ? <><span className="text-white font-medium">€{annual}/mo</span> · billed annually</>
+                        : <><span className="text-white font-medium">€{monthly}/mo</span></>
+                      }
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-white/20 mt-4">Stacks on top of your plan&apos;s included storage.</p>
+            </div>
+
+            {/* Render credits */}
+            <div className="rounded-2xl border border-white/[0.07] bg-[#141929] p-6">
+              <p className="text-xs text-[#0DA5A5] font-bold tracking-widest uppercase mb-3">Render Credits</p>
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm text-white/70">{RENDER_PACK.credits} credits</span>
+                <span className="text-sm"><span className="text-white font-medium">€{RENDER_PACK.price}</span> <span className="text-white/50">one-time</span></span>
+              </div>
+              <p className="text-xs text-white/40 leading-relaxed">
+                Used for carousel image rendering and Reel covers. Each render costs 1 credit.
+                Credits never expire.
+              </p>
+            </div>
+          </div>
+        </div>
 
         {/* Agency row */}
         <div className="rounded-2xl border border-white/[0.07] bg-[#141929] px-8 py-7 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
