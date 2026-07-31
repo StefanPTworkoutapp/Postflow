@@ -31,6 +31,37 @@ export type UploadStage =
   | "done"
   | "error"
 
+/** Human-readable error messages for common upload failures. */
+function friendlyError(err: unknown, context: "compress" | "sign" | "upload" | "confirm"): string {
+  const raw = err instanceof Error ? err.message : String(err)
+
+  // Pass through our own already-friendly messages
+  if (raw.includes("Could not load") || raw.includes("Video compression failed") || raw.includes("Could not read")) {
+    return raw
+  }
+
+  if (context === "compress") {
+    return `Compression failed — try enabling "Keep original quality" to skip it, or convert the file to MP4 first.`
+  }
+  if (context === "sign") {
+    if (raw.toLowerCase().includes("storage limit") || raw.toLowerCase().includes("quota")) {
+      return "You've reached your storage limit. Delete some files or upgrade your plan to free up space."
+    }
+    if (raw.toLowerCase().includes("too large")) return raw
+    if (raw.toLowerCase().includes("not allowed")) return raw
+    return `Could not prepare upload: ${raw}`
+  }
+  if (context === "upload") {
+    if (raw.includes("413")) return "File is too large for the server. Try enabling compression or split the video into shorter clips."
+    if (raw.includes("403") || raw.includes("401")) return "Upload permission expired. Refresh the page and try again."
+    return "Upload failed — check your internet connection and try again."
+  }
+  if (context === "confirm") {
+    return `File uploaded but could not be saved: ${raw}. Contact support if this keeps happening.`
+  }
+  return raw
+}
+
 export interface UploadResult {
   path:      string
   publicUrl: string
@@ -47,10 +78,12 @@ export interface UploadOptions {
 
 export interface UploadResultWithSizes extends UploadResult {
   /** Original file size in bytes, before any client-side compression. */
-  originalBytes:   number
+  originalBytes:     number
   /** Size actually uploaded, in bytes (== originalBytes when uncompressed or keepOriginalQuality was set). */
-  uploadedBytes:   number
-  compressed:      boolean
+  uploadedBytes:     number
+  compressed:        boolean
+  /** Set when compression was attempted but failed and the original was uploaded instead. */
+  compressionWarning?: string
 }
 
 // ── Main function ─────────────────────────────────────────────────────────────
@@ -67,6 +100,7 @@ export async function uploadFile(
   // ── Step 1: Compress ───────────────────────────────────────────────────────
   let fileToUpload = file
   let compressed = false
+  let compressionWarning: string | undefined
 
   if (!keepOriginalQuality && shouldCompressVideo(file)) {
     setStage("compressing")
@@ -75,7 +109,8 @@ export async function uploadFile(
       fileToUpload = await compressVideo(file, pct => setProgress(Math.round(pct * 0.6)))
       compressed = true
     } catch (err) {
-      console.warn("[upload-manager] Video compression failed, uploading original:", err)
+      // Surface compression failure as a warning but continue with the original file
+      compressionWarning = friendlyError(err, "compress")
       fileToUpload = file
     }
   } else if (!keepOriginalQuality && shouldCompressImage(file)) {
@@ -84,8 +119,7 @@ export async function uploadFile(
     try {
       fileToUpload = await compressImage(file)
       compressed = fileToUpload !== file && fileToUpload.size !== file.size
-    } catch (err) {
-      console.warn("[upload-manager] Image compression failed, uploading original:", err)
+    } catch {
       fileToUpload = file
     }
   }
@@ -119,15 +153,22 @@ export async function uploadFile(
       signedUrl?: string; path?: string; publicUrl?: string; error?: string
     }
     if (urlData.error || !urlData.signedUrl) {
-      throw new Error(urlData.error ?? "Failed to get upload URL")
+      throw new Error(friendlyError(urlData.error ?? "Failed to get upload URL", "sign"))
     }
 
-    const uploadRes = await fetch(urlData.signedUrl, {
-      method:  "PUT",
-      headers: { "Content-Type": fileToUpload.type },
-      body:    fileToUpload,
-    })
-    if (!uploadRes.ok) throw new Error(`Storage upload failed (${uploadRes.status})`)
+    let uploadRes: Response
+    try {
+      uploadRes = await fetch(urlData.signedUrl, {
+        method:  "PUT",
+        headers: { "Content-Type": fileToUpload.type },
+        body:    fileToUpload,
+      })
+    } catch {
+      throw new Error(friendlyError("network", "upload"))
+    }
+    if (!uploadRes.ok) {
+      throw new Error(friendlyError(`${uploadRes.status}`, "upload"))
+    }
 
     path      = urlData.path!
     publicUrl = urlData.publicUrl!
@@ -149,8 +190,8 @@ export async function uploadFile(
       size:        fileToUpload.size,
     }),
   })
-  const confirmData = await confirmRes.json() as { mediaId?: string; error?: string }
-  if (confirmData.error) throw new Error(confirmData.error)
+  const confirmData = await confirmRes.json() as { mediaId?: string; media?: { id: string }; error?: string }
+  if (confirmData.error) throw new Error(friendlyError(confirmData.error, "confirm"))
 
   setStage("done")
   setProgress(100)
@@ -158,9 +199,10 @@ export async function uploadFile(
   return {
     path,
     publicUrl,
-    mediaId:       confirmData.mediaId ?? "",
-    originalBytes: file.size,
-    uploadedBytes: fileToUpload.size,
+    mediaId:           confirmData.mediaId ?? confirmData.media?.id ?? "",
+    originalBytes:     file.size,
+    uploadedBytes:     fileToUpload.size,
     compressed,
+    compressionWarning,
   }
 }

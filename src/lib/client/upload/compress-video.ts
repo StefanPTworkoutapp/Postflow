@@ -1,23 +1,19 @@
 /**
  * compress-video.ts
  *
- * Client-side video compression via ffmpeg.wasm.
+ * Client-side video compression via ffmpeg.wasm (single-thread build).
  * Runs entirely in the browser — no server round-trip.
+ * Works on every route — does NOT require COOP/COEP headers because it
+ * uses @ffmpeg/core-st (single-thread) which avoids SharedArrayBuffer.
  *
- * Target (P4, 2026-07-14 — media efficiency pass): 1080p / H.264 / CRF 26.
- * Only applied to files over COMPRESS_THRESHOLD_BYTES (~80MB) — see
- * shouldCompressVideo() below. Smaller clips upload as-is; the wasm
- * transcode isn't worth the client-side CPU/time for an already-small file.
- * MOV files are automatically transcoded to MP4.
- * Returns a compressed File ready to upload.
+ * Target: 1080p max / H.264 / CRF 26 / AAC 128k.
+ * Applied to all video files over COMPRESS_THRESHOLD_BYTES (20 MB).
+ * MOV/AVI/WebM are transcoded to MP4.
  *
- * Requires COOP/COEP headers on the page (set in next.config.ts for /upload).
- *
- * Usage:
- *   const compressed = await compressVideo(file, (progress) => setProgress(progress))
+ * Throws on failure — callers must handle and surface the error to the user.
  */
 
-import { FFmpeg }        from "@ffmpeg/ffmpeg"
+import { FFmpeg }              from "@ffmpeg/ffmpeg"
 import { fetchFile, toBlobURL } from "@ffmpeg/util"
 
 export type ProgressCallback = (pct: number) => void
@@ -29,11 +25,11 @@ async function getFFmpeg(): Promise<FFmpeg> {
 
   const ffmpeg = new FFmpeg()
 
-  // Load ffmpeg.wasm core from CDN — avoids bundling the ~30MB binary
-  const baseURL = "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd"
+  // Single-thread build — no SharedArrayBuffer / COOP/COEP headers needed.
+  const baseURL = "https://unpkg.com/@ffmpeg/core-st@0.12.6/dist/umd"
   await ffmpeg.load({
-    coreURL:   await toBlobURL(`${baseURL}/ffmpeg-core.js`,   "text/javascript"),
-    wasmURL:   await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm"),
+    coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`,   "text/javascript"),
+    wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm"),
   })
 
   ffmpegInstance = ffmpeg
@@ -41,72 +37,77 @@ async function getFFmpeg(): Promise<FFmpeg> {
 }
 
 export async function compressVideo(
-  file:       File,
+  file:        File,
   onProgress?: ProgressCallback,
 ): Promise<File> {
-  const ffmpeg = await getFFmpeg()
+  let ffmpeg: FFmpeg
+  try {
+    ffmpeg = await getFFmpeg()
+  } catch {
+    throw new Error("Could not load the video compressor. Check your internet connection and try again.")
+  }
 
   onProgress?.(0)
 
-  // Wire ffmpeg progress to our callback (0–100)
   ffmpeg.on("progress", ({ progress }) => {
-    onProgress?.(Math.round(progress * 100))
+    onProgress?.(Math.min(99, Math.round(progress * 100)))
   })
 
-  const inputName  = "input"  + file.name.slice(file.name.lastIndexOf("."))
+  const inputName  = "input" + file.name.slice(file.name.lastIndexOf("."))
   const outputName = "output.mp4"
 
-  // Write the file into ffmpeg's virtual FS
-  await ffmpeg.writeFile(inputName, await fetchFile(file))
+  try {
+    await ffmpeg.writeFile(inputName, await fetchFile(file))
+  } catch {
+    throw new Error("Could not read the video file. It may be corrupted or too large for your browser.")
+  }
 
-  // Compress to 1080p H.264 CRF 26, copy audio stream
-  await ffmpeg.exec([
-    "-i",        inputName,
-    "-vf",       "scale='min(1920,iw)':'min(1080,ih)':force_original_aspect_ratio=decrease",
-    "-c:v",      "libx264",
-    "-crf",      "26",
-    "-preset",   "fast",
-    "-c:a",      "aac",
-    "-b:a",      "128k",
-    "-movflags", "+faststart",
-    outputName,
-  ])
+  try {
+    await ffmpeg.exec([
+      "-i",        inputName,
+      "-vf",       "scale='min(1920,iw)':'min(1080,ih)':force_original_aspect_ratio=decrease",
+      "-c:v",      "libx264",
+      "-crf",      "26",
+      "-preset",   "fast",
+      "-c:a",      "aac",
+      "-b:a",      "128k",
+      "-movflags", "+faststart",
+      outputName,
+    ])
+  } catch {
+    throw new Error("Video compression failed. Try using 'Keep original quality' to skip compression, or convert the file to MP4 first.")
+  }
 
   const data = await ffmpeg.readFile(outputName)
 
-  // Clean up virtual FS
   await ffmpeg.deleteFile(inputName).catch(() => null)
   await ffmpeg.deleteFile(outputName).catch(() => null)
 
-  // data may be Uint8Array or string — normalise to a plain ArrayBuffer for Blob
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const raw   = data as any
   const uint8 = raw instanceof Uint8Array ? raw : new TextEncoder().encode(String(raw))
-  // Copy into a plain ArrayBuffer (avoids SharedArrayBuffer Blob restriction)
   const buf   = uint8.buffer.slice(uint8.byteOffset, uint8.byteOffset + uint8.byteLength) as ArrayBuffer
   const blob  = new Blob([buf], { type: "video/mp4" })
-  const compressedName = file.name.replace(/\.[^.]+$/, "") + "_compressed.mp4"
 
   onProgress?.(100)
 
-  return new File([blob], compressedName, { type: "video/mp4" })
+  return new File(
+    [blob],
+    file.name.replace(/\.[^.]+$/, "") + "_compressed.mp4",
+    { type: "video/mp4" },
+  )
 }
 
-/** Files over this size get transcoded down to 1080p before upload. */
-export const COMPRESS_THRESHOLD_BYTES = 80 * 1024 * 1024 // ~80MB
+/** Videos over this size are compressed before upload. */
+export const COMPRESS_THRESHOLD_BYTES = 20 * 1024 * 1024 // 20 MB
 
-/**
- * Returns true if the file should be compressed before upload.
- * Gated on size (COMPRESS_THRESHOLD_BYTES) — small clips upload untouched.
- */
 export function shouldCompressVideo(file: File): boolean {
   const type = file.type.toLowerCase()
-  const isVideoType = (
+  const isVideo =
     type === "video/mp4"       ||
-    type === "video/quicktime" ||  // MOV
+    type === "video/quicktime" ||
     type === "video/mov"       ||
     type === "video/avi"       ||
     type === "video/webm"
-  )
-  return isVideoType && file.size > COMPRESS_THRESHOLD_BYTES
+  return isVideo && file.size > COMPRESS_THRESHOLD_BYTES
 }

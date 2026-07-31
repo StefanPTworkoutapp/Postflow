@@ -59,7 +59,7 @@ export async function POST(request: Request) {
       console.warn("confirm: failed to fire media.uploaded event:", err)
     })
 
-    return NextResponse.json({ media: data }, { status: 201 })
+    return NextResponse.json({ mediaId: data.id, media: data }, { status: 201 })
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error"
     return NextResponse.json({ error: message }, { status: 500 })

@@ -7,15 +7,16 @@ import { Button } from "@/components/ui/button"
 import { uploadFile, type UploadStage } from "@/lib/client/upload/upload-manager"
 
 interface UploadFile {
-  id:         string
-  file:       File
-  preview:    string | null
-  status:     "pending" | "uploading" | "done" | "error"
-  stage?:     UploadStage
-  progress?:  number
-  error?:     string
-  publicUrl?: string
-  compressionNote?: string | null
+  id:                  string
+  file:                File
+  preview:             string | null
+  status:              "pending" | "uploading" | "done" | "error"
+  stage?:              UploadStage
+  progress?:           number
+  error?:              string
+  publicUrl?:          string
+  compressionNote?:    string | null
+  compressionWarning?: string
 }
 
 // Accept HEIC + increased size limit (compression handles oversized files)
@@ -30,7 +31,7 @@ function uid() { return Math.random().toString(36).slice(2) }
 
 const STAGE_LABEL: Record<UploadStage, string> = {
   idle:        "",
-  compressing: "Compressing…",
+  compressing: "Compressing video…",
   uploading:   "Uploading…",
   confirming:  "Saving…",
   done:        "Done",
@@ -44,17 +45,27 @@ export function MediaUploader({ onUploadComplete }: { onUploadComplete?: () => v
   const inputRef = useRef<HTMLInputElement>(null)
 
   function addFiles(incoming: File[]) {
-    const valid = incoming.filter(f => {
-      if (!ACCEPTED.includes(f.type)) return false
-      if (f.size > MAX_SIZE) return false
-      return true
+    const newItems: UploadFile[] = incoming.map(file => {
+      if (!ACCEPTED.includes(file.type)) {
+        return {
+          id: uid(), file, preview: null, status: "error" as const,
+          error: `"${file.type || file.name.split(".").pop()}" files aren't supported. Upload videos (MP4, MOV) or images (JPG, PNG, WebP, HEIC, GIF).`,
+        }
+      }
+      if (file.size > MAX_SIZE) {
+        const mb = (file.size / 1024 / 1024).toFixed(0)
+        return {
+          id: uid(), file, preview: null, status: "error" as const,
+          error: `File is ${mb} MB — too large to upload. Videos are compressed automatically; if you're seeing this, the file may be unusually large. Try exporting at a lower resolution first.`,
+        }
+      }
+      return {
+        id: uid(),
+        file,
+        preview: file.type.startsWith("image/") ? URL.createObjectURL(file) : null,
+        status: "pending" as const,
+      }
     })
-    const newItems: UploadFile[] = valid.map(file => ({
-      id: uid(),
-      file,
-      preview: file.type.startsWith("image/") ? URL.createObjectURL(file) : null,
-      status: "pending",
-    }))
     setFiles(prev => [...prev, ...newItems])
   }
 
@@ -88,7 +99,15 @@ export function MediaUploader({ onUploadComplete }: { onUploadComplete?: () => v
       const note = compressionFeedback(result.originalBytes, result.uploadedBytes)
       setFiles(prev => prev.map(f =>
         f.id === item.id
-          ? { ...f, status: "done", stage: "done", progress: 100, publicUrl: result.publicUrl, compressionNote: note }
+          ? {
+              ...f,
+              status: "done",
+              stage: "done",
+              progress: 100,
+              publicUrl: result.publicUrl,
+              compressionNote: note,
+              compressionWarning: result.compressionWarning,
+            }
           : f
       ))
     } catch (err) {
@@ -246,7 +265,15 @@ export function MediaUploader({ onUploadComplete }: { onUploadComplete?: () => v
                     <p className="text-[10px] text-green-600 dark:text-green-400 leading-tight">{f.compressionNote}</p>
                   )}
 
-                  {f.error && <p className="text-xs text-[hsl(var(--destructive))] leading-tight">{f.error}</p>}
+                  {f.compressionWarning && (
+                    <p className="text-[10px] text-amber-500 leading-tight">
+                      ⚠ {f.compressionWarning}
+                    </p>
+                  )}
+
+                  {f.error && (
+                    <p className="text-xs text-[hsl(var(--destructive))] leading-tight">{f.error}</p>
+                  )}
                 </div>
 
                 {/* Remove button */}
