@@ -11,7 +11,8 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
-import { Loader2, CheckCircle2, XCircle, ArrowLeft, Copy, Check, Clapperboard } from "lucide-react"
+import Link from "next/link"
+import { Loader2, CheckCircle2, XCircle, ArrowLeft, Copy, Check, Clapperboard, CreditCard } from "lucide-react"
 import { Button }        from "@/components/ui/button"
 import { cn }            from "@/lib/utils"
 import { ClipDropzone }  from "@/components/clip-forge/ClipDropzone"
@@ -69,6 +70,22 @@ interface JobStatus {
   musicSkippedReason?: string | null
 }
 
+// ── Error mapping ────────────────────────────────────────────────────────────
+
+/** Maps a clip-forge API error payload to a user-facing message, flagging the credits case. */
+function toApiError(
+  data: { error?: string; upgradeHint?: string },
+  fallback: string,
+): { message: string; insufficientCredits?: boolean } {
+  if (data.error === "insufficient_credits") {
+    return {
+      message:             data.upgradeHint ?? "You're out of render credits.",
+      insufficientCredits: true,
+    }
+  }
+  return { message: data.error ?? fallback }
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function CreateClient() {
@@ -94,7 +111,7 @@ export function CreateClient() {
 
   // Global loading
   const [loading,  setLoading]  = useState(false)
-  const [apiError, setApiError] = useState<string | null>(null)
+  const [apiError, setApiError] = useState<{ message: string; insufficientCredits?: boolean } | null>(null)
 
   // ── Polling ──────────────────────────────────────────────────────────────────
 
@@ -156,7 +173,7 @@ export function CreateClient() {
       })
 
       const data = await res.json()
-      if (!res.ok) { setApiError(data.error ?? "Failed to create job"); return }
+      if (!res.ok) { setApiError(toApiError(data, "Failed to create job")); return }
 
       setJobResult(data as JobResult)
       // Default music to first track
@@ -186,7 +203,7 @@ export function CreateClient() {
       })
 
       const data = await res.json()
-      if (!res.ok) { setApiError(data.error ?? "Failed to start render"); return }
+      if (!res.ok) { setApiError(toApiError(data, "Failed to start render")); return }
 
       setStep(3)
 
@@ -241,9 +258,30 @@ export function CreateClient() {
 
       {/* API error banner */}
       {apiError && (
-        <div className="rounded-lg bg-rose-50 border border-rose-200 px-4 py-3 text-sm text-rose-700 dark:bg-rose-950/30 dark:border-rose-800 dark:text-rose-400">
-          {apiError}
-        </div>
+        apiError.insufficientCredits ? (
+          <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 dark:bg-amber-950/20 dark:border-amber-800">
+            <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
+              Out of render credits
+            </p>
+            <p className="mt-1 text-sm text-amber-700 dark:text-amber-400">
+              {apiError.message}
+            </p>
+            <div className="mt-3 flex gap-2">
+              <Button asChild size="sm">
+                <Link href="/settings/billing#render-credits">
+                  <CreditCard className="h-4 w-4 mr-2" /> Get more credits
+                </Link>
+              </Button>
+              <Button asChild size="sm" variant="outline">
+                <Link href="/settings/billing">Upgrade plan</Link>
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-lg bg-rose-50 border border-rose-200 px-4 py-3 text-sm text-rose-700 dark:bg-rose-950/30 dark:border-rose-800 dark:text-rose-400">
+            {apiError.message}
+          </div>
+        )
       )}
 
       {/* ── Step 0: Upload ──────────────────────────────────────────────────── */}
