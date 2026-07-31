@@ -1017,6 +1017,7 @@ export type Database = {
           ai_tags: string[] | null
           aspect_ratio: string | null
           brand_id: string
+          content_hash: string | null
           created_at: string
           duration_seconds: number | null
           file_size_mb: number | null
@@ -1038,6 +1039,7 @@ export type Database = {
           ai_tags?: string[] | null
           aspect_ratio?: string | null
           brand_id: string
+          content_hash?: string | null
           created_at?: string
           duration_seconds?: number | null
           file_size_mb?: number | null
@@ -1059,6 +1061,7 @@ export type Database = {
           ai_tags?: string[] | null
           aspect_ratio?: string | null
           brand_id?: string
+          content_hash?: string | null
           created_at?: string
           duration_seconds?: number | null
           file_size_mb?: number | null

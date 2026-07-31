@@ -31,7 +31,6 @@ export async function POST(request: Request) {
 
     const { data, error } = await supabase
       .from("media_uploads")
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .insert({
         brand_id:         brand.id,
         filename,
@@ -42,7 +41,7 @@ export async function POST(request: Request) {
         mime_type:        contentType,
         file_size_mb:     size / (1024 * 1024),
         ...(contentHash ? { content_hash: contentHash } : {}),
-      } as any)
+      })
       .select("id, public_url, media_type, filename, file_size_mb, ai_tags, ai_description, ai_quality_score, created_at")
       .single()
 

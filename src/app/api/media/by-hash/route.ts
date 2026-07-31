@@ -24,8 +24,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Invalid hash" }, { status: 400 })
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data, error } = await (supabase as any)
+    const { data, error } = await supabase
       .from("media_uploads")
       .select("id, public_url, media_type, mime_type, filename, file_size_mb, ai_tags, ai_description, created_at")
       .eq("brand_id", brand.id)
