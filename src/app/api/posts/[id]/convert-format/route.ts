@@ -96,11 +96,14 @@ export async function POST(
       .map(s => [s.headline, s.body].filter(Boolean).join(" — "))
       .join("\n")
 
+    const langLine = ctx.contentLanguage ? `LANGUAGE: Write entirely in ${ctx.contentLanguage}. Never switch languages.` : ""
+
     const flattenPrompt = `You are a social media copywriter. Convert these carousel slides into a single cohesive Instagram/LinkedIn post caption.
 
 BRAND: ${ctx.brand_name}
 ${ctx.tone_summary ? `TONE: ${ctx.tone_summary}` : ""}
 PLATFORM: ${post.platform}
+${langLine}
 
 CAROUSEL SLIDES:
 ${slideSummary}
@@ -148,12 +151,15 @@ No markdown, no explanation.`
     return NextResponse.json({ error: "No caption to convert" }, { status: 400 })
   }
 
+  const langLine = ctx.contentLanguage ? `LANGUAGE: Write entirely in ${ctx.contentLanguage}. Never switch languages.` : ""
+
   const prompt = isCarouselEdu
     ? `You are a social media expert. Convert this existing post caption into slide content for an educational Instagram/LinkedIn carousel.
 
 BRAND: ${ctx.brand_name}
 ${ctx.tone_summary ? `TONE: ${ctx.tone_summary}` : ""}
 PLATFORM: ${post.platform}
+${langLine}
 
 EXISTING CAPTION:
 ${caption}
@@ -184,6 +190,7 @@ Format:
 BRAND: ${ctx.brand_name}
 ${ctx.tone_summary ? `TONE: ${ctx.tone_summary}` : ""}
 PLATFORM: ${post.platform}
+${langLine}
 
 EXISTING CAPTION:
 ${caption}

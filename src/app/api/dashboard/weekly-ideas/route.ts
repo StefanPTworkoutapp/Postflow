@@ -36,6 +36,7 @@ export async function GET(_req: NextRequest): Promise<NextResponse> {
       ? (toneProfile.tone_adjectives as string[]).slice(0, 3).join(", ")
       : null
     const toneSummary = toneAdjectives ?? (toneProfile?.summary as string | undefined) ?? brand.tone_suggestion ?? "professional"
+    const contentLanguage = (toneProfile?.content_language as string | undefined) ?? null
 
     // Pull extra brand context that makes ideas more specific
     const tagline    = (brand as unknown as Record<string, unknown>).tagline as string | undefined
@@ -57,6 +58,7 @@ ${geoLine ? `Location: ${geoLine}` : ""}
 
 Suggest 3 specific, actionable post ideas for this week that feel tailored to this exact brand — not generic ${nicheLabel} tips.
 Each idea: hook (max 10 words — make it specific to the brand, not a template), format (Reel/Carousel/Single/Story), platform (Instagram/LinkedIn/Facebook), why it works for THIS brand (1 sentence, mention specific brand details).
+${contentLanguage ? `IMPORTANT: Write ALL text (hooks, reasons) in ${contentLanguage}. Never switch languages.` : ""}
 Return as JSON array with keys: hook, format, platform, reason.
 Only return the JSON array, no other text.`
 

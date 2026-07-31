@@ -57,6 +57,8 @@ export interface BrandContext {
   // ── Pre-formatted prompt block for simple prompt injection ────
   /** Drop this string directly into any Claude prompt. Always fetch live. */
   promptBlock: string
+  /** Detected content language (e.g. "Dutch", "English"). Null if not yet extracted. */
+  contentLanguage: string | null
 }
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
@@ -603,6 +605,7 @@ export async function getBrandContext(
     tone_examples:       (b.tone_examples as string[] | null) ?? null,
     custom_do_rules:     (b.custom_do_rules as string | null) ?? null,
     custom_dont_rules:   (b.custom_dont_rules as string | null) ?? null,
+    contentLanguage:     toneProfile?.content_language ?? null,
     promptBlock,
   }
 }

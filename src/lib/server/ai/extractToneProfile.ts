@@ -61,10 +61,10 @@ Return ONLY valid JSON matching this exact structure — no explanation, no mark
   "do_not_use": ["avoid1", "avoid2"],
   "cta_style": "direct_action|soft_invite|question|urgency",
   "emoji_usage": "none|minimal|moderate|heavy",
-  "content_language": "English"
+  "content_language": "<detected language in English, e.g. Dutch>"
 }
 
-For content_language: detect the primary language of the example posts (e.g. "Dutch", "English", "Spanish", "French") and use its English name.`,
+For content_language: detect the primary language of the example posts and write its English name (e.g. "Dutch", "English", "German", "French", "Spanish"). Do NOT default to English — if the posts are in Dutch, write "Dutch".`,
       },
     ],
   })
