@@ -18,18 +18,20 @@ export async function POST(request: Request) {
     const brand = await getBrand()
     if (!brand) return NextResponse.json({ error: "No brand found" }, { status: 400 })
 
-    const { path, publicUrl, filename, contentType, size } = await request.json() as {
+    const { path, publicUrl, filename, contentType, size, contentHash } = await request.json() as {
       path: string
       publicUrl: string
       filename: string
       contentType: string
       size: number
+      contentHash?: string
     }
 
     const mediaType = contentType.startsWith("video/") ? "video" : "image"
 
     const { data, error } = await supabase
       .from("media_uploads")
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .insert({
         brand_id:         brand.id,
         filename,
@@ -39,7 +41,8 @@ export async function POST(request: Request) {
         media_type:       mediaType,
         mime_type:        contentType,
         file_size_mb:     size / (1024 * 1024),
-      })
+        ...(contentHash ? { content_hash: contentHash } : {}),
+      } as any)
       .select("id, public_url, media_type, filename, file_size_mb, ai_tags, ai_description, ai_quality_score, created_at")
       .single()
 

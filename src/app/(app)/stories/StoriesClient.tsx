@@ -17,7 +17,7 @@
 import { useState, useRef, useCallback, DragEvent, ChangeEvent } from "react"
 import {
   Upload, CheckCircle2, ArrowLeft, Copy, Check,
-  Loader2, X, ImageIcon, Film, Sparkles,
+  Loader2, X, ImageIcon, Film, Sparkles, Library,
 } from "lucide-react"
 import { Button }        from "@/components/ui/button"
 import { SelectCard }    from "@/components/clip-forge/SelectCard"
@@ -26,6 +26,7 @@ import { FeedbackRow, BASE_FEEDBACK_TAGS } from "@/components/shared/FeedbackRow
 import { cn, compressionFeedback } from "@/lib/utils"
 import { useConnections } from "@/hooks/useConnections"
 import { prepareMediaFile } from "@/lib/client/upload/prepare-media-file"
+import { MediaPicker, type MediaItem } from "@/components/media/MediaPicker"
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -67,10 +68,18 @@ const TEMPLATE_OPTIONS: Array<{ value: string; label: string; emoji: string; des
 type MediaType = "photo" | "video"
 
 interface UploadedMedia {
-  file:      File
-  path:      string
-  mediaType: MediaType
-  previewUrl: string
+  /** Set for freshly uploaded files; absent for library-picked items */
+  file?:        File
+  /** Storage path (upload) or public URL (library item) passed to stories/create */
+  path?:        string
+  /** Public URL passed directly to stories/create when picked from library */
+  publicUrl?:   string
+  mediaType:    MediaType
+  previewUrl:   string
+  /** Display name when file object is unavailable */
+  displayName?: string
+  /** Display size in MB when file object is unavailable */
+  displaySizeMb?: number
 }
 
 interface CreateResult {
@@ -88,7 +97,8 @@ interface CreateResult {
 export function StoriesClient() {
   const [step, setStep] = useState<Step>(0)
 
-  // Step 0 — upload
+  // Step 0 — upload / library
+  const [step0Tab,   setStep0Tab]   = useState<"upload" | "library">("upload")
   const [media,      setMedia]      = useState<UploadedMedia | null>(null)
   const [uploading,  setUploading]  = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
@@ -220,7 +230,7 @@ export function StoriesClient() {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          path:      media.path,
+          ...(media.publicUrl ? { publicUrl: media.publicUrl } : { path: media.path }),
           platform,
           template,
           mediaType: media.mediaType,
@@ -326,63 +336,126 @@ export function StoriesClient() {
       {/* ── Step 0: Upload ────────────────────────────────────────────────────── */}
       {step === 0 && (
         <section className="space-y-4">
-          <h2 className="text-base font-medium">Upload your media</h2>
+          <h2 className="text-base font-medium">Choose your media</h2>
 
-          <div
-            onDrop={onDrop}
-            onDragOver={e => { e.preventDefault(); setDragging(true) }}
-            onDragLeave={() => setDragging(false)}
-            onClick={() => !uploading && inputRef.current?.click()}
-            className={cn(
-              "flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-12 text-center transition-colors",
-              uploading
-                ? "pointer-events-none border-purple-300 bg-purple-50/40 dark:bg-purple-950/20"
-                : "cursor-pointer hover:border-purple-300 hover:bg-zinc-50/50 dark:hover:bg-zinc-900/40",
-              dragging && "border-purple-400 bg-purple-50/40 dark:bg-purple-950/20",
-              !uploading && !dragging && "border-border",
-            )}
-          >
-            {uploading ? (
-              <>
-                <Loader2 className="h-8 w-8 text-purple-500 animate-spin mb-3" />
-                <p className="text-sm font-medium">Uploading…</p>
-              </>
-            ) : (
-              <>
-                <Upload className="h-8 w-8 text-muted-foreground mb-3" />
-                <p className="text-sm font-medium">Drop your photo or video here</p>
-                <p className="text-xs text-muted-foreground mt-1.5">
-                  Photo: JPEG, PNG, WEBP · max 25 MB
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Video: MP4, MOV, WEBM · max 200 MB
-                </p>
-              </>
-            )}
+          {/* Tab strip */}
+          <div className="flex rounded-lg border overflow-hidden text-sm">
+            <button
+              type="button"
+              onClick={() => setStep0Tab("upload")}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-1.5 py-2 font-medium transition-colors",
+                step0Tab === "upload"
+                  ? "bg-purple-600 text-white"
+                  : "bg-muted/30 text-muted-foreground hover:bg-muted/60"
+              )}
+            >
+              <Upload className="h-3.5 w-3.5" /> Upload new
+            </button>
+            <button
+              type="button"
+              onClick={() => setStep0Tab("library")}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-1.5 py-2 font-medium transition-colors border-l border-border",
+                step0Tab === "library"
+                  ? "bg-purple-600 text-white"
+                  : "bg-muted/30 text-muted-foreground hover:bg-muted/60"
+              )}
+            >
+              <Library className="h-3.5 w-3.5" /> From library
+            </button>
           </div>
 
-          <input
-            ref={inputRef}
-            type="file"
-            accept={ACCEPTED_ALL.join(",")}
-            className="hidden"
-            onChange={onInputChange}
-          />
+          {/* Upload tab */}
+          {step0Tab === "upload" && (
+            <>
+              <div
+                onDrop={onDrop}
+                onDragOver={e => { e.preventDefault(); setDragging(true) }}
+                onDragLeave={() => setDragging(false)}
+                onClick={() => !uploading && inputRef.current?.click()}
+                className={cn(
+                  "flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-12 text-center transition-colors",
+                  uploading
+                    ? "pointer-events-none border-purple-300 bg-purple-50/40 dark:bg-purple-950/20"
+                    : "cursor-pointer hover:border-purple-300 hover:bg-zinc-50/50 dark:hover:bg-zinc-900/40",
+                  dragging && "border-purple-400 bg-purple-50/40 dark:bg-purple-950/20",
+                  !uploading && !dragging && "border-border",
+                )}
+              >
+                {uploading ? (
+                  <>
+                    <Loader2 className="h-8 w-8 text-purple-500 animate-spin mb-3" />
+                    <p className="text-sm font-medium">Uploading…</p>
+                  </>
+                ) : (
+                  <>
+                    <Upload className="h-8 w-8 text-muted-foreground mb-3" />
+                    <p className="text-sm font-medium">Drop your photo or video here</p>
+                    <p className="text-xs text-muted-foreground mt-1.5">Photo: JPEG, PNG, WEBP · max 25 MB</p>
+                    <p className="text-xs text-muted-foreground">Video: MP4, MOV, WEBM · max 200 MB</p>
+                  </>
+                )}
+              </div>
 
-          <p className="text-xs text-muted-foreground text-center">
-            Photo uploads use the <strong>story-teaser</strong> template.
-            Videos use the <strong>reel-cover</strong> template.
-          </p>
+              <input
+                ref={inputRef}
+                type="file"
+                accept={ACCEPTED_ALL.join(",")}
+                className="hidden"
+                onChange={onInputChange}
+              />
 
-          <label className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={keepOriginalQuality}
-              onChange={(e) => setKeepOriginalQuality(e.target.checked)}
-              className="h-3.5 w-3.5"
-            />
-            Keep original quality (skip compression)
-          </label>
+              <p className="text-xs text-muted-foreground text-center">
+                Photo uploads use the <strong>story-teaser</strong> template.
+                Videos use the <strong>reel-cover</strong> template.
+              </p>
+
+              <label className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={keepOriginalQuality}
+                  onChange={(e) => setKeepOriginalQuality(e.target.checked)}
+                  className="h-3.5 w-3.5"
+                />
+                Keep original quality (skip compression)
+              </label>
+            </>
+          )}
+
+          {/* Library tab */}
+          {step0Tab === "library" && (
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground">
+                Select a photo or video from your media library.
+              </p>
+              <MediaPicker
+                selected={[]}
+                max={1}
+                onChange={ids => {
+                  if (!ids.length) return
+                  // Fetch the selected item metadata and use publicUrl directly
+                  fetch("/api/media")
+                    .then(r => r.json())
+                    .then(json => {
+                      const item: MediaItem | undefined = (json.media ?? []).find((m: MediaItem) => m.id === ids[0])
+                      if (!item?.public_url) return
+                      const mediaType: MediaType = item.media_type === "video" ? "video" : "photo"
+                      setMedia({
+                        publicUrl:      item.public_url,
+                        mediaType,
+                        previewUrl:     item.public_url,
+                        displayName:    item.filename,
+                        displaySizeMb:  item.file_size_mb ?? undefined,
+                      })
+                      setTemplate(mediaType === "photo" ? "story-teaser" : "reel-cover")
+                      setStep(1)
+                    })
+                    .catch(() => setUploadError("Failed to load media item"))
+                }}
+              />
+            </div>
+          )}
         </section>
       )}
 
@@ -408,9 +481,13 @@ export function StoriesClient() {
                   ? <ImageIcon className="h-4 w-4 text-muted-foreground shrink-0" />
                   : <Film className="h-4 w-4 text-muted-foreground shrink-0" />
                 }
-                <p className="text-sm font-medium truncate">{media.file.name}</p>
+                <p className="text-sm font-medium truncate">{media.file?.name ?? media.displayName ?? "media"}</p>
               </div>
-              <p className="text-xs text-muted-foreground capitalize">{media.mediaType} · {(media.file.size / 1024 / 1024).toFixed(1)} MB</p>
+              <p className="text-xs text-muted-foreground capitalize">
+                {media.mediaType}
+                {media.file ? ` · ${(media.file.size / 1024 / 1024).toFixed(1)} MB` : media.displaySizeMb ? ` · ${media.displaySizeMb.toFixed(1)} MB` : ""}
+                {media.publicUrl ? " · from library" : ""}
+              </p>
             </div>
             <button
               type="button"
@@ -472,7 +549,7 @@ export function StoriesClient() {
               ? <ImageIcon className="h-4 w-4 text-muted-foreground shrink-0" />
               : <Film className="h-4 w-4 text-muted-foreground shrink-0" />
             }
-            <p className="text-sm truncate text-muted-foreground">{media?.file.name}</p>
+            <p className="text-sm truncate text-muted-foreground">{media?.file?.name ?? media?.displayName ?? "media"}</p>
             <span className="ml-auto text-xs bg-purple-100 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 px-2 py-0.5 rounded-full shrink-0">
               {result.template === "story-teaser" ? "Story Teaser" : "Reel Cover"}
             </span>

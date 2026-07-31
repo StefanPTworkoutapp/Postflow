@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
-import { MediaPicker, AttachedMedia } from "@/components/media/MediaPicker"
+import { AttachedMedia } from "@/components/media/MediaPicker"
+import { MediaSelector } from "@/components/media/MediaSelector"
 import { CarouselBuilder } from "@/features/carousel/CarouselBuilder"
 
 // ── Template definitions (client-safe subset — no buildHtml) ──────────────────
@@ -1184,7 +1185,7 @@ export function PostEditor({ post, brandName, industry, contentLanguage = "en", 
                   onRemove={(id) => setMediaIds(prev => prev.filter(x => x !== id))}
                 />
                 {showPicker && (
-                  <MediaPicker
+                  <MediaSelector
                     selected={mediaIds}
                     onChange={setMediaIds}
                     className="mt-2"

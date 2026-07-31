@@ -20,6 +20,7 @@
 import { compressVideo, shouldCompressVideo } from "./compress-video"
 import { compressImage, shouldCompressImage } from "./compress-image"
 import { chunkedUpload, MAX_DIRECT_SIZE }     from "./chunked-upload"
+import { hashFile }                           from "./hash-file"
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -84,6 +85,8 @@ export interface UploadResultWithSizes extends UploadResult {
   compressed:        boolean
   /** Set when compression was attempted but failed and the original was uploaded instead. */
   compressionWarning?: string
+  /** True when the file already existed in the library and was not re-uploaded. */
+  deduplicated?: boolean
 }
 
 // ── Main function ─────────────────────────────────────────────────────────────
@@ -96,6 +99,34 @@ export async function uploadFile(
 
   const setStage = (s: UploadStage) => onStageChange?.(s)
   const setProgress = (p: number) => onProgress?.(p)
+
+  // ── Step 0: Deduplication check ────────────────────────────────────────────
+  // Compute SHA-256 of the original file and check if it already exists in
+  // the media library. If so, return the existing record without uploading.
+  const contentHash = await hashFile(file)
+  if (contentHash) {
+    try {
+      const dupRes = await fetch(`/api/media/by-hash?hash=${contentHash}`)
+      if (dupRes.ok) {
+        const dupData = await dupRes.json() as { exists: boolean; media?: { id: string; public_url: string | null } }
+        if (dupData.exists && dupData.media?.id) {
+          setStage("done")
+          setProgress(100)
+          return {
+            path:          dupData.media.public_url ?? "",
+            publicUrl:     dupData.media.public_url ?? "",
+            mediaId:       dupData.media.id,
+            originalBytes: file.size,
+            uploadedBytes: 0,
+            compressed:    false,
+            deduplicated:  true,
+          }
+        }
+      }
+    } catch {
+      // Dedup check failed silently — continue with normal upload
+    }
+  }
 
   // ── Step 1: Compress ───────────────────────────────────────────────────────
   let fileToUpload = file
@@ -188,6 +219,7 @@ export async function uploadFile(
       filename:    file.name,          // original filename for display
       contentType: fileToUpload.type,
       size:        fileToUpload.size,
+      contentHash,                     // may be null — server handles both
     }),
   })
   const confirmData = await confirmRes.json() as { mediaId?: string; media?: { id: string }; error?: string }

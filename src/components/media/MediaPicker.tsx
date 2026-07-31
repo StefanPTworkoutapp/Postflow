@@ -19,16 +19,22 @@ interface Props {
   onChange:    (ids: string[]) => void
   /** Max files selectable (default: unlimited) */
   max?:        number
+  /** Restrict to "image" or "video" only (default: all) */
+  type?:       "image" | "video"
   className?:  string
+  /** If set, called after a fresh upload populates the library so the grid can refresh */
+  refreshKey?: number
 }
 
-export function MediaPicker({ selected, onChange, max, className }: Props) {
+export function MediaPicker({ selected, onChange, max, type, className, refreshKey }: Props) {
   const [items,   setItems]   = useState<MediaItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState<string | null>(null)
 
   useEffect(() => {
-    fetch("/api/media")
+    setLoading(true)
+    const url = type ? `/api/media?type=${type}` : "/api/media"
+    fetch(url)
       .then(r => r.json())
       .then(json => {
         if (json.error) { setError(json.error); return }
@@ -36,7 +42,7 @@ export function MediaPicker({ selected, onChange, max, className }: Props) {
       })
       .catch(() => setError("Failed to load media"))
       .finally(() => setLoading(false))
-  }, [])
+  }, [type, refreshKey])
 
   function toggle(id: string) {
     if (selected.includes(id)) {
@@ -60,8 +66,10 @@ export function MediaPicker({ selected, onChange, max, className }: Props) {
   if (items.length === 0) return (
     <div className="text-center py-8 space-y-2">
       <ImageIcon className="h-8 w-8 mx-auto text-[hsl(var(--muted-foreground))]/30" />
-      <p className="text-sm text-[hsl(var(--muted-foreground))]">No media yet.</p>
-      <a href="/schedule?tab=upload" className="text-sm text-indigo-500 hover:underline">Upload files →</a>
+      <p className="text-sm text-[hsl(var(--muted-foreground))]">
+        {type === "video" ? "No videos yet." : type === "image" ? "No images yet." : "No media yet."}
+      </p>
+      <p className="text-xs text-[hsl(var(--muted-foreground))]">Switch to the Upload tab to add files.</p>
     </div>
   )
 

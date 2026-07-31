@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { DEFAULT_TEMPLATES, type PostTemplate, type Platform } from "@/lib/shared/posts/templates"
-import { MediaPicker } from "@/components/media/MediaPicker"
+import { MediaSelector } from "@/components/media/MediaSelector"
 
 const PLATFORMS: { value: Platform; label: string; emoji: string }[] = [
   { value: "instagram", label: "Instagram", emoji: "📸" },
@@ -166,10 +166,7 @@ export function PostCreator() {
 
           <div className="space-y-1.5">
             <Label>Attach media <span className="text-[hsl(var(--muted-foreground))] font-normal">(optional)</span></Label>
-            <p className="text-xs text-[hsl(var(--muted-foreground))]">
-              Pick photos or videos from your media library to attach to this post.
-            </p>
-            <MediaPicker
+            <MediaSelector
               selected={mediaIds}
               onChange={setMediaIds}
               max={template?.media_count ?? 10}

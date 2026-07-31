@@ -28,11 +28,13 @@ const VALID_PLATFORMS = ["instagram", "tiktok", "linkedin", "facebook", "youtube
 const VALID_TEMPLATES = ["story-teaser", "reel-cover"]
 
 interface CreateStoryBody {
-  /** Storage path returned by /api/stories/upload-url */
-  path:      string
-  platform:  string
-  template:  string   // "story-teaser" | "reel-cover"
-  mediaType: StoryMediaType  // "photo" | "video"
+  /** Storage path returned by /api/stories/upload-url, OR omitted when publicUrl is provided */
+  path?:       string
+  /** Direct public URL (from the media library) — skips signed-URL creation */
+  publicUrl?:  string
+  platform:    string
+  template:    string   // "story-teaser" | "reel-cover"
+  mediaType:   StoryMediaType  // "photo" | "video"
 }
 
 export async function POST(req: Request) {
@@ -45,9 +47,11 @@ export async function POST(req: Request) {
     if (!brand) return NextResponse.json({ error: "No brand found" }, { status: 400 })
 
     const body = await req.json() as CreateStoryBody
-    const { path, platform, template, mediaType } = body
+    const { path, publicUrl, platform, template, mediaType } = body
 
-    if (!path?.trim())     return NextResponse.json({ error: "path is required" }, { status: 400 })
+    if (!path?.trim() && !publicUrl?.trim()) {
+      return NextResponse.json({ error: "path or publicUrl is required" }, { status: 400 })
+    }
     if (!VALID_PLATFORMS.includes(platform)) {
       return NextResponse.json({ error: `platform must be one of: ${VALID_PLATFORMS.join(", ")}` }, { status: 400 })
     }
@@ -58,18 +62,24 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "mediaType must be 'photo' or 'video'" }, { status: 400 })
     }
 
-    // ── 1. Get a signed read URL for the uploaded media ─────────────────────
-    const serviceSupabase = createServiceClient()
-    const { data: signedData, error: signedError } = await serviceSupabase.storage
-      .from("postflow-clips")
-      .createSignedUrl(path, 3600 * 24)  // 24h — long enough to preview + schedule
+    // ── 1. Resolve a readable media URL ─────────────────────────────────────
+    // If the client passed a direct publicUrl (picked from media library),
+    // use it as-is. Otherwise create a signed URL from the clips storage path.
+    let mediaUrl: string
+    if (publicUrl?.trim()) {
+      mediaUrl = publicUrl.trim()
+    } else {
+      const serviceSupabase = createServiceClient()
+      const { data: signedData, error: signedError } = await serviceSupabase.storage
+        .from("postflow-clips")
+        .createSignedUrl(path!, 3600 * 24)  // 24h — long enough to preview + schedule
 
-    if (signedError || !signedData?.signedUrl) {
-      console.error("[stories/create] signed URL error:", signedError)
-      return NextResponse.json({ error: "Could not read uploaded file" }, { status: 500 })
+      if (signedError || !signedData?.signedUrl) {
+        console.error("[stories/create] signed URL error:", signedError)
+        return NextResponse.json({ error: "Could not read uploaded file" }, { status: 500 })
+      }
+      mediaUrl = signedData.signedUrl
     }
-
-    const mediaUrl = signedData.signedUrl
 
     // ── 2. Brand context ─────────────────────────────────────────────────────
     const ctx = await getBrandContext(brand.id, platform)

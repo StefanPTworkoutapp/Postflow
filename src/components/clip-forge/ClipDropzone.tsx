@@ -11,9 +11,10 @@
 "use client"
 
 import { useState, useRef, useCallback, DragEvent, ChangeEvent } from "react"
-import { Upload, X, CheckCircle2, Film, Loader2 } from "lucide-react"
+import { Upload, X, CheckCircle2, Film, Loader2, Library } from "lucide-react"
 import { cn }    from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import { MediaPicker, type MediaItem } from "@/components/media/MediaPicker"
 
 const MAX_CLIPS    = 10
 const MAX_BYTES    = 500 * 1024 * 1024  // 500 MB
@@ -92,6 +93,7 @@ async function getVideoDuration(file: File): Promise<number> {
 }
 
 export function ClipDropzone({ onClipsReady, className }: ClipDropzoneProps) {
+  const [tab,      setTab]      = useState<"upload" | "library">("upload")
   const [clips, setClips]   = useState<ClipItem[]>([])
   const [dragging, setDragging] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -208,6 +210,73 @@ export function ClipDropzone({ onClipsReady, className }: ClipDropzoneProps) {
 
   return (
     <div className={cn("space-y-4", className)}>
+      {/* Tab strip */}
+      <div className="flex rounded-lg border overflow-hidden text-sm">
+        <button
+          type="button"
+          onClick={() => setTab("upload")}
+          className={cn(
+            "flex-1 flex items-center justify-center gap-1.5 py-2 font-medium transition-colors",
+            tab === "upload"
+              ? "bg-indigo-600 text-white"
+              : "bg-muted/30 text-muted-foreground hover:bg-muted/60"
+          )}
+        >
+          <Upload className="h-3.5 w-3.5" /> Upload clips
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab("library")}
+          className={cn(
+            "flex-1 flex items-center justify-center gap-1.5 py-2 font-medium transition-colors border-l border-border",
+            tab === "library"
+              ? "bg-indigo-600 text-white"
+              : "bg-muted/30 text-muted-foreground hover:bg-muted/60"
+          )}
+        >
+          <Library className="h-3.5 w-3.5" /> From library
+        </button>
+      </div>
+
+      {/* Library tab — pick existing videos */}
+      {tab === "library" && (
+        <div className="space-y-3">
+          <p className="text-xs text-muted-foreground">
+            Select videos from your media library to use as clips.
+          </p>
+          <MediaPicker
+            selected={[]}
+            type="video"
+            max={MAX_CLIPS}
+            onChange={ids => {
+              if (!ids.length) return
+              fetch("/api/media?type=video")
+                .then(r => r.json())
+                .then(json => {
+                  const all: MediaItem[] = json.media ?? []
+                  const selected = all.filter(m => ids.includes(m.id))
+                  const readyClips: UploadedClip[] = selected
+                    .filter(m => m.public_url)
+                    .map(m => ({
+                      path:     m.public_url!,
+                      duration: 5,  // unknown until played client-side
+                      fileName: m.filename,
+                    }))
+                  if (readyClips.length) onClipsReady(readyClips)
+                })
+                .catch(() => null)
+            }}
+          />
+          {clips.length < MAX_CLIPS && (
+            <p className="text-xs text-muted-foreground text-center">
+              Or <button type="button" className="text-indigo-500 hover:underline" onClick={() => setTab("upload")}>upload new clips</button>
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Upload tab */}
+      {tab === "upload" && (<>
       {/* Drop zone */}
       <div
         onDrop={onDrop}
@@ -301,6 +370,7 @@ export function ClipDropzone({ onClipsReady, className }: ClipDropzoneProps) {
           {clips.filter(c => c.status === "done").length !== 1 ? "s" : ""}
         </Button>
       )}
+      </>)}
     </div>
   )
 }

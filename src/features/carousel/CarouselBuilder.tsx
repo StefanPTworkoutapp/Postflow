@@ -13,10 +13,11 @@
  */
 
 import { useState, useRef } from "react"
-import { Loader2, ChevronUp, ChevronDown, Plus, Trash2, ImageIcon, X, Play } from "lucide-react"
+import { Loader2, ChevronUp, ChevronDown, Plus, Trash2, ImageIcon, X, Play, Library, Upload } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn, compressionFeedback } from "@/lib/utils"
 import { prepareMediaFile } from "@/lib/client/upload/prepare-media-file"
+import { MediaPicker } from "@/components/media/MediaPicker"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -266,6 +267,7 @@ export function CarouselBuilder({ templateSlug, postId, captionFirstLine, ctaVal
   const [uploading,  setUploading]  = useState<number | null>(null) // slide index being uploaded
   const [keepOriginalQuality, setKeepOriginalQuality] = useState(false) // per-session toggle, nothing persisted
   const [compressionNote, setCompressionNote] = useState<string | null>(null)
+  const [libraryOpenForSlide, setLibraryOpenForSlide] = useState<number | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const uploadingForSlide = useRef<number | null>(null)
 
@@ -542,9 +544,9 @@ export function CarouselBuilder({ templateSlug, postId, captionFirstLine, ctaVal
                 />
               </div>
 
-              {/* Per-slide photo upload (shown for all non-fixed slides) */}
+              {/* Per-slide photo — upload new or pick from library */}
               {!slide._fixed && (
-                <div className="pt-0.5">
+                <div className="pt-0.5 space-y-1.5">
                   {slide.mediaUrl ? (
                     <div className="flex items-center gap-2 text-xs text-green-600 dark:text-green-400">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -552,24 +554,66 @@ export function CarouselBuilder({ templateSlug, postId, captionFirstLine, ctaVal
                       <span className="flex-1 truncate">Photo attached</span>
                       <button
                         type="button"
-                        onClick={() => updateSlide(idx, { mediaUrl: null })}
+                        onClick={() => { updateSlide(idx, { mediaUrl: null }); setLibraryOpenForSlide(null) }}
                         className="text-zinc-400 hover:text-zinc-700"
                       >
                         <X className="h-3.5 w-3.5" />
                       </button>
                     </div>
                   ) : (
-                    <button
-                      type="button"
-                      onClick={() => openUpload(idx)}
-                      disabled={uploading === idx}
-                      className="flex items-center gap-1.5 text-xs text-[hsl(var(--muted-foreground))] hover:text-foreground border border-dashed border-[hsl(var(--border))] rounded-lg px-3 py-1.5 transition-colors w-full justify-center hover:bg-[hsl(var(--muted))]/30"
-                    >
-                      {uploading === idx
-                        ? <><Loader2 className="h-3 w-3 animate-spin" /> Uploading…</>
-                        : <><ImageIcon className="h-3 w-3" /> Add photo for this slide (optional)</>
-                      }
-                    </button>
+                    <>
+                      {/* Two small action buttons: Upload | Library */}
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => { setLibraryOpenForSlide(null); openUpload(idx) }}
+                          disabled={uploading === idx}
+                          className="flex-1 flex items-center gap-1.5 text-xs text-[hsl(var(--muted-foreground))] hover:text-foreground border border-dashed border-[hsl(var(--border))] rounded-lg px-2 py-1.5 transition-colors justify-center hover:bg-[hsl(var(--muted))]/30"
+                        >
+                          {uploading === idx
+                            ? <><Loader2 className="h-3 w-3 animate-spin" /> Uploading…</>
+                            : <><Upload className="h-3 w-3" /> Upload</>
+                          }
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setLibraryOpenForSlide(libraryOpenForSlide === idx ? null : idx)}
+                          className={cn(
+                            "flex-1 flex items-center gap-1.5 text-xs border rounded-lg px-2 py-1.5 transition-colors justify-center",
+                            libraryOpenForSlide === idx
+                              ? "border-indigo-400 text-indigo-600 bg-indigo-50 dark:bg-indigo-950/30"
+                              : "border-dashed border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:text-foreground hover:bg-[hsl(var(--muted))]/30"
+                          )}
+                        >
+                          <Library className="h-3 w-3" /> From library
+                        </button>
+                      </div>
+
+                      {/* Inline library picker */}
+                      {libraryOpenForSlide === idx && (
+                        <div className="border rounded-lg p-2 bg-[hsl(var(--muted))]/10">
+                          <MediaPicker
+                            selected={slide.mediaUrl ? [] : []}
+                            type="image"
+                            onChange={ids => {
+                              // Fetch public_url for selected ID
+                              if (!ids.length) return
+                              fetch("/api/media?type=image")
+                                .then(r => r.json())
+                                .then(json => {
+                                  const item = (json.media ?? []).find((m: { id: string; public_url: string | null }) => m.id === ids[0])
+                                  if (item?.public_url) {
+                                    updateSlide(idx, { mediaUrl: item.public_url })
+                                    setLibraryOpenForSlide(null)
+                                  }
+                                })
+                                .catch(() => null)
+                            }}
+                            max={1}
+                          />
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               )}
