@@ -52,9 +52,13 @@ export async function POST(request: Request) {
       )
     }
 
-    // Max 50 MB via Supabase Storage
-    if (size > 50 * 1024 * 1024) {
-      return NextResponse.json({ error: "File too large (max 50 MB)" }, { status: 400 })
+    // Videos get a 2 GB limit; images/PDFs get 50 MB.
+    // Supabase bucket file-size limit must be set to match in the dashboard.
+    const isVideo  = contentType.startsWith("video/")
+    const maxBytes = isVideo ? 2 * 1024 * 1024 * 1024 : 50 * 1024 * 1024
+    const maxLabel = isVideo ? "2 GB" : "50 MB"
+    if (size > maxBytes) {
+      return NextResponse.json({ error: `File too large (max ${maxLabel} for ${isVideo ? "videos" : "images"})` }, { status: 400 })
     }
 
     // Plan storage quota check
