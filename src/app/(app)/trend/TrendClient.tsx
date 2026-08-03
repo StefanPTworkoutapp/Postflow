@@ -22,6 +22,7 @@ import { ConnectPrompt }  from "@/components/clip-forge/ConnectPrompt"
 import { ConceptCard }    from "@/components/trend-forge/ConceptCard"
 import { RenderStatusBar } from "@/components/trend-forge/RenderStatusBar"
 import { FeedbackRow, REEL_FEEDBACK_TAGS } from "@/components/shared/FeedbackRow"
+import { useConnections } from "@/hooks/useConnections"
 import type { UploadedClip } from "@/components/clip-forge/ClipDropzone"
 import type { TrendConcept } from "@/lib/server/trends/trend-filter"
 
@@ -55,6 +56,7 @@ const STEPS = ["Upload", "Platform", "Concepts", "Rendering", "Preview"] as cons
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function TrendClient() {
+  const { isConnected, loading: connectionsLoading } = useConnections()
   const [step,         setStep]         = useState<Step>(0)
   const [clips,        setClips]        = useState<UploadedClip[]>([])
   const [platform,     setPlatform]     = useState<string | null>(null)
@@ -506,12 +508,10 @@ export function TrendClient() {
             </div>
           )}
 
-          {/* Done */}
-          {feedbackDone && platform && (
-            <ConnectPrompt
-              platform={platform}
-              onSkip={undefined}
-            />
+          {/* Done — only prompt to connect when the platform genuinely isn't
+              connected yet (previously rendered unconditionally). */}
+          {feedbackDone && platform && !connectionsLoading && !isConnected(platform) && (
+            <ConnectPrompt platform={platform} />
           )}
         </section>
       )}

@@ -20,6 +20,7 @@ import { MusicPicker }   from "@/components/clip-forge/MusicPicker"
 import { SelectCard }    from "@/components/clip-forge/SelectCard"
 import { ConnectPrompt } from "@/components/clip-forge/ConnectPrompt"
 import { FeedbackRow, REEL_FEEDBACK_TAGS } from "@/components/shared/FeedbackRow"
+import { useConnections } from "@/hooks/useConnections"
 import type { UploadedClip } from "@/components/clip-forge/ClipDropzone"
 import type { MusicTrack }  from "@/lib/server/music/music-selector"
 
@@ -547,6 +548,7 @@ function StepIndicator({ current }: { current: Step }) {
 }
 
 function SuccessBlock({ platform, videoUrl }: { platform: string; videoUrl: string | null }) {
+  const { isConnected, loading } = useConnections()
   const LABELS: Record<string, string> = {
     instagram: "Instagram", tiktok: "TikTok", linkedin: "LinkedIn",
     facebook: "Facebook",   youtube: "YouTube",
@@ -562,10 +564,11 @@ function SuccessBlock({ platform, videoUrl }: { platform: string; videoUrl: stri
         </p>
       </div>
 
-      <ConnectPrompt
-        platform={platform}
-        onSkip={undefined}
-      />
+      {/* Only prompt to connect when the platform genuinely isn't connected yet —
+          previously this rendered unconditionally, confusing already-connected users. */}
+      {!loading && !isConnected(platform) && (
+        <ConnectPrompt platform={platform} />
+      )}
 
       {videoUrl && (
         <div className="flex justify-center pt-1">

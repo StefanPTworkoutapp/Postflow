@@ -32,6 +32,12 @@ interface Props {
   oauthConnected?: string | null
   oauthError?:     string | null
   /**
+   * Platform slug to scroll to + highlight on load, e.g. from a
+   * "Connect {platform}" deep link elsewhere in the app
+   * (`/settings/connections?platform=instagram`).
+   */
+  focusPlatform?:  string | null
+  /**
    * Mirrors the server-side TIKTOK_DIRECT_PUBLISH_ENABLED flag (read by the
    * Server Component page — client components can't read process.env directly).
    * When false (default), TikTok shows as "Analytics only" in the connections UI.
@@ -259,10 +265,13 @@ function WizardStep({
   const helpContent = HELP_CONTENT[platform]
 
   return (
-    <div className={cn(
-      "border-b last:border-0 transition-colors",
-      isHighlighted && !isConnected && "bg-[hsl(var(--muted))/0.3]"
-    )}>
+    <div
+      id={`wizard-step-${platform}`}
+      className={cn(
+        "border-b last:border-0 transition-colors",
+        isHighlighted && !isConnected && "bg-[hsl(var(--muted))/0.3]"
+      )}
+    >
       <div className="flex items-center gap-4 py-3.5 px-1">
         {/* Step indicator */}
         <div className="shrink-0 w-6 h-6 flex items-center justify-center">
@@ -347,9 +356,11 @@ interface ConnectedGridProps {
   connecting:    string | null
   /** Platforms currently showing "Analytics only" pending publish approval. */
   publishingPendingPlatforms: Set<string>
+  /** Platform to briefly highlight — set from a "Connect {platform}" deep link */
+  focusPlatform?: string | null
 }
 
-function ConnectedGrid({ accounts, onDisconnect, onReconnect, disconnecting, connecting, publishingPendingPlatforms }: ConnectedGridProps) {
+function ConnectedGrid({ accounts, onDisconnect, onReconnect, disconnecting, connecting, publishingPendingPlatforms, focusPlatform }: ConnectedGridProps) {
   const accountMap = new Map(accounts.map(a => [a.platform, a]))
 
   return (
@@ -369,10 +380,12 @@ function ConnectedGrid({ accounts, onDisconnect, onReconnect, disconnecting, con
         return (
           <div
             key={platform}
+            id={`platform-row-${platform}`}
             className={cn(
-              "flex items-center gap-3 rounded-lg border px-3 py-2.5",
+              "flex items-center gap-3 rounded-lg border px-3 py-2.5 transition-colors",
               isExpired  && "border-red-200   bg-red-50/40   dark:border-red-800   dark:bg-red-950/10",
               isExpiring && "border-amber-200 bg-amber-50/40 dark:border-amber-800 dark:bg-amber-950/10",
+              focusPlatform === platform && "ring-2 ring-indigo-400 border-indigo-300",
             )}
           >
             <PlatformBadge platform={platform} variant="icon" connected={isConn && !isExpired} />
@@ -580,7 +593,7 @@ function UrlConnector({ onConnectPlatform }: UrlConnectorProps) {
 // No useSearchParams() here — params are forwarded from the Server Component as
 // props so we never need a Suspense boundary, and the component renders instantly.
 
-function ConnectionsInner({ initialAccounts, brandId, oauthConnected, oauthError, tikTokDirectPublishEnabled }: Props) {
+function ConnectionsInner({ initialAccounts, brandId, oauthConnected, oauthError, focusPlatform, tikTokDirectPublishEnabled }: Props) {
   const router        = useRouter()
   const publishingPendingPlatforms = tikTokDirectPublishEnabled
     ? new Set(Array.from(PUBLISHING_PENDING_PLATFORMS_DEFAULT).filter(p => p !== "tiktok"))
@@ -616,6 +629,19 @@ function ConnectionsInner({ initialAccounts, brandId, oauthConnected, oauthError
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []) // only on mount — params are static snapshot from SSR
+
+  // ── Scroll to + briefly highlight a platform deep-linked from elsewhere ─────
+  // (e.g. an ActionableError's "Connect {platform}" button after a failed schedule)
+  const [deepLinkHighlight, setDeepLinkHighlight] = useState<string | null>(focusPlatform ?? null)
+  useEffect(() => {
+    if (!focusPlatform) return
+    const el = document.getElementById(`platform-row-${focusPlatform}`)
+             ?? document.getElementById(`wizard-step-${focusPlatform}`)
+    el?.scrollIntoView({ behavior: "smooth", block: "center" })
+    const timer = setTimeout(() => setDeepLinkHighlight(null), 4000)
+    return () => clearTimeout(timer)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // only on mount — focusPlatform is a static snapshot from SSR
 
   const hasBuffer         = accounts.some(a => a.buffer_profile_id)
   const connectedPlatforms = new Set(accounts.map(a => a.platform))
@@ -795,7 +821,7 @@ function ConnectionsInner({ initialAccounts, brandId, oauthConnected, oauthError
               isBuffer={step.isBuffer}
               isConnected={step.isBuffer ? hasBuffer : connectedPlatforms.has(step.key)}
               isConnecting={connecting === step.key}
-              isHighlighted={highlightedStep === step.key}
+              isHighlighted={highlightedStep === step.key || deepLinkHighlight === step.key}
               onConnect={() => handleConnect(step.key)}
             />
           ))}
@@ -817,6 +843,7 @@ function ConnectionsInner({ initialAccounts, brandId, oauthConnected, oauthError
             disconnecting={disconnecting}
             connecting={connecting}
             publishingPendingPlatforms={publishingPendingPlatforms}
+            focusPlatform={deepLinkHighlight}
           />
 
           {/* Buffer inline PAT section */}
@@ -838,7 +865,7 @@ function ConnectionsInner({ initialAccounts, brandId, oauthConnected, oauthError
                   isBuffer={step.isBuffer}
                   isConnected={false}
                   isConnecting={connecting === step.key}
-                  isHighlighted={highlightedStep === step.key}
+                  isHighlighted={highlightedStep === step.key || deepLinkHighlight === step.key}
                   onConnect={() => handleConnect(step.key)}
                 />
               ))}

@@ -8,6 +8,7 @@ import { cn, compressionFeedback } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { GenerateCalendarModal } from "./GenerateCalendarModal"
 import { prepareMediaFile } from "@/lib/client/upload/prepare-media-file"
+import { ActionableError, classifyScheduleError } from "@/components/shared/ActionableError"
 
 // ── Schedule sign-off panel state ─────────────────────────────────────────────
 interface SchedulePanelState {
@@ -20,6 +21,8 @@ interface SchedulePanelState {
   selectedAt:  string   // ISO string — what the user picked (starts = suggestedAt)
   saving:      boolean
   error:       string | null
+  /** Set when `error` is caused by a missing/expired connection for `platform` */
+  connectionPlatform?: string | null
 }
 
 interface SlideContent {
@@ -391,19 +394,9 @@ export function CalendarView({ initialEntries, initialYear, initialMonth, brandM
   /** Confirm and send the post to be published at the selected time */
   async function handleScheduleConfirm() {
     if (!schedulePanel) return
-    setSchedulePanel(prev => prev ? { ...prev, saving: true, error: null } : null)
-    try {
-      const res  = await fetch(`/api/posts/${schedulePanel.postId}/schedule`, {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ scheduledAt: schedulePanel.selectedAt }),
-      })
-      const json = await res.json()
-      if (!res.ok) {
-        setSchedulePanel(prev => prev ? { ...prev, saving: false, error: json.error ?? "Schedule failed" } : null)
-        return
-      }
-      // Optimistically update the entry status in calendar
+    setSchedulePanel(prev => prev ? { ...prev, saving: true, error: null, connectionPlatform: null } : null)
+
+    const markScheduled = () => {
       setEntries(prev => prev.map(e =>
         e.id === schedulePanel.entryId
           ? { ...e, status: "scheduled", posts: e.posts?.map(p =>
@@ -412,9 +405,44 @@ export function CalendarView({ initialEntries, initialYear, initialMonth, brandM
           : e
       ))
       setSchedulePanel(null)
+    }
+
+    try {
+      const res  = await fetch(`/api/posts/${schedulePanel.postId}/schedule`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ scheduledAt: schedulePanel.selectedAt }),
+      })
+      const json = await res.json()
+
+      if (res.ok) {
+        markScheduled()
+        return
+      }
+
+      if (json.needsBuffer) {
+        // Platform not yet supported for direct publishing — fall back to Buffer,
+        // same as the post editor's schedule flow.
+        const bufRes  = await fetch("/api/buffer/schedule", {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ post_id: schedulePanel.postId }),
+        })
+        const bufJson = await bufRes.json()
+        if (bufRes.ok) {
+          markScheduled()
+          return
+        }
+        const { message, connectionPlatform } = classifyScheduleError(bufJson, schedulePanel.platform)
+        setSchedulePanel(prev => prev ? { ...prev, saving: false, error: message, connectionPlatform } : null)
+        return
+      }
+
+      const { message, connectionPlatform } = classifyScheduleError(json, schedulePanel.platform)
+      setSchedulePanel(prev => prev ? { ...prev, saving: false, error: message, connectionPlatform } : null)
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Unknown error"
-      setSchedulePanel(prev => prev ? { ...prev, saving: false, error: msg } : null)
+      setSchedulePanel(prev => prev ? { ...prev, saving: false, error: msg, connectionPlatform: null } : null)
     }
   }
 
@@ -979,7 +1007,12 @@ export function CalendarView({ initialEntries, initialYear, initialMonth, brandM
                                 className="w-full text-xs rounded border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-400"
                               />
                               {schedulePanel.error && (
-                                <p className="text-[10px] text-red-500">{schedulePanel.error}</p>
+                                <ActionableError
+                                  message={schedulePanel.error}
+                                  platform={schedulePanel.connectionPlatform}
+                                  context="Scheduling a post"
+                                  className="text-[11px] px-2 py-1.5"
+                                />
                               )}
                               <div className="flex gap-1.5">
                                 <button

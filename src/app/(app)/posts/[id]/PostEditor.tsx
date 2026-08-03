@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
 import { AttachedMedia } from "@/components/media/MediaPicker"
 import { MediaSelector } from "@/components/media/MediaSelector"
+import { ActionableError, classifyScheduleError } from "@/components/shared/ActionableError"
 import { CarouselBuilder } from "@/features/carousel/CarouselBuilder"
 
 // ── Template definitions (client-safe subset — no buildHtml) ──────────────────
@@ -178,7 +179,7 @@ export function PostEditor({ post, brandName, industry, contentLanguage = "en", 
   const [feedback,    setFeedback]    = useState("")
   const [saving,      setSaving]      = useState(false)
   const [scheduling,  setScheduling]  = useState(false)
-  const [scheduleMsg, setScheduleMsg] = useState<{ type: "success" | "warn"; text: string } | null>(null)
+  const [scheduleMsg, setScheduleMsg] = useState<{ type: "success" | "warn"; text: string; connectionPlatform?: string | null } | null>(null)
   const [retrying,    setRetrying]    = useState(false)
   const [publishError, setPublishError] = useState<string | null>(post.publish_error ?? null)
   // Reminder publish mode — 'direct' (default, PostFlow publishes via API) or
@@ -356,11 +357,12 @@ export function PostEditor({ post, brandName, industry, contentLanguage = "en", 
           setScheduleMsg({ type: "success", text: "✅ Sent to Buffer! It will auto-publish at the scheduled time." })
           router.refresh()
         } else {
-          const msg = bufJson.error ?? "Buffer not connected."
-          setScheduleMsg({ type: "warn", text: `⚠️ ${schedJson.error} Also tried Buffer: ${msg}` })
+          const { message, connectionPlatform } = classifyScheduleError(bufJson, post.platform)
+          setScheduleMsg({ type: "warn", text: message, connectionPlatform })
         }
       } else {
-        setError(schedJson.error ?? "Scheduling failed")
+        const { message, connectionPlatform } = classifyScheduleError(schedJson, post.platform)
+        setScheduleMsg({ type: "warn", text: message, connectionPlatform })
       }
     } finally {
       setScheduling(false)
@@ -391,10 +393,9 @@ export function PostEditor({ post, brandName, industry, contentLanguage = "en", 
           text: "✅ Retrying — this post will publish again in a couple of minutes.",
         })
         router.refresh()
-      } else if (schedJson.needsBuffer) {
-        setScheduleMsg({ type: "warn", text: `⚠️ ${schedJson.error}` })
       } else {
-        setError(schedJson.error ?? "Retry failed")
+        const { message, connectionPlatform } = classifyScheduleError(schedJson, post.platform)
+        setScheduleMsg({ type: "warn", text: message, connectionPlatform })
       }
     } finally {
       setRetrying(false)
@@ -1496,7 +1497,7 @@ export function PostEditor({ post, brandName, industry, contentLanguage = "en", 
       </div>
 
       {/* Error */}
-      {error && <p className="text-sm text-[hsl(var(--destructive))]">{error}</p>}
+      {error && <ActionableError message={error} context="Editing a post" />}
 
       {/* Save */}
       <div className="space-y-3 pt-2 border-t">
@@ -1584,16 +1585,20 @@ export function PostEditor({ post, brandName, industry, contentLanguage = "en", 
           </p>
         )}
 
-        {/* Buffer schedule feedback */}
+        {/* Schedule / Buffer feedback */}
         {scheduleMsg && (
-          <p className={cn(
-            "text-xs rounded-lg px-3 py-2",
-            scheduleMsg.type === "success"
-              ? "bg-green-50 text-green-700 dark:bg-green-950/20 dark:text-green-400"
-              : "bg-amber-50 text-amber-700 dark:bg-amber-950/20 dark:text-amber-400"
-          )}>
-            {scheduleMsg.text}
-          </p>
+          scheduleMsg.type === "success" ? (
+            <p className="text-xs rounded-lg px-3 py-2 bg-green-50 text-green-700 dark:bg-green-950/20 dark:text-green-400">
+              {scheduleMsg.text}
+            </p>
+          ) : (
+            <ActionableError
+              message={scheduleMsg.text}
+              platform={scheduleMsg.connectionPlatform}
+              context="Scheduling a post"
+              tone="warn"
+            />
+          )
         )}
 
         {/* Notification-publish banner (Instagram/Facebook require a tap in Buffer app) */}

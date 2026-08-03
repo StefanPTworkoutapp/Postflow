@@ -113,6 +113,7 @@ export default async function ConnectionsPage({
         brandId={brand.id}
         oauthConnected={typeof params.connected === "string" ? params.connected : null}
         oauthError={typeof params.error === "string" ? params.error : null}
+        focusPlatform={typeof params.platform === "string" ? params.platform : null}
         tikTokDirectPublishEnabled={isTikTokDirectPublishEnabled()}
       />
     </div>
